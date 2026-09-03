@@ -1,0 +1,65 @@
+{
+  "name": "polar-expedition-asset-management",
+  "version": "1.0.0",
+  "description": "Tactical operations hub and telemetry console for polar expeditions, research stations, and extreme survival logistics.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Polar Expedition Operations Consortium",
+  "main": "./dist/index.html",
+  "bin": {
+    "polar-ops": "./bin/polar-ops.cjs"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "src",
+    "public",
+    "index.html",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "polar",
+    "expedition",
+    "antarctica",
+    "arctic",
+    "operations",
+    "telemetry",
+    "asset-management",
+    "react",
+    "vite",
+    "typescript"
+  ],
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --port=3000 --host=0.0.0.0",
+    "serve": "node bin/polar-ops.cjs",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3",
+    "express": "^4.21.2",
+    "dotenv": "^17.2.3",
+    "motion": "^12.23.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "@types/express": "^4.17.21"
+  }
+}
