@@ -3,14 +3,16 @@ import {
   Compass, 
   Radio, 
   ShieldAlert, 
-  ThermometerSnowflake, 
   Clock, 
-  Layers, 
   RotateCcw,
-  Activity,
-  AlertTriangle
+  AlertTriangle,
+  Smartphone,
+  Laptop,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { PolarRegion, ConditionLevel } from '../types';
+import { SyncConnectionStatus } from '../hooks/usePolarSync';
 
 interface HeaderProps {
   currentRegion: PolarRegion;
@@ -18,10 +20,13 @@ interface HeaderProps {
   conditionLevel: ConditionLevel;
   onChangeCondition: (level: ConditionLevel) => void;
   onOpenDistressModal: () => void;
+  onOpenPairingModal?: () => void;
   onResetData: () => void;
   activeExpeditionsCount: number;
   activeAssetsCount: number;
   alertsCount: number;
+  syncStatus: SyncConnectionStatus;
+  connectedClients: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,10 +35,13 @@ export const Header: React.FC<HeaderProps> = ({
   conditionLevel,
   onChangeCondition,
   onOpenDistressModal,
+  onOpenPairingModal,
   onResetData,
   activeExpeditionsCount,
   activeAssetsCount,
   alertsCount,
+  syncStatus,
+  connectedClients,
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
   const [julianDay, setJulianDay] = useState<string>('');
@@ -44,7 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
       const utc = now.toUTCString().replace('GMT', 'UTC');
       setUtcTime(utc);
 
-      // Calculate Julian day approximation
       const start = new Date(now.getUTCFullYear(), 0, 0);
       const diff = now.getTime() - start.getTime();
       const oneDay = 1000 * 60 * 60 * 24;
@@ -84,22 +91,53 @@ export const Header: React.FC<HeaderProps> = ({
   const cond = getConditionBadge();
 
   return (
-    <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
+    <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 font-mono">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
           
-          {/* System Title & Telemetry Header */}
+          {/* System Title & Real-Time Sync Status */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-sky-950/80 border border-sky-600/60 flex items-center justify-center text-sky-400 shrink-0">
               <Compass className="w-6 h-6 animate-[spin_40s_linear_infinite]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs tracking-widest font-mono text-sky-400 uppercase font-semibold">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs tracking-widest text-sky-400 uppercase font-semibold">
                   POLAR OPS WORKSTATION
                 </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span className="text-[11px] font-mono text-slate-400">SATCOM LINK 99.8%</span>
+                
+                {/* Live Sync Node Pill (Clickable to open pairing modal) */}
+                <button
+                  type="button"
+                  onClick={onOpenPairingModal}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer hover:opacity-90 ${
+                    syncStatus === 'connected'
+                      ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300 hover:border-emerald-400'
+                      : syncStatus === 'connecting'
+                      ? 'bg-amber-950/60 border-amber-600/60 text-amber-300'
+                      : 'bg-rose-950/60 border-rose-600/60 text-rose-300'
+                  }`}
+                  title="Click to view connected terminals roster or pair your phone via QR code"
+                >
+                  {syncStatus === 'connected' ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                      <Wifi className="w-3 h-3 text-emerald-400" />
+                      <span>LIVE SYNC: {connectedClients} {connectedClients === 1 ? 'NODE' : 'NODES'} ONLINE</span>
+                      <span className="hidden sm:inline text-[9px] text-emerald-400/70 border-l border-emerald-700/60 pl-1 ml-0.5">PAIR PHONE</span>
+                    </>
+                  ) : syncStatus === 'connecting' ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                      <span>CONNECTING BASE SERVER...</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="w-3 h-3 text-rose-400" />
+                      <span>OFFLINE (CACHED)</span>
+                    </>
+                  )}
+                </button>
               </div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display">
                 POLAR EXPEDITION & ASSET MANAGEMENT SYSTEM
@@ -107,11 +145,11 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* UTC Clock & Region Selector */}
+          {/* UTC Clock & Controls */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto justify-between lg:justify-end">
             
             {/* UTC Clock & Julian Day */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-slate-900 border border-slate-800 font-mono text-xs text-slate-300">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded bg-slate-900 border border-slate-800 text-xs text-slate-300">
               <Clock className="w-3.5 h-3.5 text-sky-400" />
               <span>{utcTime || 'SYNCHRONIZING UTC...'}</span>
               <span className="text-slate-600">|</span>
@@ -130,7 +168,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ANTARCTICA (SOUTH)
+                ANTARCTICA
               </button>
               <button
                 id="region-arctic-btn"
@@ -142,9 +180,26 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ARCTIC (NORTH)
+                ARCTIC
               </button>
             </div>
+
+            {/* Pair Phone Button */}
+            {onOpenPairingModal && (
+              <button
+                id="pair-phone-btn"
+                type="button"
+                onClick={onOpenPairingModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 text-xs font-semibold tracking-wider transition-colors shadow-sm"
+                title="Scan QR code to connect your mobile phone as a remote field beacon"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+                <span className="hidden sm:inline">PAIR PHONE</span>
+                <span className="px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px] font-bold">
+                  {connectedClients}
+                </span>
+              </button>
+            )}
 
             {/* Emergency Distress Protocol Trigger */}
             <button
@@ -152,9 +207,11 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onOpenDistressModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold tracking-wider uppercase transition-colors shadow-lg shadow-rose-950/50 border border-rose-400/40"
+              title="Broadcast Mayday Distress Signal across all connected laptops and phones"
             >
               <ShieldAlert className="w-4 h-4 animate-bounce" />
-              <span>DISTRESS BEACON / SAR</span>
+              <Smartphone className="w-3.5 h-3.5 hidden sm:inline" />
+              <span>TRANSMIT DISTRESS</span>
             </button>
 
             {/* Reset data */}
@@ -174,8 +231,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="mt-3 pt-2.5 border-t border-slate-900/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Condition Level Dropdown / Indicator */}
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-mono uppercase text-[11px]">BASE DEFCON:</span>
-            <div className={`px-2.5 py-1 rounded border flex items-center gap-2 font-mono ${cond.badgeClass}`}>
+            <span className="text-slate-400 uppercase text-[11px]">BASE DEFCON:</span>
+            <div className={`px-2.5 py-1 rounded border flex items-center gap-2 ${cond.badgeClass}`}>
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               <span className="font-bold tracking-wide">{cond.label}</span>
               <span className="hidden md:inline text-[10px] opacity-80">({cond.desc})</span>
@@ -184,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
               value={conditionLevel}
               onChange={(e) => onChangeCondition(e.target.value as ConditionLevel)}
               aria-label="Set base condition status"
-              className="bg-slate-900 text-slate-300 border border-slate-700 rounded px-2 py-0.5 text-xs font-mono focus:outline-none focus:border-sky-500"
+              className="bg-slate-900 text-slate-300 border border-slate-700 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-sky-500"
             >
               <option value="COND-3_NORMAL">Set: Condition 3 (Normal Ops)</option>
               <option value="COND-2_CAUTION">Set: Condition 2 (High Caution)</option>
@@ -193,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-4 font-mono text-[11px] text-slate-400">
+          <div className="flex items-center gap-4 text-[11px] text-slate-400">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-sky-400"></span>
               <span>EXPEDITIONS:</span>

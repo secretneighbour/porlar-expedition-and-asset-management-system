@@ -115,7 +115,28 @@ To publish this package to NPM:
 - **Expedition Traverse Planner**: Multi-waypoint route management, distance calculations, elevation profiling, and mission staging phases.
 - **Extreme-Cold Consumables Depot**: Arctic diesel (F-34/JP-8), Jet-A1, rations, and hypothermia resuscitation units with burn-rate analysis and emergency air-drop dispatch.
 - **Katabatic Telemetry & Windchill Calculator**: Real-time AWOS sensor feeds and frostbite risk calculation.
-- **Emergency Distress & SAR Protocol**: Rapid distress beacon broadcast with nearest SAR-capable asset triangulation.
+- **Real-Time Distress Beacon & Multi-Device Sync (Mobile ➔ Laptop HQ)**: Zero-cloud, free, built-in WebSocket & REST synchronization. When a field researcher triggers Mayday on their mobile phone over mobile data or satellite link, the research center asset manager's laptop console instantly sounds an emergency audio klaxon, flashes a high-visibility incident banner with coordinates, and queues SAR scramble confirmation back to the field phone.
+
+---
+
+## 📱 Mobile Field Unit to Research Center Laptop Sync (100% Free & Self-Contained)
+
+The system includes a built-in bidirectional WebSocket and HTTP heartbeat synchronization server with accurate terminal deduplication:
+
+1. **Research Center Laptop**: Open the console on the research center desk laptop. The top bar accurately indicates `LIVE SYNC: 1 NODE ONLINE` representing this single active workstation.
+2. **Instant QR Code Pairing**: Click **PAIR PHONE** or the live sync badge in the top bar. A modal appears with a live, high-resolution QR code generated directly for your server URL.
+3. **Field Mobile Device**: Point any smartphone camera at the QR code (or copy the URL) to open the console over 4G/5G mobile data or Wi-Fi.
+   - The server instantly detects the new device ID and updates the status to `LIVE SYNC: 2 NODES ONLINE` across all screens.
+   - The **Active Terminals Roster** displays both nodes (`Base Station HQ Console` & `Mobile Phone Field Unit`) with live pulsing heartbeat indicators.
+4. **Triggering Mayday**: On the phone, navigate to the **FIELD PHONE MAYDAY TERMINAL** tab or tap **TRANSMIT DISTRESS**. Tap **BROADCAST MAYDAY OVER MOBILE DATA**.
+5. **Immediate Laptop Alert**: The laptop console instantly:
+   - Plays a pulsating two-tone polar emergency alarm klaxon via the Web Audio API.
+   - Flashes an unmissable red alert banner with incident details, coordinates, and transmitting device ID.
+   - Centers the polar radar map directly on the distress coordinates with an animated pulse marker.
+   - Provides an **ACKNOWLEDGE & SCRAMBLE SAR** button to assign a rescue crawler or Twin Otter ski-plane.
+6. **Phone Confirmation**: As soon as the laptop manager clicks **ACKNOWLEDGE**, the field phone screen immediately turns green:
+   - `✅ HQ HAS RECEIVED YOUR MAYDAY! Deployed SAR Asset: PB-300 Heavy SAR En Route.`
+7. **Disconnect Handling**: When the phone tab is closed or goes out of range, the heartbeat timeout automatically prunes the disconnected device within seconds and the counter returns to `1 NODE ONLINE`.
 
 ---
 

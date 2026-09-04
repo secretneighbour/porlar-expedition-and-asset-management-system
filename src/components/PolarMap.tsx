@@ -17,7 +17,7 @@ import {
   Navigation,
   Info
 } from 'lucide-react';
-import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint } from '../types';
+import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint, ActiveDistressAlert } from '../types';
 
 interface PolarMapProps {
   region: PolarRegion;
@@ -27,6 +27,8 @@ interface PolarMapProps {
   hazards: HazardZone[];
   selectedAssetId?: string;
   selectedExpeditionId?: string;
+  activeDistress?: ActiveDistressAlert | null;
+  focusCoords?: { lat: number; lng: number } | null;
   onSelectAsset: (asset: PolarAsset | null) => void;
   onSelectExpedition: (expedition: Expedition | null) => void;
 }
@@ -39,6 +41,8 @@ export const PolarMap: React.FC<PolarMapProps> = ({
   hazards,
   selectedAssetId,
   selectedExpeditionId,
+  activeDistress,
+  focusCoords,
   onSelectAsset,
   onSelectExpedition,
 }) => {
@@ -92,6 +96,18 @@ export const PolarMap: React.FC<PolarMapProps> = ({
       }
     };
   }, [region, center, maxRadius]);
+
+  // Handle programmatic radar lock onto coordinates
+  React.useEffect(() => {
+    if (focusCoords && typeof focusCoords.lat === 'number' && typeof focusCoords.lng === 'number') {
+      const pos = projectCoordinates(focusCoords.lat, focusCoords.lng);
+      setZoomLevel(1.8);
+      setPan({
+        x: (center - pos.x) * 1.8,
+        y: (center - pos.y) * 1.8,
+      });
+    }
+  }, [focusCoords, projectCoordinates, center]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -663,6 +679,49 @@ export const PolarMap: React.FC<PolarMapProps> = ({
             </g>
           )}
 
+          {/* Active Field Distress Emergency Marker */}
+          {activeDistress && (() => {
+            let lat = activeDistress.targetLat;
+            let lng = activeDistress.targetLng;
+            if (lat === undefined || lng === undefined) {
+              const parts = activeDistress.coordinates.split(',').map((p) => parseFloat(p.trim()));
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                lat = parts[0];
+                lng = parts[1];
+              }
+            }
+            if (lat === undefined || lng === undefined) return null;
+            // Check if matches current region
+            const isAntarctica = lat < 0;
+            if ((region === 'antarctica' && !isAntarctica) || (region === 'arctic' && isAntarctica)) {
+              return null;
+            }
+            const pos = projectCoordinates(lat, lng);
+            return (
+              <g
+                id="active-distress-marker"
+                className="cursor-pointer"
+                onClick={() => setSelectedInspectable({ type: 'distress' as any, data: activeDistress })}
+              >
+                {/* Radiating emergency beacon rings */}
+                <circle cx={pos.x} cy={pos.y} r="30" fill="none" stroke="#e11d48" strokeWidth="1.5" opacity="0.5" />
+                <circle cx={pos.x} cy={pos.y} r="18" fill="none" stroke="#f43f5e" strokeWidth="2" opacity="0.8" />
+                <circle cx={pos.x} cy={pos.y} r="7" fill="#e11d48" stroke="#ffffff" strokeWidth="2" />
+                {/* Crosshairs */}
+                <line x1={pos.x - 24} y1={pos.y} x2={pos.x + 24} y2={pos.y} stroke="#f43f5e" strokeWidth="1" strokeDasharray="3 3" />
+                <line x1={pos.x} y1={pos.y - 24} x2={pos.x} y2={pos.y + 24} stroke="#f43f5e" strokeWidth="1" strokeDasharray="3 3" />
+                
+                {/* Emergency Tag */}
+                <g transform={`translate(${pos.x + 12}, ${pos.y - 12})`}>
+                  <rect x="0" y="-10" width="125" height="18" fill="#881337" stroke="#f43f5e" strokeWidth="1" rx="3" />
+                  <text x="6" y="3" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                    🚨 MAYDAY BEACON
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
+
         </svg>
 
         {/* Selected Inspectable Tactical Overlay Card */}
@@ -795,6 +854,36 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                     Warning: {selectedInspectable.data.hazardNote}
                   </div>
                 )}
+              </div>
+            )}
+
+            {selectedInspectable.type === 'distress' && (
+              <div className="space-y-1.5 text-rose-200">
+                <div className="flex justify-between font-bold text-rose-400">
+                  <span>EMERGENCY:</span>
+                  <span>{selectedInspectable.data.incidentType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">SECTOR:</span>
+                  <span className="text-white">{selectedInspectable.data.location}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">COORDS:</span>
+                  <span className="text-amber-300">{selectedInspectable.data.coordinates}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">SOURCE:</span>
+                  <span className="text-white">{selectedInspectable.data.reportedByDevice}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">STATUS:</span>
+                  <span className={selectedInspectable.data.acknowledgedByHQ ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold animate-pulse'}>
+                    {selectedInspectable.data.acknowledgedByHQ ? 'SAR SCRAMBLED' : 'AWAITING HQ DISPATCH'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 pt-1 border-t border-slate-800">
+                  {selectedInspectable.data.summary}
+                </p>
               </div>
             )}
           </div>

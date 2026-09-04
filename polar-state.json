@@ -1,0 +1,847 @@
+{
+  "region": "antarctica",
+  "conditionLevel": "COND-2_CAUTION",
+  "assets": [
+    {
+      "id": "ast-pb300-1",
+      "name": "PistenBully 300 Polar Track Alpha",
+      "code": "PB-ALPHA",
+      "category": "heavy_traverse",
+      "model": "Kässbohrer P300 Polar Custom",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "Leverett Glacier Waypoint 4",
+        "lat": -85.25,
+        "lng": 151.1,
+        "elevationM": 2150
+      },
+      "assignedExpeditionId": "exp-702",
+      "coldRatingC": -65,
+      "fuelOrBatteryPercent": 78,
+      "fuelType": "Arctic Diesel F-34",
+      "crewCapacity": 4,
+      "lastMaintenanceDate": "2026-08-14",
+      "nextServiceHours": 142,
+      "specifications": {
+        "weightKg": 11500,
+        "topSpeedKmh": 24,
+        "rangeKm": 650,
+        "heatingSystem": "Webasto Dual Hydronic Pre-heater + Cab Heat Exchanger"
+      },
+      "telemetry": {
+        "tempC": -48,
+        "engineHealthPercent": 94,
+        "satlinkSignal": 92
+      }
+    },
+    {
+      "id": "ast-case-quad",
+      "name": "Case IH Steiger 600 Quadtrac Sled Tug",
+      "code": "QUAD-01",
+      "category": "heavy_traverse",
+      "model": "Steiger 600 Arctic Spec",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "South Pole Traverse Km 720",
+        "lat": -84.6,
+        "lng": 154.2,
+        "elevationM": 1980
+      },
+      "assignedExpeditionId": "exp-702",
+      "coldRatingC": -60,
+      "fuelOrBatteryPercent": 62,
+      "fuelType": "Arctic Diesel F-34",
+      "crewCapacity": 2,
+      "lastMaintenanceDate": "2026-08-01",
+      "nextServiceHours": 88,
+      "specifications": {
+        "weightKg": 24000,
+        "topSpeedKmh": 18,
+        "rangeKm": 850,
+        "heatingSystem": "Arctic Block Glow-Plug Engine Jacket with Glycol Loop"
+      },
+      "telemetry": {
+        "tempC": -46,
+        "engineHealthPercent": 89,
+        "satlinkSignal": 85
+      }
+    },
+    {
+      "id": "ast-lc130",
+      "name": "Skibird LC-130H Hercules (Tail 091)",
+      "code": "SKIBIRD-91",
+      "category": "aviation",
+      "model": "Lockheed LC-130 Ski-equipped",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "McMurdo Station Williams Field",
+        "lat": -77.867,
+        "lng": 167.05,
+        "elevationM": 15
+      },
+      "assignedStationId": "st-mcmurdo",
+      "coldRatingC": -55,
+      "fuelOrBatteryPercent": 95,
+      "fuelType": "Jet-A1 Polar",
+      "crewCapacity": 6,
+      "lastMaintenanceDate": "2026-08-28",
+      "nextServiceHours": 210,
+      "specifications": {
+        "weightKg": 34500,
+        "topSpeedKmh": 590,
+        "rangeKm": 3800,
+        "heatingSystem": "Bleed Air De-icing & Cabin Environmental Unit"
+      },
+      "telemetry": {
+        "tempC": -28,
+        "engineHealthPercent": 98,
+        "satlinkSignal": 99
+      }
+    },
+    {
+      "id": "ast-twin-otter",
+      "name": "DHC-6 Twin Otter Polar Scout",
+      "code": "OTTER-03",
+      "category": "aviation",
+      "model": "de Havilland Canada DHC-6-300 Ski-Wheel",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "Concordia High Plateau Corridor",
+        "lat": -76.2,
+        "lng": 125.8,
+        "elevationM": 3100
+      },
+      "assignedExpeditionId": "exp-705",
+      "coldRatingC": -60,
+      "fuelOrBatteryPercent": 54,
+      "fuelType": "Jet-A1 Polar",
+      "crewCapacity": 3,
+      "lastMaintenanceDate": "2026-08-20",
+      "nextServiceHours": 64,
+      "specifications": {
+        "weightKg": 3800,
+        "topSpeedKmh": 314,
+        "rangeKm": 1430,
+        "heatingSystem": "Pneumatic Boot De-icer & Cabin Combustion Heater"
+      },
+      "telemetry": {
+        "tempC": -56,
+        "engineHealthPercent": 91,
+        "satlinkSignal": 88
+      }
+    },
+    {
+      "id": "ast-at44",
+      "name": "Arctic Trucks AT44 6x6 Rapid Response",
+      "code": "AT-ECHO",
+      "category": "emergency_sar",
+      "model": "Hilux AT44 6WD Exped Spec",
+      "status": "standby",
+      "currentLocation": {
+        "name": "Amundsen-Scott South Pole Station",
+        "lat": -90,
+        "lng": 0,
+        "elevationM": 2835
+      },
+      "assignedStationId": "st-amundsen-scott",
+      "coldRatingC": -70,
+      "fuelOrBatteryPercent": 100,
+      "fuelType": "Arctic Diesel F-34",
+      "crewCapacity": 5,
+      "lastMaintenanceDate": "2026-08-25",
+      "nextServiceHours": 320,
+      "specifications": {
+        "weightKg": 3600,
+        "topSpeedKmh": 65,
+        "rangeKm": 1200,
+        "heatingSystem": "Double Thermal Insulation with Webasto Thermo Top"
+      },
+      "telemetry": {
+        "tempC": -51,
+        "engineHealthPercent": 100,
+        "satlinkSignal": 95
+      }
+    },
+    {
+      "id": "ast-drill-skid",
+      "name": "Sub-Ice Thermal Coring Rig Alpha",
+      "code": "CORE-RIG-1",
+      "category": "scientific_rig",
+      "model": "Deep Ice Coring Electromechanical 3000m",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "Wilkes Basin Field Camp Bravo",
+        "lat": -74.12,
+        "lng": 132.4,
+        "elevationM": 2980
+      },
+      "assignedExpeditionId": "exp-705",
+      "coldRatingC": -65,
+      "fuelOrBatteryPercent": 82,
+      "fuelType": "Lithium-Cold Solid",
+      "crewCapacity": 0,
+      "lastMaintenanceDate": "2026-07-30",
+      "nextServiceHours": 190,
+      "specifications": {
+        "weightKg": 6200,
+        "topSpeedKmh": 0,
+        "rangeKm": 0,
+        "heatingSystem": "Heated Fluid Circulation Glycol Skid"
+      },
+      "telemetry": {
+        "tempC": -52,
+        "engineHealthPercent": 96,
+        "satlinkSignal": 91
+      }
+    },
+    {
+      "id": "ast-crevasse-gpr",
+      "name": "Autonomous Crevasse Radar Scout (GPR)",
+      "code": "GPR-SCOUT",
+      "category": "scientific_rig",
+      "model": "Polaris Autonomous Sled GPR 400MHz",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "Leverett Glacier Waypoint 4",
+        "lat": -85.27,
+        "lng": 151.15,
+        "elevationM": 2160
+      },
+      "assignedExpeditionId": "exp-702",
+      "coldRatingC": -60,
+      "fuelOrBatteryPercent": 68,
+      "fuelType": "Lithium-Cold Solid",
+      "crewCapacity": 0,
+      "lastMaintenanceDate": "2026-08-18",
+      "nextServiceHours": 110,
+      "specifications": {
+        "weightKg": 340,
+        "topSpeedKmh": 15,
+        "rangeKm": 220,
+        "heatingSystem": "Direct Solid-State Battery Heating Blanket"
+      },
+      "telemetry": {
+        "tempC": -47,
+        "engineHealthPercent": 92,
+        "satlinkSignal": 89
+      }
+    },
+    {
+      "id": "ast-micro-hab",
+      "name": "Extreme Cold Mobile Habitat Pod",
+      "code": "HAB-POD-3",
+      "category": "power_habitat",
+      "model": "Fiberglass Vacuum-Insulated Sled Shelter",
+      "status": "in_transit",
+      "currentLocation": {
+        "name": "Leverett Glacier Waypoint 4",
+        "lat": -85.25,
+        "lng": 151.05,
+        "elevationM": 2150
+      },
+      "assignedExpeditionId": "exp-702",
+      "coldRatingC": -75,
+      "fuelOrBatteryPercent": 88,
+      "fuelType": "Arctic Diesel F-34",
+      "crewCapacity": 8,
+      "lastMaintenanceDate": "2026-08-10",
+      "nextServiceHours": 450,
+      "specifications": {
+        "weightKg": 5200,
+        "topSpeedKmh": 0,
+        "rangeKm": 0,
+        "heatingSystem": "Redundant Arctic Diesel Radiant Boiler & Stirling Unit"
+      },
+      "telemetry": {
+        "tempC": -48,
+        "engineHealthPercent": 99,
+        "satlinkSignal": 94
+      }
+    },
+    {
+      "id": "ast-icebreaker",
+      "name": "RRS Sir David Attenborough (Icebreaker)",
+      "code": "ICE-SDA",
+      "category": "heavy_traverse",
+      "model": "Polar Class 4 Research Icebreaker",
+      "status": "operational",
+      "currentLocation": {
+        "name": "Weddell Sea Northern Marginal Ice Zone",
+        "lat": -68.45,
+        "lng": -42.1,
+        "elevationM": 0
+      },
+      "assignedStationId": "st-halley-vi",
+      "coldRatingC": -45,
+      "fuelOrBatteryPercent": 74,
+      "fuelType": "Arctic Diesel F-34",
+      "crewCapacity": 60,
+      "lastMaintenanceDate": "2026-07-15",
+      "nextServiceHours": 600,
+      "specifications": {
+        "weightKg": 15600000,
+        "topSpeedKmh": 32,
+        "rangeKm": 35000,
+        "heatingSystem": "Steam Hull Heating & Heated Sea Chest Strainers"
+      },
+      "telemetry": {
+        "tempC": -19,
+        "engineHealthPercent": 97,
+        "satlinkSignal": 99
+      }
+    }
+  ],
+  "expeditions": [
+    {
+      "id": "exp-702",
+      "code": "SPoT-26",
+      "name": "South Pole Traverse (SPoT Heavy Resupply)",
+      "region": "antarctica",
+      "objective": "Overland delivery of 120,000L Arctic Diesel fuel and heavy scientific skids from McMurdo across the Ross Ice Shelf to Amundsen-Scott.",
+      "phase": "in_progress",
+      "leader": "Cmdr. Henrik Lindqvist",
+      "crew": [
+        {
+          "id": "c-1",
+          "name": "Cmdr. Henrik Lindqvist",
+          "role": "Traverse Leader",
+          "callsign": "Polar-Lead",
+          "experienceSeasons": 11,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-2",
+          "name": "Dr. Elena Rostova",
+          "role": "Glaciologist",
+          "callsign": "Ice-Eye",
+          "experienceSeasons": 7,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-3",
+          "name": "Marcus Vance",
+          "role": "Heavy Mechanic",
+          "callsign": "Torque",
+          "experienceSeasons": 9,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-4",
+          "name": "Dr. Tarek Benali",
+          "role": "Doctor / Medical Officer",
+          "callsign": "Medic-1",
+          "experienceSeasons": 5,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-5",
+          "name": "Sven Nygren",
+          "role": "Navigator / Comms",
+          "callsign": "Compass",
+          "experienceSeasons": 8,
+          "medicalClearance": "Class-1 Unrestricted"
+        }
+      ],
+      "assignedAssetIds": [
+        "ast-pb300-1",
+        "ast-case-quad",
+        "ast-crevasse-gpr",
+        "ast-micro-hab"
+      ],
+      "departureDate": "2026-08-10",
+      "estimatedReturnDate": "2026-09-22",
+      "totalDistanceKm": 1600,
+      "distanceCoveredKm": 980,
+      "currentLat": -85.25,
+      "currentLng": 151.1,
+      "waypoints": [
+        {
+          "id": "wp-1",
+          "name": "McMurdo Williams Field Exit",
+          "lat": -77.86,
+          "lng": 167,
+          "elevationM": 15,
+          "passed": true,
+          "distanceFromPrevKm": 0
+        },
+        {
+          "id": "wp-2",
+          "name": "Ross Shelf Shear Zone Gate",
+          "lat": -79.2,
+          "lng": 168.5,
+          "elevationM": 45,
+          "passed": true,
+          "distanceFromPrevKm": 180,
+          "hazardNote": "Controlled crevasse crossing via snow bridges"
+        },
+        {
+          "id": "wp-3",
+          "name": "Minna Bluff Depot",
+          "lat": -81.5,
+          "lng": 165,
+          "elevationM": 120,
+          "passed": true,
+          "distanceFromPrevKm": 280
+        },
+        {
+          "id": "wp-4",
+          "name": "Leverett Glacier Foot",
+          "lat": -84.1,
+          "lng": 158,
+          "elevationM": 850,
+          "passed": true,
+          "distanceFromPrevKm": 340,
+          "hazardNote": "Steep glacier climb, 12% grade"
+        },
+        {
+          "id": "wp-5",
+          "name": "Polar Plateau Gateway (Current)",
+          "lat": -85.25,
+          "lng": 151.1,
+          "elevationM": 2150,
+          "passed": false,
+          "distanceFromPrevKm": 180,
+          "hazardNote": "High katabatic wind pass"
+        },
+        {
+          "id": "wp-6",
+          "name": "Titan Dome Approach",
+          "lat": -88,
+          "lng": 80,
+          "elevationM": 2700,
+          "passed": false,
+          "distanceFromPrevKm": 350
+        },
+        {
+          "id": "wp-7",
+          "name": "Amundsen-Scott South Pole Station",
+          "lat": -90,
+          "lng": 0,
+          "elevationM": 2835,
+          "passed": false,
+          "distanceFromPrevKm": 270
+        }
+      ],
+      "fuelBurnPerDayL": 420,
+      "rationsDaysRemaining": 24,
+      "currentWeather": {
+        "tempC": -48,
+        "windchillC": -68,
+        "windKnots": 38,
+        "condition": "COND-2_CAUTION"
+      }
+    },
+    {
+      "id": "exp-705",
+      "code": "AURORA-RADAR",
+      "name": "Wilkes Subglacial Basin Bedrock Sounding",
+      "region": "antarctica",
+      "objective": "High-frequency ice-penetrating radar profiling across the Wilkes Basin anomaly and bedrock temperature mapping.",
+      "phase": "in_progress",
+      "leader": "Dr. Astrid Holm",
+      "crew": [
+        {
+          "id": "c-6",
+          "name": "Dr. Astrid Holm",
+          "role": "Glaciologist",
+          "callsign": "Aurora-Lead",
+          "experienceSeasons": 8,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-7",
+          "name": "Kai Tanaka",
+          "role": "Navigator / Comms",
+          "callsign": "Echo",
+          "experienceSeasons": 4,
+          "medicalClearance": "Class-2 Cold-Adaptive"
+        },
+        {
+          "id": "c-8",
+          "name": "Olaf Lind",
+          "role": "Heavy Mechanic",
+          "callsign": "Wrench",
+          "experienceSeasons": 6,
+          "medicalClearance": "Class-1 Unrestricted"
+        }
+      ],
+      "assignedAssetIds": [
+        "ast-twin-otter",
+        "ast-drill-skid"
+      ],
+      "departureDate": "2026-08-18",
+      "estimatedReturnDate": "2026-09-14",
+      "totalDistanceKm": 780,
+      "distanceCoveredKm": 420,
+      "currentLat": -76.2,
+      "currentLng": 125.8,
+      "waypoints": [
+        {
+          "id": "wp-10",
+          "name": "Dome C Concordia Departure",
+          "lat": -75.1,
+          "lng": 123.33,
+          "elevationM": 3233,
+          "passed": true,
+          "distanceFromPrevKm": 0
+        },
+        {
+          "id": "wp-11",
+          "name": "Trans-Ridge Sounding Line 1",
+          "lat": -75.8,
+          "lng": 124.5,
+          "elevationM": 3180,
+          "passed": true,
+          "distanceFromPrevKm": 150
+        },
+        {
+          "id": "wp-12",
+          "name": "Subglacial Lake Anomaly (Current)",
+          "lat": -76.2,
+          "lng": 125.8,
+          "elevationM": 3100,
+          "passed": false,
+          "distanceFromPrevKm": 270,
+          "hazardNote": "Deep ice fracture zones detected"
+        },
+        {
+          "id": "wp-13",
+          "name": "Deep Core Extraction Point",
+          "lat": -77.4,
+          "lng": 128.2,
+          "elevationM": 2950,
+          "passed": false,
+          "distanceFromPrevKm": 360
+        }
+      ],
+      "fuelBurnPerDayL": 180,
+      "rationsDaysRemaining": 18,
+      "currentWeather": {
+        "tempC": -56,
+        "windchillC": -76,
+        "windKnots": 22,
+        "condition": "COND-2_CAUTION"
+      }
+    },
+    {
+      "id": "exp-711",
+      "code": "VALKYRIE-09",
+      "name": "Queen Maud Land Sastrugi Traverse",
+      "region": "antarctica",
+      "objective": "Autonomous sensor telemetry recovery and sastrugi obstacle clearing along the Princess Elisabeth corridor.",
+      "phase": "staging",
+      "leader": "Capt. Francois Mercier",
+      "crew": [
+        {
+          "id": "c-9",
+          "name": "Capt. Francois Mercier",
+          "role": "Traverse Leader",
+          "callsign": "Val-1",
+          "experienceSeasons": 12,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-10",
+          "name": "Jonas Brandt",
+          "role": "Survival Specialist",
+          "callsign": "Tracker",
+          "experienceSeasons": 6,
+          "medicalClearance": "Class-1 Unrestricted"
+        }
+      ],
+      "assignedAssetIds": [
+        "ast-at44"
+      ],
+      "departureDate": "2026-09-08",
+      "estimatedReturnDate": "2026-09-28",
+      "totalDistanceKm": 640,
+      "distanceCoveredKm": 0,
+      "currentLat": -71.95,
+      "currentLng": 23.34,
+      "waypoints": [
+        {
+          "id": "wp-20",
+          "name": "Princess Elisabeth Base Gate",
+          "lat": -71.95,
+          "lng": 23.34,
+          "elevationM": 1382,
+          "passed": false,
+          "distanceFromPrevKm": 0
+        },
+        {
+          "id": "wp-21",
+          "name": "Sør Rondane Mountains Pass",
+          "lat": -72.4,
+          "lng": 24.1,
+          "elevationM": 1850,
+          "passed": false,
+          "distanceFromPrevKm": 180
+        },
+        {
+          "id": "wp-22",
+          "name": "Plateau Megadune Perimeter",
+          "lat": -73.5,
+          "lng": 25.8,
+          "elevationM": 2420,
+          "passed": false,
+          "distanceFromPrevKm": 260
+        },
+        {
+          "id": "wp-23",
+          "name": "Autonomous Station Alpha Recover",
+          "lat": -74.8,
+          "lng": 28,
+          "elevationM": 2900,
+          "passed": false,
+          "distanceFromPrevKm": 200
+        }
+      ],
+      "fuelBurnPerDayL": 140,
+      "rationsDaysRemaining": 30,
+      "currentWeather": {
+        "tempC": -34,
+        "windchillC": -46,
+        "windKnots": 18,
+        "condition": "COND-3_NORMAL"
+      }
+    },
+    {
+      "id": "exp-714",
+      "code": "BOREALIS-ARC",
+      "name": "Svalbard Arctic Pack Ice Drone Patrol",
+      "region": "arctic",
+      "objective": "High-latitude sea-ice thickness mapping and drift telemetry buoy deployment north of 80°N latitude.",
+      "phase": "in_progress",
+      "leader": "Ingrid Solheim",
+      "crew": [
+        {
+          "id": "c-11",
+          "name": "Ingrid Solheim",
+          "role": "Traverse Leader",
+          "callsign": "Fjord-1",
+          "experienceSeasons": 5,
+          "medicalClearance": "Class-1 Unrestricted"
+        },
+        {
+          "id": "c-12",
+          "name": "Einar Johansen",
+          "role": "Survival Specialist",
+          "callsign": "Bear-Guard",
+          "experienceSeasons": 9,
+          "medicalClearance": "Class-1 Unrestricted"
+        }
+      ],
+      "assignedAssetIds": [],
+      "departureDate": "2026-08-27",
+      "estimatedReturnDate": "2026-09-09",
+      "totalDistanceKm": 420,
+      "distanceCoveredKm": 290,
+      "currentLat": 80.45,
+      "currentLng": 14.2,
+      "waypoints": [
+        {
+          "id": "wp-30",
+          "name": "Ny-Ålesund Kings Bay Port",
+          "lat": 78.92,
+          "lng": 11.93,
+          "elevationM": 10,
+          "passed": true,
+          "distanceFromPrevKm": 0
+        },
+        {
+          "id": "wp-31",
+          "name": "Moffen Island Ice Edge",
+          "lat": 80.02,
+          "lng": 14.5,
+          "elevationM": 2,
+          "passed": true,
+          "distanceFromPrevKm": 160
+        },
+        {
+          "id": "wp-32",
+          "name": "Pack Ice Floe Station 1",
+          "lat": 80.45,
+          "lng": 14.2,
+          "elevationM": 1,
+          "passed": false,
+          "distanceFromPrevKm": 130
+        },
+        {
+          "id": "wp-33",
+          "name": "Deep Arctic Ocean Transect",
+          "lat": 81.2,
+          "lng": 15,
+          "elevationM": 1,
+          "passed": false,
+          "distanceFromPrevKm": 130
+        }
+      ],
+      "fuelBurnPerDayL": 90,
+      "rationsDaysRemaining": 14,
+      "currentWeather": {
+        "tempC": -16,
+        "windchillC": -28,
+        "windKnots": 28,
+        "condition": "COND-3_NORMAL"
+      }
+    }
+  ],
+  "supplies": [
+    {
+      "id": "sup-f34",
+      "name": "Arctic Diesel Fuel Blend F-34 / JP-8",
+      "category": "fuel",
+      "currentStock": 485000,
+      "unit": "Liters",
+      "minThreshold": 150000,
+      "burnRatePerDay": 2850,
+      "storageLocation": "Bulk Fuel Farm Bladder 1-4",
+      "coldStabilityC": -65,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-jeta1",
+      "name": "Aviation Kerosene Jet-A1 Polar Anti-Ice",
+      "category": "fuel",
+      "currentStock": 195000,
+      "unit": "Liters",
+      "minThreshold": 80000,
+      "burnRatePerDay": 1400,
+      "storageLocation": "Air Wing Tanker Depot B",
+      "coldStabilityC": -58,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-rations",
+      "name": "High-Calorie Polar Rations (5,500 kcal/day)",
+      "category": "rations",
+      "currentStock": 3420,
+      "unit": "Man-Day Packs",
+      "minThreshold": 1200,
+      "burnRatePerDay": 35,
+      "storageLocation": "Cryo-Dry Storage Unit Alpha",
+      "coldStabilityC": -70,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-hypothermia",
+      "name": "Hypothermia Trauma & Resuscitation Kits",
+      "category": "medical",
+      "currentStock": 18,
+      "unit": "Tactical Units",
+      "minThreshold": 10,
+      "burnRatePerDay": 0.2,
+      "storageLocation": "Traverse Mobile Infirmary Pod",
+      "coldStabilityC": -50,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-o2",
+      "name": "High-Altitude Polar Medical Oxygen Cylinders",
+      "category": "medical",
+      "currentStock": 32,
+      "unit": "50L Cylinders",
+      "minThreshold": 20,
+      "burnRatePerDay": 0.5,
+      "storageLocation": "Dome C Pressurized Bay",
+      "coldStabilityC": -80,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-crevasse-gear",
+      "name": "Crevasse Extrication & Sled Hauling Pulleys",
+      "category": "survival_gear",
+      "currentStock": 24,
+      "unit": "Full Rigging Kits",
+      "minThreshold": 12,
+      "burnRatePerDay": 0,
+      "storageLocation": "Lead Snowcat Equipment Locker",
+      "coldStabilityC": -75,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-bivouac",
+      "name": "Geodesic Blizzard Bivouac Tents (4-Person)",
+      "category": "survival_gear",
+      "currentStock": 14,
+      "unit": "Shelters",
+      "minThreshold": 8,
+      "burnRatePerDay": 0,
+      "storageLocation": "Emergency Cache Bunker",
+      "coldStabilityC": -80,
+      "status": "optimal"
+    },
+    {
+      "id": "sup-stirling-parts",
+      "name": "Heater Glow Plugs & Hydraulic Seal Spares",
+      "category": "technical",
+      "currentStock": 8,
+      "unit": "Service Kits",
+      "minThreshold": 15,
+      "burnRatePerDay": 0.3,
+      "storageLocation": "Mechanical Workshop Sled",
+      "coldStabilityC": -60,
+      "status": "low"
+    }
+  ],
+  "dispatchLogs": [
+    {
+      "id": "log-1788493903898",
+      "timestamp": "03:51:43 UTC",
+      "callsign": "HQ DISPATCH CONSOLE",
+      "severity": "warning",
+      "sector": "Leverett Glacier Approach (85.2°S, 151.1°E)",
+      "message": "MAYDAY ACKNOWLEDGED by Operations Desk Lead. SAR asset SKIBIRD-91 (Skibird LC-130H Hercules (Tail 091)) dispatched."
+    },
+    {
+      "id": "log-1788493894955",
+      "timestamp": "03:51:34 UTC",
+      "callsign": "EXP-701 FIELD MOBILE",
+      "severity": "urgent_distress",
+      "sector": "Leverett Glacier Approach (85.2°S, 151.1°E)",
+      "message": "*** MAYDAY DISTRESS BEACON ACTIVE *** [Crevasse Fall / Structural Ice Breach] Snowcat lead track broke through concealed snow bridge into 25m slot void. Vehicle anchored, personnel secured in bivouac. (Urgency: Stage-2 Hypothermia / Immediate Evacuation, Souls: 4) (-85.25, 151.10) [Source: Mobile Phone Field Unit]"
+    },
+    {
+      "id": "log-01",
+      "timestamp": "2026-09-03 14:15 UTC",
+      "callsign": "Polar-Lead (EXP-702)",
+      "severity": "routine",
+      "sector": "Leverett Glacier Waypoint 4",
+      "message": "Traverse convoy PB-Alpha and Quad-01 safely cleared waypoint 4 climb. Both engines running nominal. Fuel consumption 415L/24h."
+    },
+    {
+      "id": "log-02",
+      "timestamp": "2026-09-03 12:40 UTC",
+      "callsign": "GPR-SCOUT (EXP-702)",
+      "severity": "advisory",
+      "sector": "Polar Plateau Gateway",
+      "message": "Radar scan identified 4.2m subsurface void 120m bearing 195°. Convoy diverted 400m east onto solid firn."
+    },
+    {
+      "id": "log-03",
+      "timestamp": "2026-09-03 09:30 UTC",
+      "callsign": "MCM Comms Relay",
+      "severity": "warning",
+      "sector": "Ross Ice Shelf",
+      "message": "Condition 2 declared for Southern Ross Sector. Gale warning 45 knots with drifting snow. Aircraft flights on hold."
+    },
+    {
+      "id": "log-04",
+      "timestamp": "2026-09-03 06:10 UTC",
+      "callsign": "Aurora-Lead (EXP-705)",
+      "severity": "routine",
+      "sector": "Wilkes Basin Bedrock",
+      "message": "Completed core transect 3. Bedrock thermal probe reading -2.1°C at base of ice column. Commencing return leg staging."
+    },
+    {
+      "id": "log-05",
+      "timestamp": "2026-09-02 22:50 UTC",
+      "callsign": "South Pole Station Tower",
+      "severity": "routine",
+      "sector": "Amundsen-Scott Skiway",
+      "message": "Clean skiway drag finished. Surface temp -51°C, wind 14 knots from 040. Prepared for scheduled Otter resupply."
+    }
+  ],
+  "activeDistress": null,
+  "lastUpdated": "2026-09-04T03:51:48.733Z"
+}
