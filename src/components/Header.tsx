@@ -9,9 +9,14 @@ import {
   Smartphone,
   Laptop,
   Wifi,
-  WifiOff
+  WifiOff,
+  Key,
+  Sparkles,
+  CloudSnow,
+  Wind,
+  LocateFixed
 } from 'lucide-react';
-import { PolarRegion, ConditionLevel } from '../types';
+import { PolarRegion, ConditionLevel, RealtimeWeatherReading } from '../types';
 import { SyncConnectionStatus } from '../hooks/usePolarSync';
 
 interface HeaderProps {
@@ -21,6 +26,13 @@ interface HeaderProps {
   onChangeCondition: (level: ConditionLevel) => void;
   onOpenDistressModal: () => void;
   onOpenPairingModal?: () => void;
+  onOpenApiKeyModal?: () => void;
+  hasCustomGmaps?: boolean;
+  hasCustomGemini?: boolean;
+  weatherTicker?: string;
+  userLocationWeather?: RealtimeWeatherReading | null;
+  userCityName?: string | null;
+  onAcquireGps?: () => Promise<any>;
   onResetData: () => void;
   activeExpeditionsCount: number;
   activeAssetsCount: number;
@@ -36,6 +48,13 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeCondition,
   onOpenDistressModal,
   onOpenPairingModal,
+  onOpenApiKeyModal,
+  hasCustomGmaps = false,
+  hasCustomGemini = false,
+  weatherTicker,
+  userLocationWeather,
+  userCityName,
+  onAcquireGps,
   onResetData,
   activeExpeditionsCount,
   activeAssetsCount,
@@ -201,6 +220,27 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {/* API Keys Configuration Button */}
+            {onOpenApiKeyModal && (
+              <button
+                id="api-keys-config-btn"
+                type="button"
+                onClick={onOpenApiKeyModal}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-semibold tracking-wider transition-colors shadow-sm ${
+                  hasCustomGmaps || hasCustomGemini
+                    ? 'bg-sky-950/80 hover:bg-sky-900/90 text-sky-200 border-sky-600/80 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                }`}
+                title="Configure Google Maps Platform & Gemini AI API Keys"
+              >
+                <Key className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">API KEYS</span>
+                {(hasCustomGmaps || hasCustomGemini) && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Custom API Keys Active" />
+                )}
+              </button>
+            )}
+
             {/* Emergency Distress Protocol Trigger */}
             <button
               id="sos-distress-btn"
@@ -249,8 +289,31 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="flex items-center gap-4 text-[11px] text-slate-400">
+          {/* Quick Metrics & Live Weather Ticker */}
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+            {userLocationWeather && (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-600/80 text-emerald-200 font-mono shadow-sm"
+                title={`Real-time meteorological conditions at ${userCityName || userLocationWeather.locationName}: ${userLocationWeather.weatherDescription}, Wind: ${userLocationWeather.windSpeedKts} kts, Baro: ${userLocationWeather.pressureHpa} hPa`}
+              >
+                <LocateFixed className="w-3 h-3 text-emerald-400 animate-pulse" />
+                <span className="font-bold text-[10px] text-white uppercase tracking-wider">
+                  {userCityName ? userCityName.split(',')[0] : userLocationWeather.locationName.split(' ')[0]}:
+                </span>
+                <span className="font-extrabold text-emerald-300">{userLocationWeather.tempC}°C</span>
+                <span className="text-slate-300 text-[10px] hidden sm:inline">
+                  ({userLocationWeather.weatherDescription} • {userLocationWeather.windSpeedKts}kt)
+                </span>
+              </div>
+            )}
+
+            {weatherTicker && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-sky-950/80 border border-sky-800/80 text-sky-300 font-mono">
+                <CloudSnow className="w-3 h-3 text-cyan-400 animate-pulse" />
+                <span className="font-bold text-[10px] text-sky-200">POLAR AWOS:</span>
+                <span>{weatherTicker}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-sky-400"></span>
               <span>EXPEDITIONS:</span>

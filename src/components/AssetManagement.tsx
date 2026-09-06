@@ -14,9 +14,13 @@ import {
   ShieldCheck, 
   AlertCircle,
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  Zap,
+  BatteryWarning,
+  AlertTriangle
 } from 'lucide-react';
 import { PolarAsset, AssetCategory, AssetStatus } from '../types';
+import { BatteryStatus } from './BatteryStatus';
 
 interface AssetManagementProps {
   assets: PolarAsset[];
@@ -38,6 +42,7 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [onlyLowBattery, setOnlyLowBattery] = useState<boolean>(false);
 
   const filteredAssets = assets.filter((asset) => {
     const matchesSearch =
@@ -48,9 +53,16 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
 
     const matchesCategory = selectedCategory === 'all' || asset.category === selectedCategory;
     const matchesStatus = selectedStatus === 'all' || asset.status === selectedStatus;
+    const matchesBattery = !onlyLowBattery || asset.fuelOrBatteryPercent < 25;
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesStatus && matchesBattery;
   });
+
+  // Calculate fleet power diagnostics
+  const totalBatterySum = assets.reduce((sum, a) => sum + a.fuelOrBatteryPercent, 0);
+  const avgFleetBattery = assets.length > 0 ? Math.round(totalBatterySum / assets.length) : 0;
+  const lowBatteryCount = assets.filter((a) => a.fuelOrBatteryPercent < 25).length;
+  const inTransitCount = assets.filter((a) => a.status === 'in_transit').length;
 
   const getCategoryIcon = (category: AssetCategory) => {
     switch (category) {
@@ -111,8 +123,55 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
         </button>
       </div>
 
+      {/* Fleet Battery Diagnostics Quick HUD */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-3 font-mono text-xs">
+        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-slate-400 block uppercase">FLEET AVG POWER</span>
+            <span className="text-sm font-bold text-sky-400">{avgFleetBattery}%</span>
+          </div>
+          <Zap className="w-4 h-4 text-sky-400" />
+        </div>
+
+        <div className={`p-2.5 rounded-lg border flex items-center justify-between transition-colors ${
+          lowBatteryCount > 0 ? 'bg-rose-950/40 border-rose-700/60' : 'bg-slate-950 border-slate-800'
+        }`}>
+          <div>
+            <span className="text-[10px] text-slate-400 block uppercase">LOW BATTERY (&lt;25%)</span>
+            <span className={`text-sm font-bold ${lowBatteryCount > 0 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
+              {lowBatteryCount} UNITS
+            </span>
+          </div>
+          <BatteryWarning className={`w-4 h-4 ${lowBatteryCount > 0 ? 'text-rose-400' : 'text-slate-500'}`} />
+        </div>
+
+        <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-slate-400 block uppercase">ACTIVE TRAVERSES</span>
+            <span className="text-sm font-bold text-amber-400">{inTransitCount} HEAVY LOADS</span>
+          </div>
+          <Activity className="w-4 h-4 text-amber-400" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOnlyLowBattery((prev) => !prev)}
+          className={`p-2.5 rounded-lg border flex items-center justify-between font-mono text-left transition-all ${
+            onlyLowBattery
+              ? 'bg-rose-600 text-white border-rose-400 ring-2 ring-rose-500/50'
+              : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800'
+          }`}
+        >
+          <div>
+            <span className="text-[10px] uppercase block opacity-80">FILTER CRITICAL POWER</span>
+            <span className="text-xs font-bold">{onlyLowBattery ? 'SHOWING &lt;25% ONLY' : 'SHOW ALL UNITS'}</span>
+          </div>
+          <Filter className="w-4 h-4 shrink-0" />
+        </button>
+      </div>
+
       {/* Filter Controls Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3 text-xs">
         {/* Search */}
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -152,9 +211,9 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
           >
             <option value="all">All Operational Statuses</option>
             <option value="operational">Operational</option>
-            <option value="in_transit">In Transit</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="cold_soaked">Cold Soaked</option>
+            <option value="in_transit">In Transit (Active Drain)</option>
+            <option value="maintenance">Maintenance (Recharging)</option>
+            <option value="cold_soaked">Cold Soaked (Sub-zero Drain)</option>
             <option value="standby">Standby</option>
           </select>
         </div>
@@ -179,9 +238,9 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
                     : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
                 }`}
               >
-                <div>
+                <div className="space-y-2.5">
                   {/* Top Bar: Code, Category & Status */}
-                  <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1 rounded bg-slate-900 border border-slate-800">
                         {getCategoryIcon(asset.category)}
@@ -194,70 +253,54 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
                   </div>
 
                   {/* Name & Model */}
-                  <h3 className="text-sm font-bold text-white tracking-wide font-display line-clamp-1">
-                    {asset.name}
-                  </h3>
-                  <p className="text-[11px] text-slate-400 font-mono mb-2">
-                    {asset.model}
-                  </p>
+                  <div>
+                    <h3 className="text-sm font-bold text-white tracking-wide font-display line-clamp-1">
+                      {asset.name}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      {asset.model}
+                    </p>
+                  </div>
 
                   {/* Location Coordinate Tag */}
-                  <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1 mb-2.5 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+                  <div className="bg-slate-900/90 border border-slate-800 rounded px-2 py-1 text-[11px] font-mono text-slate-300 flex items-center justify-between">
                     <span className="text-slate-500 truncate max-w-[140px]">{asset.currentLocation.name}</span>
                     <span className="text-sky-300 font-semibold">
                       {asset.currentLocation.lat > 0 ? `${asset.currentLocation.lat.toFixed(1)}°N` : `${Math.abs(asset.currentLocation.lat).toFixed(1)}°S`}
                     </span>
                   </div>
 
-                  {/* Telemetry Metrics */}
-                  <div className="space-y-2 text-xs font-mono mb-3">
-                    {/* Fuel / Battery Bar */}
-                    <div>
-                      <div className="flex justify-between text-[11px] mb-1">
-                        <span className="text-slate-400 flex items-center gap-1">
-                          <Fuel className="w-3 h-3 text-amber-400" />
-                          <span>{asset.fuelType.split(' ')[0]}</span>
-                        </span>
-                        <span className={asset.fuelOrBatteryPercent < 25 ? 'text-rose-400 font-bold' : 'text-slate-200 font-bold'}>
-                          {asset.fuelOrBatteryPercent}%
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            asset.fuelOrBatteryPercent < 25
-                              ? 'bg-rose-500'
-                              : asset.fuelOrBatteryPercent < 50
-                              ? 'bg-amber-500'
-                              : 'bg-sky-500'
-                          }`}
-                          style={{ width: `${asset.fuelOrBatteryPercent}%` }}
-                        />
-                      </div>
-                    </div>
+                  {/* Battery Status Component Integration */}
+                  <BatteryStatus
+                    batteryPercent={asset.fuelOrBatteryPercent}
+                    status={asset.status}
+                    fuelType={asset.fuelType}
+                    engineHealthPercent={asset.telemetry.engineHealthPercent}
+                    tempC={asset.telemetry.tempC}
+                    showHealthDetails={true}
+                  />
 
-                    {/* Cold Rating & Satlink Signal */}
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
-                        <span className="text-slate-500 block text-[9px] uppercase">COLD LIMIT</span>
-                        <span className="text-cyan-400 font-bold flex items-center gap-1">
-                          <ThermometerSnowflake className="w-3 h-3" />
-                          {asset.coldRatingC}°C
-                        </span>
-                      </div>
-                      <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
-                        <span className="text-slate-500 block text-[9px] uppercase">SATCOM LINK</span>
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
-                          <Radio className="w-3 h-3" />
-                          {asset.telemetry.satlinkSignal}%
-                        </span>
-                      </div>
+                  {/* Cold Rating & Satlink Signal */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
+                      <span className="text-slate-500 block text-[9px] uppercase">COLD LIMIT</span>
+                      <span className="text-cyan-400 font-bold flex items-center gap-1">
+                        <ThermometerSnowflake className="w-3 h-3" />
+                        {asset.coldRatingC}°C
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded bg-slate-900/60 border border-slate-800/80">
+                      <span className="text-slate-500 block text-[9px] uppercase">SATCOM LINK</span>
+                      <span className="text-emerald-400 font-bold flex items-center gap-1">
+                        <Radio className="w-3 h-3" />
+                        {asset.telemetry.satlinkSignal}%
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Quick Action Buttons */}
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-1 text-xs font-mono">
+                <div className="pt-2.5 mt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-xs font-mono">
                   {/* Status toggle selector */}
                   <select
                     value={asset.status}
@@ -275,17 +318,18 @@ export const AssetManagement: React.FC<AssetManagementProps> = ({
                     <option value="standby">Standby</option>
                   </select>
 
-                  {/* Refuel button */}
+                  {/* Refuel / Recharge button */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRefuelAsset(asset.id);
                     }}
-                    title="Top off Arctic Diesel / Batteries to 100%"
-                    className="px-2 py-1 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 text-[10px] font-bold tracking-wider transition-colors"
+                    title="Charge battery & replenish fuel to 100%"
+                    className="px-2 py-1 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 text-[10px] font-bold tracking-wider transition-colors flex items-center gap-1"
                   >
-                    REFUEL 100%
+                    <Zap className="w-3 h-3 text-amber-400" />
+                    <span>RECHARGE 100%</span>
                   </button>
                 </div>
               </div>

@@ -18,11 +18,11 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
   const [category, setCategory] = useState<AssetCategory>('heavy_traverse');
   const [model, setModel] = useState('');
   const [locationName, setLocationName] = useState('McMurdo Base Logistics Yard');
-  const [lat, setLat] = useState(-77.85);
-  const [lng, setLng] = useState(166.67);
-  const [coldRatingC, setColdRatingC] = useState(-65);
+  const [latInput, setLatInput] = useState('-77.85');
+  const [lngInput, setLngInput] = useState('166.67');
+  const [coldRatingCInput, setColdRatingCInput] = useState('-65');
   const [fuelType, setFuelType] = useState<PolarAsset['fuelType']>('Arctic Diesel F-34');
-  const [crewCapacity, setCrewCapacity] = useState(4);
+  const [crewCapacityInput, setCrewCapacityInput] = useState('4');
   const [heatingSystem, setHeatingSystem] = useState('Dual Webasto Thermo Hydronic Block Heaters');
 
   if (!isOpen) return null;
@@ -40,14 +40,14 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
       status: 'operational',
       currentLocation: {
         name: locationName.trim() || 'Polar Operations Hub',
-        lat: Number(lat),
-        lng: Number(lng),
+        lat: parseFloat(latInput) || -77.85,
+        lng: parseFloat(lngInput) || 166.67,
         elevationM: 50,
       },
-      coldRatingC: Number(coldRatingC),
+      coldRatingC: parseFloat(coldRatingCInput) || -65,
       fuelOrBatteryPercent: 100,
       fuelType,
-      crewCapacity: Number(crewCapacity),
+      crewCapacity: parseInt(crewCapacityInput, 10) || 4,
       lastMaintenanceDate: new Date().toISOString().split('T')[0],
       nextServiceHours: 250,
       specifications: {
@@ -89,6 +89,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
               <input
                 type="text"
                 required
+                autoFocus
                 placeholder="e.g. PB-BRAVO or TWIN-04"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -156,11 +157,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">COLD LIMIT (°C):</label>
               <input
-                type="number"
-                max="0"
-                min="-95"
-                value={coldRatingC}
-                onChange={(e) => setColdRatingC(Number(e.target.value))}
+                type="text"
+                value={coldRatingCInput}
+                onChange={(e) => setColdRatingCInput(e.target.value)}
+                placeholder="-65"
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-sky-500 focus:outline-none"
               />
             </div>
@@ -168,11 +168,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">CREW CAPACITY:</label>
               <input
-                type="number"
-                min="0"
-                max="50"
-                value={crewCapacity}
-                onChange={(e) => setCrewCapacity(Number(e.target.value))}
+                type="text"
+                value={crewCapacityInput}
+                onChange={(e) => setCrewCapacityInput(e.target.value)}
+                placeholder="4"
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-sky-500 focus:outline-none"
               />
             </div>

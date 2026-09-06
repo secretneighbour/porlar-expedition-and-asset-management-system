@@ -9,9 +9,13 @@ import {
   Plane,
   Smartphone,
   Send,
-  Navigation
+  Navigation,
+  Crosshair,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { PolarAsset } from '../types';
+import { useGeolocation } from '../hooks/useGeolocation';
 
 interface EmergencyModalProps {
   isOpen: boolean;
@@ -41,13 +45,23 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   const [personnelCount, setPersonnelCount] = useState(4);
   const [medicalUrgency, setMedicalUrgency] = useState('Stage-2 Hypothermia / Immediate Evacuation');
   const [notes, setNotes] = useState('Snowcat lead track broke through concealed snow bridge into 25m slot void. Vehicle anchored, personnel secured in bivouac.');
-  const [confirmedChecklist, setConfirmedChecklist] = useState({
-    beaconActive: true,
-    shelterSecured: true,
-    radioListeningWatch: true,
-  });
+  const [geoFixAcquired, setGeoFixAcquired] = useState<string | null>(null);
+
+  const { acquireSingleFix, loading: geoLoading, error: geoError, formattedAccuracy } = useGeolocation();
 
   if (!isOpen) return null;
+
+  const handleAcquireDeviceGps = async () => {
+    try {
+      const fix = await acquireSingleFix();
+      const coordStr = `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`;
+      setCoordinates(coordStr);
+      setLocationName(`Real-Time GPS Fix (${fix.lat > 0 ? 'Arctic/North' : 'Antarctica/South'})`);
+      setGeoFixAcquired(`Fix: ${coordStr} (Accuracy: ±${Math.round(fix.accuracy)}m)`);
+    } catch (err: any) {
+      // Handled in hook
+    }
+  };
 
   const sarCapableAssets = assets.filter(
     (a) => a.category === 'emergency_sar' || a.category === 'aviation' || a.category === 'heavy_traverse'
@@ -67,6 +81,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   };
 
   const setPresetCoords = (type: 'leverett' | 'southpole' | 'wilkes' | 'svalbard') => {
+    setGeoFixAcquired(null);
     switch (type) {
       case 'leverett':
         setLocationName('Leverett Glacier Ascent Zone');
@@ -211,9 +226,11 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-400 font-bold uppercase text-[10px] mb-1">
-                GPS FIX (LAT, LNG):
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-400 font-bold uppercase text-[10px]">
+                  GPS FIX (LAT, LNG):
+                </label>
+              </div>
               <input
                 type="text"
                 required
@@ -225,38 +242,61 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             </div>
           </div>
 
-          {/* Quick preset coordinate buttons */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span className="text-slate-400 uppercase">PRESET POLAR SECTORS:</span>
+          {/* Quick preset coordinate buttons & Live GPS acquisition */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-slate-400 uppercase">PRESETS:</span>
+              <button
+                type="button"
+                onClick={() => setPresetCoords('leverett')}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"
+              >
+                Leverett Glacier
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresetCoords('southpole')}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"
+              >
+                South Pole
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresetCoords('svalbard')}
+                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700"
+              >
+                Svalbard Arctic
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => setPresetCoords('leverett')}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"
+              onClick={handleAcquireDeviceGps}
+              disabled={geoLoading}
+              className="px-2.5 py-1 rounded bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-600 flex items-center gap-1.5 font-bold transition-all disabled:opacity-50"
             >
-              Leverett Glacier
-            </button>
-            <button
-              type="button"
-              onClick={() => setPresetCoords('southpole')}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"
-            >
-              South Pole Vicinity
-            </button>
-            <button
-              type="button"
-              onClick={() => setPresetCoords('wilkes')}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700"
-            >
-              Wilkes Basin
-            </button>
-            <button
-              type="button"
-              onClick={() => setPresetCoords('svalbard')}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700"
-            >
-              Svalbard Arctic
+              {geoLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              ) : (
+                <Crosshair className="w-3.5 h-3.5 text-sky-400" />
+              )}
+              <span>ACQUIRE DEVICE REAL-TIME GPS FIX</span>
             </button>
           </div>
+
+          {geoFixAcquired && (
+            <div className="p-2 rounded bg-emerald-950/60 border border-emerald-700 text-emerald-300 text-[11px] flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span><strong>Live GPS Lock:</strong> {geoFixAcquired}</span>
+            </div>
+          )}
+
+          {geoError && (
+            <div className="p-2 rounded bg-rose-950/60 border border-rose-700 text-rose-300 text-[11px] flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{geoError}</span>
+            </div>
+          )}
 
           {/* Situation description */}
           <div>

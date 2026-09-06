@@ -20,9 +20,9 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
   const [region, setRegion] = useState<PolarRegion>(defaultRegion);
   const [leader, setLeader] = useState('');
   const [objective, setObjective] = useState('');
-  const [totalDistanceKm, setTotalDistanceKm] = useState(850);
-  const [rationsDays, setRationsDays] = useState(30);
-  const [fuelBurnL, setFuelBurnL] = useState(250);
+  const [totalDistanceKmInput, setTotalDistanceKmInput] = useState('850');
+  const [rationsDaysInput, setRationsDaysInput] = useState('30');
+  const [fuelBurnLInput, setFuelBurnLInput] = useState('250');
 
   if (!isOpen) return null;
 
@@ -57,13 +57,13 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
       assignedAssetIds: [],
       departureDate: new Date().toISOString().split('T')[0],
       estimatedReturnDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      totalDistanceKm: Number(totalDistanceKm),
+      totalDistanceKm: parseFloat(totalDistanceKmInput) || 850,
       distanceCoveredKm: 0,
       currentLat: region === 'antarctica' ? -78.0 : 78.9,
       currentLng: region === 'antarctica' ? 166.0 : 11.9,
       waypoints: defaultWaypoints,
-      fuelBurnPerDayL: Number(fuelBurnL),
-      rationsDaysRemaining: Number(rationsDays),
+      fuelBurnPerDayL: parseFloat(fuelBurnLInput) || 250,
+      rationsDaysRemaining: parseFloat(rationsDaysInput) || 30,
       currentWeather: {
         tempC: -36,
         windchillC: -48,
@@ -98,6 +98,7 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
               <input
                 type="text"
                 required
+                autoFocus
                 placeholder="e.g. EXP-801"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -158,11 +159,10 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">TOTAL DISTANCE (KM):</label>
               <input
-                type="number"
-                min="50"
-                max="5000"
-                value={totalDistanceKm}
-                onChange={(e) => setTotalDistanceKm(Number(e.target.value))}
+                type="text"
+                value={totalDistanceKmInput}
+                onChange={(e) => setTotalDistanceKmInput(e.target.value)}
+                placeholder="850"
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -170,11 +170,10 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">RATIONS ENDURANCE (DAYS):</label>
               <input
-                type="number"
-                min="5"
-                max="120"
-                value={rationsDays}
-                onChange={(e) => setRationsDays(Number(e.target.value))}
+                type="text"
+                value={rationsDaysInput}
+                onChange={(e) => setRationsDaysInput(e.target.value)}
+                placeholder="30"
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -182,11 +181,10 @@ export const AddExpeditionModal: React.FC<AddExpeditionModalProps> = ({
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">EST. FUEL BURN (L/24H):</label>
               <input
-                type="number"
-                min="20"
-                max="2000"
-                value={fuelBurnL}
-                onChange={(e) => setFuelBurnL(Number(e.target.value))}
+                type="text"
+                value={fuelBurnLInput}
+                onChange={(e) => setFuelBurnLInput(e.target.value)}
+                placeholder="250"
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:border-indigo-500 focus:outline-none"
               />
             </div>

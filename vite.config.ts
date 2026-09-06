@@ -12,11 +12,17 @@ export default defineConfig(() => {
       },
     },
     server: {
-      allowedHosts:  true,
       // Hot Module Replacement (HMR) configuration
       hmr: process.env.DISABLE_HMR !== 'true',
-      // File watching configuration for production container optimization
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // File watching configuration to ignore runtime state persistence files
+      watch: {
+        ignored: [
+          '**/polar-state.json',
+          '**/.git/**',
+          '**/node_modules/**',
+          '**/dist/**',
+        ],
+      },
     },
   };
 });

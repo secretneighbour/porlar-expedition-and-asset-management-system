@@ -1,6 +1,8 @@
 {
   "name": "Polar Expedition and Asset Management System",
   "description": "Tactical operations hub for polar expeditions, research stations, icebreaker and crawler telemetry, environmental safety monitoring, and survival asset allocation.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "geolocation"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

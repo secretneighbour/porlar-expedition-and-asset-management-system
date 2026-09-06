@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Header 
 } from './components/Header';
@@ -30,11 +30,23 @@ import {
   AddExpeditionModal 
 } from './components/AddExpeditionModal';
 import {
+  AddBaseModal
+} from './components/AddBaseModal';
+import {
+  AddWaypointModal
+} from './components/AddWaypointModal';
+import {
+  WaypointPlannerPage
+} from './components/WaypointPlannerPage';
+import {
   ActiveDistressBanner
 } from './components/ActiveDistressBanner';
 import {
   DevicePairingModal
 } from './components/DevicePairingModal';
+import {
+  ApiKeyModal
+} from './components/ApiKeyModal';
 import {
   INITIAL_STATIONS,
   INITIAL_HAZARDS,
@@ -55,15 +67,24 @@ import {
   Send,
   MapPin,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  LocateFixed,
+  Crosshair,
+  Loader2,
+  Key
 } from 'lucide-react';
 import { usePolarSync } from './hooks/usePolarSync';
+import { useGeolocation } from './hooks/useGeolocation';
+import { useApiKeys } from './hooks/useApiKeys';
+import { useRealtimeWeather } from './hooks/useRealtimeWeather';
 
 export default function App() {
   // Real-time authoritative sync hook (HTTP + WebSocket)
   const {
     region,
     conditionLevel,
+    stations,
+    customWaypoints,
     assets,
     expeditions,
     supplies,
@@ -85,6 +106,10 @@ export default function App() {
     advanceWaypoint,
     updateExpeditionPhase,
     addExpedition,
+    addStation,
+    addWaypoint,
+    deleteWaypoint,
+    updateWaypoint,
     restockSupply,
     addDispatchLog,
     triggerDistress,
@@ -95,19 +120,85 @@ export default function App() {
 
   const [hazards] = useState<HazardZone[]>(INITIAL_HAZARDS);
 
+  // User-Configurable API Keys state (Google Maps Platform & Gemini AI)
+  const {
+    googleMapsApiKey,
+    geminiApiKey,
+    hasCustomGmaps,
+    hasCustomGemini,
+    saveKeys,
+    clearKeys,
+  } = useApiKeys();
+
+  // Geolocation with auto-start and IP fallback
+  const {
+    latitude: userLat,
+    longitude: userLng,
+    cityName: userCityName,
+    source: geoSource,
+    acquireSingleFix: mobileAcquireGps,
+    setManualLocation,
+    searchCity,
+    loading: mobileGeoLoading,
+    error: mobileGeoError,
+  } = useGeolocation(true);
+
+  // Real-time Meteorological Telemetry Hook (Open-Meteo High-Res AWOS)
+  const {
+    stationWeather,
+    userLocationWeather,
+    expeditionWeather,
+    customWeather,
+    queryCustomLocationWeather,
+    loading: loadingWeather,
+    error: weatherError,
+    lastUpdated: weatherLastUpdated,
+    refreshAllWeather,
+    refreshUserLocationWeather,
+  } = useRealtimeWeather({
+    stations,
+    expeditions,
+    userLat,
+    userLng,
+    userLocationName: userCityName,
+    region,
+  });
+
+  // Calculate live weather ticker for Header
+  const weatherTicker = (() => {
+    const southPole = stationWeather['st-amundsen-scott'];
+    const mcmurdo = stationWeather['st-mcmurdo'];
+    const concordia = stationWeather['st-concordia'];
+    const svalbard = stationWeather['st-svalbard'];
+
+    if (region === 'antarctica') {
+      const p1 = southPole ? `Amundsen-Scott ${southPole.tempC}°C (${southPole.windSpeedKts} kts)` : 'South Pole -51°C';
+      const p2 = mcmurdo ? `McMurdo ${mcmurdo.tempC}°C` : 'McMurdo -25°C';
+      const p3 = concordia ? `Dome C ${concordia.tempC}°C` : 'Dome C -63°C';
+      return `${p1} • ${p2} • ${p3}`;
+    } else {
+      const p1 = svalbard ? `Ny-Ålesund ${svalbard.tempC}°C (${svalbard.windSpeedKts} kts)` : 'Ny-Ålesund -14°C';
+      return `${p1} • Summit Camp -32°C • Alert Station -38°C`;
+    }
+  })();
+
   // Selections & radar focus
   const [selectedAsset, setSelectedAsset] = useState<PolarAsset | null>(null);
   const [selectedExpedition, setSelectedExpedition] = useState<Expedition | null>(null);
   const [focusCoords, setFocusCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Active Bottom Tab
-  const [activeTab, setActiveTab] = useState<'assets' | 'expeditions' | 'supplies' | 'comms' | 'field_mobile'>('assets');
+  const [activeTab, setActiveTab] = useState<'assets' | 'expeditions' | 'waypoints' | 'supplies' | 'comms' | 'field_mobile'>('assets');
 
   // Modals
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [isAddAssetModalOpen, setIsAddAssetModalOpen] = useState(false);
   const [isAddExpeditionModalOpen, setIsAddExpeditionModalOpen] = useState(false);
+  const [isAddBaseModalOpen, setIsAddBaseModalOpen] = useState(false);
+  const [isAddWaypointModalOpen, setIsAddWaypointModalOpen] = useState(false);
+  const [selectedExpeditionForWaypoint, setSelectedExpeditionForWaypoint] = useState<string | undefined>(undefined);
 
   // Quick field phone distress trigger form state
   const [mobileCallsign, setMobileCallsign] = useState('FIELD-SCOUT-01');
@@ -115,6 +206,38 @@ export default function App() {
   const [mobileCoords, setMobileCoords] = useState('-85.25, 151.10');
   const [mobileIncident, setMobileIncident] = useState('Crevasse Fall / Track Fracture');
   const [mobileReport, setMobileReport] = useState('Snowcat lead track dropped into crevasse slot void. 2 crew mild frostbite. Need urgent SAR.');
+  const [mobileGpsSuccess, setMobileGpsSuccess] = useState<string | null>(null);
+
+  const handleMobileAcquireGps = async () => {
+    try {
+      const fix = await mobileAcquireGps();
+      const coordStr = `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`;
+      setMobileCoords(coordStr);
+      setMobileSector(`Real-Time GPS Fix (${fix.lat > 0 ? 'Arctic Basin' : 'Antarctica'})`);
+      setMobileGpsSuccess(`GPS Fix Locked: ${coordStr} (±${Math.round(fix.accuracy)}m)`);
+    } catch (err) {
+      // Handled in hook
+    }
+  };
+
+  // Signal strength fluctuation for field phone (0-5 bars)
+  const [mobileSignalStrength, setMobileSignalStrength] = useState(4);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Simulate random polar/satellite interference
+      const rand = Math.random();
+      let newStrength = 4;
+      if (rand > 0.9) newStrength = 1; // Critical fade
+      else if (rand > 0.8) newStrength = 2; // Weak signal
+      else if (rand > 0.6) newStrength = 3; // Moderate
+      else if (rand > 0.3) newStrength = 5; // Perfect zenith pass
+      else newStrength = 4; // Nominal
+      
+      setMobileSignalStrength(newStrength);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Handlers
   const handleResetData = () => {
@@ -195,6 +318,13 @@ export default function App() {
         onChangeCondition={updateConditionLevel}
         onOpenDistressModal={() => setIsEmergencyModalOpen(true)}
         onOpenPairingModal={() => setIsPairingModalOpen(true)}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+        hasCustomGmaps={hasCustomGmaps}
+        hasCustomGemini={hasCustomGemini}
+        weatherTicker={weatherTicker}
+        userLocationWeather={userLocationWeather}
+        userCityName={userCityName}
+        onAcquireGps={mobileAcquireGps}
         onResetData={handleResetData}
         activeExpeditionsCount={expeditions.filter((e) => e.phase === 'in_progress').length}
         activeAssetsCount={assets.filter((a) => a.status === 'in_transit' || a.status === 'operational').length}
@@ -226,14 +356,28 @@ export default function App() {
           <div className="lg:col-span-7">
             <PolarMap
               region={region}
-              stations={INITIAL_STATIONS}
+              stations={stations}
               assets={assets}
               expeditions={expeditions}
               hazards={hazards}
+              stationWeather={stationWeather}
+              expeditionWeather={expeditionWeather}
+              userLocationWeather={userLocationWeather}
+              userLocationName={userCityName}
               activeDistress={activeDistress}
               focusCoords={focusCoords}
               selectedAssetId={selectedAsset?.id}
               selectedExpeditionId={selectedExpedition?.id}
+              googleMapsApiKey={googleMapsApiKey}
+              onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+              customWaypoints={customWaypoints}
+              onAddWaypoint={addWaypoint}
+              onDeleteWaypoint={deleteWaypoint}
+              onUpdateWaypoint={updateWaypoint}
+              onOpenAddBase={() => setIsAddBaseModalOpen(true)}
+              onOpenAddWaypoint={() => {
+                setActiveTab('waypoints');
+              }}
               onSelectAsset={(asset) => {
                 setSelectedAsset(asset);
                 if (asset) setActiveTab('assets');
@@ -247,7 +391,31 @@ export default function App() {
 
           {/* Environmental Telemetry & Stations Sensor HUD */}
           <div className="lg:col-span-5">
-            <EnvironmentalTelemetry conditionLevel={conditionLevel} />
+            <EnvironmentalTelemetry 
+              conditionLevel={conditionLevel}
+              region={region}
+              stations={stations}
+              expeditions={expeditions}
+              stationWeather={stationWeather}
+              userLocationWeather={userLocationWeather}
+              expeditionWeather={expeditionWeather}
+              customWeather={customWeather}
+              queryCustomLocationWeather={queryCustomLocationWeather}
+              loadingWeather={loadingWeather}
+              weatherLastUpdated={weatherLastUpdated}
+              onRefreshWeather={refreshAllWeather}
+              userLat={userLat}
+              userLng={userLng}
+              userCityName={userCityName}
+              geoSource={geoSource}
+              onAcquireGps={mobileAcquireGps}
+              onSetManualLocation={setManualLocation}
+              onSearchCity={searchCity}
+              onFlyToLocation={({ lat, lng }) => {
+                handleLocateOnMap(lat, lng);
+              }}
+              onOpenAddBase={() => setIsAddBaseModalOpen(true)}
+            />
           </div>
 
         </div>
@@ -282,6 +450,20 @@ export default function App() {
             >
               <Navigation className="w-3.5 h-3.5" />
               <span>EXPEDITION TRAVERSES ({expeditions.length})</span>
+            </button>
+
+            <button
+              id="tab-waypoints-btn"
+              type="button"
+              onClick={() => setActiveTab('waypoints')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap ${
+                activeTab === 'waypoints'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              <span>WAYPOINT PLANNER STUDIO</span>
             </button>
 
             <button
@@ -350,11 +532,32 @@ export default function App() {
             {activeTab === 'expeditions' && (
               <ExpeditionTracker
                 expeditions={expeditions}
+                assets={assets}
+                expeditionWeather={expeditionWeather}
                 selectedExpeditionId={selectedExpedition?.id}
                 onSelectExpedition={setSelectedExpedition}
                 onAdvanceWaypoint={advanceWaypoint}
                 onUpdateExpeditionPhase={updateExpeditionPhase}
+                onRefuelAsset={refuelAsset}
                 onOpenAddModal={() => setIsAddExpeditionModalOpen(true)}
+                onOpenAddWaypoint={(expId) => {
+                  setSelectedExpeditionForWaypoint(expId);
+                  setActiveTab('waypoints');
+                }}
+                onDeleteWaypoint={deleteWaypoint}
+                onUpdateWaypoint={updateWaypoint}
+              />
+            )}
+
+            {activeTab === 'waypoints' && (
+              <WaypointPlannerPage
+                expeditions={expeditions}
+                onAddWaypoint={addWaypoint}
+                onDeleteWaypoint={deleteWaypoint}
+                onUpdateWaypoint={updateWaypoint}
+                userLat={userLat}
+                userLng={userLng}
+                userCityName={userCityName}
               />
             )}
 
@@ -370,6 +573,8 @@ export default function App() {
               <DispatchLogbook
                 logs={dispatchLogs}
                 onAddLog={addDispatchLog}
+                geminiApiKey={geminiApiKey}
+                onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
               />
             )}
 
@@ -389,8 +594,24 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold text-rose-400 tracking-wider">
                             MOBILE CELLULAR & IRIDIUM FIELD UNIT
                           </span>
+                          
+                          {/* Visual Signal Strength Meter */}
+                          <div className="flex items-end gap-0.5 h-3 px-1" title={`Satellite Signal: ${mobileSignalStrength}/5 bars`}>
+                            {[1, 2, 3, 4, 5].map((bar) => (
+                              <div
+                                key={bar}
+                                className={`w-0.5 rounded-t-[1px] transition-all duration-700 ${
+                                  bar <= mobileSignalStrength 
+                                    ? mobileSignalStrength <= 2 ? 'bg-rose-500 shadow-[0_0_4px_rgba(244,63,94,0.6)]' : 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.4)]' 
+                                    : 'bg-slate-800'
+                                }`}
+                                style={{ height: `${bar * 20}%` }}
+                              />
+                            ))}
+                          </div>
+
                           <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 text-[9px]">
-                            DATA LINK: ACTIVE
+                            DATA LINK: {mobileSignalStrength > 1 ? 'ACTIVE' : 'INTERMITTENT'}
                           </span>
                         </div>
                         <h2 className="text-base sm:text-lg font-bold text-white font-display uppercase tracking-wide">
@@ -531,9 +752,11 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label className="block text-slate-400 font-bold uppercase text-[10px] mb-1">
-                            COORDINATES (LAT, LNG):
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-slate-400 font-bold uppercase text-[10px]">
+                              COORDINATES (LAT, LNG):
+                            </label>
+                          </div>
                           <input
                             type="text"
                             required
@@ -543,6 +766,38 @@ export default function App() {
                           />
                         </div>
                       </div>
+
+                      {/* GPS Auto-Fix Tool */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] text-slate-400">High-Precision Device GPS:</span>
+                        <button
+                          type="button"
+                          onClick={handleMobileAcquireGps}
+                          disabled={mobileGeoLoading}
+                          className="px-3 py-1 rounded bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-600 text-xs flex items-center gap-1.5 font-bold transition-all disabled:opacity-50"
+                        >
+                          {mobileGeoLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                          ) : (
+                            <Crosshair className="w-3.5 h-3.5 text-sky-400" />
+                          )}
+                          <span>ACQUIRE REAL-TIME GPS FIX</span>
+                        </button>
+                      </div>
+
+                      {mobileGpsSuccess && (
+                        <div className="p-2 rounded bg-emerald-950/60 border border-emerald-700 text-emerald-300 text-[11px] flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>{mobileGpsSuccess}</span>
+                        </div>
+                      )}
+
+                      {mobileGeoError && (
+                        <div className="p-2 rounded bg-rose-950/60 border border-rose-700 text-rose-300 text-[11px] flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                          <span>{mobileGeoError}</span>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-slate-400 font-bold uppercase text-[10px] mb-1">
@@ -609,6 +864,33 @@ export default function App() {
         defaultRegion={region}
       />
 
+      <AddBaseModal
+        isOpen={isAddBaseModalOpen}
+        onClose={() => setIsAddBaseModalOpen(false)}
+        onAddStation={(newStation) => {
+          addStation(newStation);
+          refreshAllWeather();
+        }}
+        defaultRegion={region}
+        userLat={userLat}
+        userLng={userLng}
+      />
+
+      <AddWaypointModal
+        isOpen={isAddWaypointModalOpen}
+        onClose={() => {
+          setIsAddWaypointModalOpen(false);
+          setSelectedExpeditionForWaypoint(undefined);
+        }}
+        onAddWaypoint={(waypoint, expeditionId) => {
+          addWaypoint(waypoint, expeditionId);
+        }}
+        expeditions={expeditions}
+        selectedExpeditionId={selectedExpeditionForWaypoint}
+        userLat={userLat}
+        userLng={userLng}
+      />
+
       <DevicePairingModal
         isOpen={isPairingModalOpen}
         onClose={() => setIsPairingModalOpen(false)}
@@ -627,6 +909,15 @@ export default function App() {
             reportedByDevice: 'Mobile Phone Field Unit',
           });
         }}
+      />
+
+      {/* Front-End User Configurable API Keys Modal */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        googleMapsApiKey={googleMapsApiKey}
+        geminiApiKey={geminiApiKey}
+        onSaveKeys={saveKeys}
       />
 
     </div>

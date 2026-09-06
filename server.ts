@@ -9,12 +9,16 @@ import {
   INITIAL_EXPEDITIONS,
   INITIAL_SUPPLIES,
   INITIAL_DISPATCH_LOGS,
+  INITIAL_STATIONS,
 } from './src/data/polarData.js';
 import { PolarSystemState, ActiveDistressAlert, SyncMessage, ConnectedDevice } from './src/types.js';
+import os from 'os';
+import { GoogleGenAI } from '@google/genai';
 
 const PORT = 3000;
 const HOST = '0.0.0.0';
-const STATE_FILE_PATH = path.join(process.cwd(), 'polar-state.json');
+const STATE_FILE_PATH = path.join(os.tmpdir(), 'polar-state.json');
+const LOCAL_FALLBACK_STATE = path.join(process.cwd(), 'polar-state.json');
 
 // Real-time active devices registry (deduplicated by deviceId)
 const activeDevices = new Map<string, ConnectedDevice>();
@@ -26,11 +30,23 @@ function getDeviceList(): ConnectedDevice[] {
 // Initialize system state from disk or defaults
 function loadInitialState(): PolarSystemState {
   try {
-    if (fs.existsSync(STATE_FILE_PATH)) {
-      const data = fs.readFileSync(STATE_FILE_PATH, 'utf-8');
+    const targetPath = fs.existsSync(STATE_FILE_PATH)
+      ? STATE_FILE_PATH
+      : fs.existsSync(LOCAL_FALLBACK_STATE)
+      ? LOCAL_FALLBACK_STATE
+      : null;
+
+    if (targetPath) {
+      const data = fs.readFileSync(targetPath, 'utf-8');
       const parsed = JSON.parse(data);
       if (parsed && Array.isArray(parsed.assets) && Array.isArray(parsed.expeditions)) {
-        console.log('[POLAR-SERVER] Authoritative state loaded from persistent disk storage.');
+        if (!parsed.stations || !Array.isArray(parsed.stations)) {
+          parsed.stations = INITIAL_STATIONS;
+        }
+        if (!parsed.customWaypoints || !Array.isArray(parsed.customWaypoints)) {
+          parsed.customWaypoints = [];
+        }
+        console.log(`[POLAR-SERVER] Authoritative state loaded from persistent storage (${targetPath}).`);
         return parsed;
       }
     }
@@ -46,6 +62,8 @@ function loadInitialState(): PolarSystemState {
     supplies: INITIAL_SUPPLIES,
     dispatchLogs: INITIAL_DISPATCH_LOGS,
     activeDistress: null,
+    stations: INITIAL_STATIONS,
+    customWaypoints: [],
     lastUpdated: new Date().toISOString(),
   };
 }
@@ -111,6 +129,71 @@ async function startServer() {
       broadcastPresence();
     }
   }, 2500);
+
+  // Simulated Polar Battery & Fuel Drain Loop (every 4 seconds)
+  // Slowly drains battery based on active status: in_transit (high), operational (medium), cold_soaked (subzero parasitic)
+  setInterval(() => {
+    if (!systemState.assets || systemState.assets.length === 0) return;
+    let anyChanged = false;
+
+    systemState.assets = systemState.assets.map((asset) => {
+      let drainAmount = 0;
+      let chargeAmount = 0;
+
+      switch (asset.status) {
+        case 'in_transit':
+          // Active traverse or flight in progress (high discharge)
+          drainAmount = 1;
+          break;
+        case 'operational':
+          // Systems online, generator / equipment running (moderate discharge)
+          drainAmount = Math.random() > 0.4 ? 1 : 0;
+          break;
+        case 'cold_soaked':
+          // Extreme sub-zero parasitic battery drain
+          drainAmount = Math.random() > 0.7 ? 1 : 0;
+          break;
+        case 'standby':
+          // Very low standby idle discharge
+          drainAmount = Math.random() > 0.9 ? 1 : 0;
+          break;
+        case 'maintenance':
+          // In maintenance depot: slowly recharge
+          if (asset.fuelOrBatteryPercent < 100) {
+            chargeAmount = 2;
+          }
+          break;
+        default:
+          break;
+      }
+
+      let newPercent = asset.fuelOrBatteryPercent;
+      if (drainAmount > 0) {
+        newPercent = Math.max(0, asset.fuelOrBatteryPercent - drainAmount);
+      } else if (chargeAmount > 0) {
+        newPercent = Math.min(100, asset.fuelOrBatteryPercent + chargeAmount);
+      }
+
+      if (newPercent !== asset.fuelOrBatteryPercent) {
+        anyChanged = true;
+        return {
+          ...asset,
+          fuelOrBatteryPercent: newPercent,
+          status: newPercent === 0 && asset.status === 'in_transit' ? 'cold_soaked' : asset.status,
+        };
+      }
+      return asset;
+    });
+
+    if (anyChanged) {
+      persistState();
+      broadcast({
+        type: 'STATE_UPDATE',
+        payload: systemState,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, 4000);
 
   // REST API Endpoints for State & Distress Actions
   app.get('/api/state', (req, res) => {
@@ -308,6 +391,8 @@ async function startServer() {
       supplies: INITIAL_SUPPLIES,
       dispatchLogs: INITIAL_DISPATCH_LOGS,
       activeDistress: null,
+      stations: INITIAL_STATIONS,
+      customWaypoints: [],
       lastUpdated: new Date().toISOString(),
     };
     persistState();
@@ -326,6 +411,92 @@ async function startServer() {
     const { action, payload } = req.body;
     handleClientAction(action, payload);
     res.json({ success: true, state: systemState });
+  });
+
+  // Test Gemini API key validation
+  app.post('/api/ai/test-key', async (req, res) => {
+    const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
+    const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
+
+    if (!keyToUse) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'No Gemini API key provided. Please enter a key in the frontend API Key Config modal or set GEMINI_API_KEY.',
+      });
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: keyToUse });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'Confirm Polar Tactical Communications handshake. Reply with one sentence: HANDSHAKE CONFIRMED.',
+      });
+
+      res.json({
+        status: 'ok',
+        model: 'gemini-2.5-flash',
+        sampleReply: response.text?.trim() || 'HANDSHAKE CONFIRMED',
+      });
+    } catch (err: any) {
+      console.error('[POLAR-AI] Test key failed:', err.message);
+      res.status(401).json({
+        status: 'error',
+        error: err.message || 'Authentication with Gemini API failed. Please verify the key string.',
+      });
+    }
+  });
+
+  // AI Tactical Polar Reconnaissance & Hazard Assessment
+  app.post('/api/ai/recon-eval', async (req, res) => {
+    const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
+    const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
+
+    if (!keyToUse) {
+      return res.status(400).json({
+        error: 'Gemini API key is required. Please enter your API key in the frontend API Key configuration dialog.',
+      });
+    }
+
+    const { prompt, region = systemState.region, focusAsset, focusExpedition } = req.body;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: keyToUse });
+
+      const contextSummary = `
+POLAR SECTOR CONTEXT:
+- Operational Region: ${region.toUpperCase()}
+- Active Base Condition Level: ${systemState.conditionLevel}
+- Active Distress Beacon: ${systemState.activeDistress ? `${systemState.activeDistress.incidentType} at ${systemState.activeDistress.location} (${systemState.activeDistress.coordinates})` : 'NONE'}
+- Active Expeditions: ${systemState.expeditions.map(e => `${e.name} (${e.code}): Phase ${e.phase}, Covered ${e.distanceCoveredKm}/${e.totalDistanceKm}km, Leader: ${e.leader}`).join('; ')}
+- Field Assets: ${systemState.assets.map(a => `${a.name} (${a.code}): Status ${a.status}, Fuel/Battery ${a.fuelOrBatteryPercent}%, Position: ${a.currentLocation.lat.toFixed(4)}, ${a.currentLocation.lng.toFixed(4)}`).join('; ')}
+- Recent Dispatch Logs: ${systemState.dispatchLogs.slice(0, 5).map(l => `[${l.severity.toUpperCase()}] ${l.callsign}: ${l.message}`).join(' | ')}
+`;
+
+      const systemInstruction = `You are the Antarctic & Arctic Tactical Operations AI Advisor (POLAR-AI-CORE). 
+Provide crisp, highly professional, tactical polar survival, route risk assessments, and cold-weather mechanical mitigation directives. 
+Focus on wind chill, crevasse hazards, whiteout navigation, battery thermal preservation, and logistics prioritization. Avoid filler. Structure response cleanly with bulleted action directives.`;
+
+      const aiResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `${contextSummary}\n\nOPERATIONAL QUERY / RECON TASK:\n${prompt || 'Provide a complete situational risk audit and tactical recommendations for all ongoing polar traverses and extreme cold assets.'}`,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+        },
+      });
+
+      res.json({
+        status: 'ok',
+        analysis: aiResponse.text || 'No response generated.',
+        model: 'gemini-2.5-flash',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('[POLAR-AI] Recon evaluation error:', err.message);
+      res.status(500).json({
+        error: err.message || 'Failed to complete AI tactical evaluation.',
+      });
+    }
   });
 
   // Shared action processor
@@ -349,6 +520,66 @@ async function startServer() {
       case 'ADD_EXPEDITION':
         systemState.expeditions = [payload, ...systemState.expeditions];
         break;
+      case 'ADD_STATION':
+        systemState.stations = [payload, ...(systemState.stations || INITIAL_STATIONS)];
+        break;
+      case 'UPDATE_STATIONS':
+        systemState.stations = payload;
+        break;
+      case 'ADD_WAYPOINT': {
+        const { waypoint, expeditionId } = payload || {};
+        const wp = waypoint || payload;
+        if (expeditionId) {
+          systemState.expeditions = systemState.expeditions.map((e) => {
+            if (e.id !== expeditionId) return e;
+            const updatedWaypoints = [...(e.waypoints || []), wp];
+            const addedDist = Number(wp.distanceFromPrevKm) || 45;
+            return {
+              ...e,
+              waypoints: updatedWaypoints,
+              totalDistanceKm: e.totalDistanceKm + addedDist,
+            };
+          });
+        } else {
+          systemState.customWaypoints = [wp, ...(systemState.customWaypoints || [])];
+        }
+        break;
+      }
+      case 'DELETE_WAYPOINT': {
+        const { waypointId, expeditionId } = payload || {};
+        if (expeditionId) {
+          systemState.expeditions = systemState.expeditions.map((e) => {
+            if (e.id !== expeditionId) return e;
+            return {
+              ...e,
+              waypoints: (e.waypoints || []).filter((w) => w.id !== waypointId),
+            };
+          });
+        } else {
+          systemState.customWaypoints = (systemState.customWaypoints || []).filter(
+            (w) => w.id !== waypointId
+          );
+        }
+        break;
+      }
+      case 'UPDATE_WAYPOINT': {
+        const { waypoint, expeditionId } = payload || {};
+        if (!waypoint) break;
+        if (expeditionId) {
+          systemState.expeditions = systemState.expeditions.map((e) => {
+            if (e.id !== expeditionId) return e;
+            return {
+              ...e,
+              waypoints: (e.waypoints || []).map((w) => (w.id === waypoint.id ? waypoint : w)),
+            };
+          });
+        } else {
+          systemState.customWaypoints = (systemState.customWaypoints || []).map((w) =>
+            w.id === waypoint.id ? waypoint : w
+          );
+        }
+        break;
+      }
       case 'RESTOCK_SUPPLY':
         systemState.supplies = systemState.supplies.map((s) => (s.id === payload.id ? payload : s));
         break;
@@ -508,6 +739,9 @@ async function startServer() {
           case 'UPDATE_CONDITION':
           case 'UPDATE_ASSET':
           case 'UPDATE_EXPEDITION':
+          case 'ADD_WAYPOINT':
+          case 'DELETE_WAYPOINT':
+          case 'UPDATE_WAYPOINT':
           case 'RESTOCK_SUPPLY':
           case 'ADD_DISPATCH_LOG':
           case 'RESET_STATE': {
@@ -543,7 +777,6 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        allowedHosts: true,
         hmr: isHmrDisabled ? false : undefined,
       },
       appType: 'spa',

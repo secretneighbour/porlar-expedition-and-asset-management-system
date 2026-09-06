@@ -15,9 +15,13 @@ import {
   ZoomOut,
   RotateCcw,
   Navigation,
-  Info
+  Info,
+  Loader2,
+  LocateFixed
 } from 'lucide-react';
-import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint, ActiveDistressAlert } from '../types';
+import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint, ActiveDistressAlert, RealtimeWeatherReading } from '../types';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { RealMapView } from './RealMapView';
 
 interface PolarMapProps {
   region: PolarRegion;
@@ -25,12 +29,24 @@ interface PolarMapProps {
   assets: PolarAsset[];
   expeditions: Expedition[];
   hazards: HazardZone[];
+  stationWeather?: Record<string, RealtimeWeatherReading>;
+  expeditionWeather?: Record<string, RealtimeWeatherReading>;
+  userLocationWeather?: RealtimeWeatherReading | null;
+  userLocationName?: string | null;
   selectedAssetId?: string;
   selectedExpeditionId?: string;
   activeDistress?: ActiveDistressAlert | null;
   focusCoords?: { lat: number; lng: number } | null;
+  googleMapsApiKey?: string;
+  onOpenApiKeyModal?: () => void;
   onSelectAsset: (asset: PolarAsset | null) => void;
   onSelectExpedition: (expedition: Expedition | null) => void;
+  customWaypoints?: Waypoint[];
+  onOpenAddBase?: () => void;
+  onOpenAddWaypoint?: () => void;
+  onAddWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
+  onDeleteWaypoint?: (waypointId: string, expeditionId?: string) => void;
+  onUpdateWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
 }
 
 export const PolarMap: React.FC<PolarMapProps> = ({
@@ -39,29 +55,59 @@ export const PolarMap: React.FC<PolarMapProps> = ({
   assets,
   expeditions,
   hazards,
+  stationWeather = {},
+  expeditionWeather = {},
+  userLocationWeather = null,
+  userLocationName = null,
   selectedAssetId,
   selectedExpeditionId,
   activeDistress,
   focusCoords,
+  googleMapsApiKey = '',
+  onOpenApiKeyModal,
   onSelectAsset,
   onSelectExpedition,
+  customWaypoints = [],
+  onOpenAddBase,
+  onOpenAddWaypoint,
+  onAddWaypoint,
+  onDeleteWaypoint,
+  onUpdateWaypoint,
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   
+  // Real-time Geolocation Hook
+  const {
+    latitude: userLat,
+    longitude: userLng,
+    accuracyMeters: userAccuracy,
+    altitudeMeters: userAlt,
+    speedMps: userSpeed,
+    loading: geoLoading,
+    error: geoError,
+    acquireSingleFix,
+    startLiveTracking,
+    stopLiveTracking,
+    isWatching: isGpsTracking,
+    formattedAccuracy,
+  } = useGeolocation();
+  
   // Layer toggles
+  const [mapMode, setMapMode] = useState<'radar' | 'real_satellite'>('real_satellite');
   const [showStations, setShowStations] = useState<boolean>(true);
   const [showAssets, setShowAssets] = useState<boolean>(true);
   const [showTraverses, setShowTraverses] = useState<boolean>(true);
   const [showHazards, setShowHazards] = useState<boolean>(true);
   const [showWeatherOverlay, setShowWeatherOverlay] = useState<boolean>(true);
   const [showGrid, setShowGrid] = useState<boolean>(true);
+  const [showUserGps, setShowUserGps] = useState<boolean>(true);
 
   // Inspector card state
   const [selectedInspectable, setSelectedInspectable] = useState<{
-    type: 'station' | 'asset' | 'expedition' | 'hazard' | 'waypoint';
+    type: 'station' | 'asset' | 'expedition' | 'hazard' | 'waypoint' | 'user_gps' | 'distress';
     data: any;
   } | null>(null);
 
@@ -75,20 +121,26 @@ export const PolarMap: React.FC<PolarMapProps> = ({
   // For Arctic: Lat ranges from +90 to +65. Pole is center.
   const projectCoordinates = useMemo(() => {
     return (lat: number, lng: number): { x: number; y: number } => {
+      let safeLat = Number(lat) || 0;
+      let safeLng = Number(lng) || 0;
+
       if (region === 'antarctica') {
-        const polarDistDeg = Math.max(0, -lat); // 0 at -90, 25 at -65
-        const r = (90 - polarDistDeg) * (maxRadius / 25); // radius proportional to latitude from pole
+        // Bound latitude between -90 and -65 for polar projection
+        const clampedLat = Math.max(-90, Math.min(-65, safeLat < 0 ? safeLat : -75));
+        const polarDistDeg = Math.abs(clampedLat) - 65; // 25 at -90, 0 at -65
+        const r = Math.min(maxRadius * 1.02, Math.max(0, (25 - polarDistDeg) * (maxRadius / 25)));
         // In Antarctica map conventions, 0° longitude is upwards (Prime Meridian)
-        const rad = ((lng - 90) * Math.PI) / 180;
+        const rad = ((safeLng - 90) * Math.PI) / 180;
         return {
           x: center + r * Math.cos(rad),
           y: center + r * Math.sin(rad),
         };
       } else {
         // Arctic: Lat 90 is center, 65 is edge
-        const polarDistDeg = Math.max(0, 90 - lat);
-        const r = polarDistDeg * (maxRadius / 25);
-        const rad = ((lng - 90) * Math.PI) / 180;
+        const clampedLat = Math.min(90, Math.max(65, safeLat > 0 ? safeLat : 75));
+        const polarDistDeg = 90 - clampedLat; // 0 at 90, 25 at 65
+        const r = Math.min(maxRadius * 1.02, Math.max(0, polarDistDeg * (maxRadius / 25)));
+        const rad = ((safeLng - 90) * Math.PI) / 180;
         return {
           x: center + r * Math.cos(rad),
           y: center + r * Math.sin(rad),
@@ -103,11 +155,35 @@ export const PolarMap: React.FC<PolarMapProps> = ({
       const pos = projectCoordinates(focusCoords.lat, focusCoords.lng);
       setZoomLevel(1.8);
       setPan({
-        x: (center - pos.x) * 1.8,
-        y: (center - pos.y) * 1.8,
+        x: Math.max(-400, Math.min(400, (center - pos.x) * 1.8)),
+        y: Math.max(-400, Math.min(400, (center - pos.y) * 1.8)),
       });
     }
   }, [focusCoords, projectCoordinates, center]);
+
+  const handleAcquireAndCenterGps = async () => {
+    try {
+      const fix = await acquireSingleFix();
+      startLiveTracking();
+
+      const isPolarLat = region === 'antarctica' ? fix.lat <= -60 : fix.lat >= 60;
+      if (isPolarLat) {
+        const pos = projectCoordinates(fix.lat, fix.lng);
+        setZoomLevel(1.8);
+        setPan({
+          x: Math.max(-350, Math.min(350, (center - pos.x) * 1.8)),
+          y: Math.max(-350, Math.min(350, (center - pos.y) * 1.8)),
+        });
+      } else {
+        // User is observing from a non-polar region (e.g. Operations HQ / home base)
+        // Keep radar centered on primary polar station without throwing view off-screen
+        setZoomLevel(1.0);
+        setPan({ x: 0, y: 0 });
+      }
+    } catch (e) {
+      // Handled in hook
+    }
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -144,123 +220,238 @@ export const PolarMap: React.FC<PolarMapProps> = ({
         <div className="flex items-center gap-2">
           <Crosshair className="w-4 h-4 text-sky-400" />
           <span className="font-display font-bold text-sm tracking-wide text-white uppercase">
-            POLAR STEREOGRAPHIC RADAR // {region === 'antarctica' ? 'ANTARCTIC CONTINENT' : 'ARCTIC BASIN'}
+            {mapMode === 'real_satellite'
+              ? `REAL-TIME SATELLITE & GEOGRAPHICAL MAP // ${region === 'antarctica' ? 'ANTARCTIC CONTINENT' : 'ARCTIC BASIN'}`
+              : `POLAR STEREOGRAPHIC RADAR // ${region === 'antarctica' ? 'ANTARCTIC CONTINENT' : 'ARCTIC BASIN'}`}
           </span>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-sky-300">
             WGS84 POLAR GRID
           </span>
         </div>
 
-        {/* Map View Zoom / Reset */}
-        <div className="flex items-center gap-1">
+        {/* View Mode Switcher: Real Satellite Map vs Stereographic Radar */}
+        <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs font-mono">
           <button
             type="button"
-            onClick={() => setZoomLevel((z) => Math.min(z + 0.25, 2.5))}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-            title="Zoom In"
-            aria-label="Zoom in on polar map"
+            onClick={() => setMapMode('real_satellite')}
+            className={`px-3 py-1 rounded font-bold transition-all flex items-center gap-1.5 ${
+              mapMode === 'real_satellite'
+                ? 'bg-sky-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono text-xs text-slate-300 px-1.5">{Math.round(zoomLevel * 100)}%</span>
-          <button
-            type="button"
-            onClick={() => setZoomLevel((z) => Math.max(z - 0.25, 0.75))}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-            title="Zoom Out"
-            aria-label="Zoom out on polar map"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
+            <span>REAL SATELLITE MAP</span>
           </button>
           <button
             type="button"
-            onClick={handleResetView}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 ml-1"
-            title="Recenter Pole"
-            aria-label="Recenter polar map view"
+            onClick={() => setMapMode('radar')}
+            className={`px-3 py-1 rounded font-bold transition-all flex items-center gap-1.5 ${
+              mapMode === 'radar'
+                ? 'bg-sky-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <span>POLAR RADAR</span>
           </button>
         </div>
+
+        {/* Map View Zoom / Reset for Radar */}
+        {mapMode === 'radar' && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(z + 0.25, 2.5))}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+              title="Zoom In"
+              aria-label="Zoom in on polar map"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <span className="font-mono text-xs text-slate-300 px-1.5">{Math.round(zoomLevel * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(z - 0.25, 0.75))}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
+              title="Zoom Out"
+              aria-label="Zoom out on polar map"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleResetView}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 ml-1"
+              title="Recenter Pole"
+              aria-label="Recenter polar map view"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Layer Filters Toggles */}
-      <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800/80 flex flex-wrap items-center gap-2 text-xs font-mono">
-        <span className="text-slate-500 uppercase text-[10px]">RADAR LAYERS:</span>
-        <button
-          type="button"
-          onClick={() => setShowStations(!showStations)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showStations ? 'bg-sky-950/80 border-sky-600 text-sky-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <MapPin className="w-3 h-3" />
-          <span>STATIONS</span>
-        </button>
+      {/* Conditional rendering of Real Satellite Map vs Polar Radar */}
+      {mapMode === 'real_satellite' ? (
+        <div className="p-3">
+          <RealMapView
+            region={region}
+            stations={stations}
+            assets={assets}
+            expeditions={expeditions}
+            hazards={hazards}
+            stationWeather={stationWeather}
+            expeditionWeather={expeditionWeather}
+            userLat={userLat}
+            userLng={userLng}
+            userAccuracy={userAccuracy}
+            userAlt={userAlt}
+            userSpeed={userSpeed}
+            isWatching={isGpsTracking}
+            formattedAccuracy={formattedAccuracy}
+            geoLoading={geoLoading}
+            geoError={geoError}
+            userLocationWeather={userLocationWeather}
+            userLocationName={userLocationName}
+            onAcquireGps={async () => {
+              await handleAcquireAndCenterGps();
+            }}
+            onSelectStation={(st) => setSelectedInspectable({ type: 'station', data: st })}
+            onSelectAsset={(ast) => onSelectAsset(ast)}
+            onSelectExpedition={(exp) => onSelectExpedition(exp)}
+            activeDistress={activeDistress}
+            focusCoords={focusCoords}
+            googleMapsApiKey={googleMapsApiKey}
+            onOpenApiKeyModal={onOpenApiKeyModal}
+            customWaypoints={customWaypoints}
+            onOpenAddBase={onOpenAddBase}
+            onOpenAddWaypoint={onOpenAddWaypoint}
+            onAddWaypoint={onAddWaypoint}
+            onDeleteWaypoint={onDeleteWaypoint}
+            onUpdateWaypoint={onUpdateWaypoint}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Layer Filters Toggles */}
+          <div className="px-4 py-2 bg-slate-950/40 border-b border-slate-800/80 flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="text-slate-500 uppercase text-[10px]">RADAR LAYERS:</span>
+            <button
+              type="button"
+              onClick={() => setShowStations(!showStations)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showStations ? 'bg-sky-950/80 border-sky-600 text-sky-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <MapPin className="w-3 h-3" />
+              <span>STATIONS</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setShowAssets(!showAssets)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showAssets ? 'bg-amber-950/80 border-amber-500 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <Truck className="w-3 h-3" />
-          <span>ASSETS ({regionalAssets.length})</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setShowAssets(!showAssets)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showAssets ? 'bg-amber-950/80 border-amber-500 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <Truck className="w-3 h-3" />
+              <span>ASSETS ({regionalAssets.length})</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setShowTraverses(!showTraverses)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showTraverses ? 'bg-indigo-950/80 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <Navigation className="w-3 h-3" />
-          <span>TRAVERSE ROUTES</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setShowTraverses(!showTraverses)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showTraverses ? 'bg-indigo-950/80 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <Navigation className="w-3 h-3" />
+              <span>TRAVERSE ROUTES</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setShowHazards(!showHazards)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showHazards ? 'bg-rose-950/80 border-rose-600 text-rose-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <AlertTriangle className="w-3 h-3" />
-          <span>CREVASSE HAZARDS</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setShowHazards(!showHazards)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showHazards ? 'bg-rose-950/80 border-rose-600 text-rose-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              <span>CREVASSE HAZARDS</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setShowWeatherOverlay(!showWeatherOverlay)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showWeatherOverlay ? 'bg-cyan-950/80 border-cyan-600 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <Layers className="w-3 h-3" />
-          <span>KATABATIC RADAR</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setShowWeatherOverlay(!showWeatherOverlay)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showWeatherOverlay ? 'bg-cyan-950/80 border-cyan-600 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <Layers className="w-3 h-3" />
+              <span>KATABATIC RADAR</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setShowGrid(!showGrid)}
-          className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
-            showGrid ? 'bg-slate-800 border-slate-600 text-slate-300' : 'bg-slate-900 border-slate-800 text-slate-500'
-          }`}
-        >
-          <span>GRID</span>
-        </button>
-      </div>
+            <button
+              type="button"
+              onClick={() => setShowGrid(!showGrid)}
+              className={`px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                showGrid ? 'bg-slate-800 border-slate-600 text-slate-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              <span>GRID</span>
+            </button>
 
-      {/* Main Map SVG Viewport */}
-      <div 
-        className="relative w-full aspect-square max-h-[580px] bg-[#050811] cursor-grab active:cursor-grabbing select-none overflow-hidden"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
+            {/* Real-time GPS Location Tool */}
+            <button
+              type="button"
+              onClick={handleAcquireAndCenterGps}
+              disabled={geoLoading}
+              className={`px-2.5 py-0.5 rounded border transition-colors flex items-center gap-1.5 ml-auto ${
+                userLat !== null
+                  ? 'bg-sky-900/90 border-sky-400 text-sky-200 shadow-[0_0_10px_rgba(56,189,248,0.3)]'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'
+              }`}
+              title="Acquire device high-accuracy GPS fix and lock radar center"
+            >
+              {geoLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+              ) : (
+                <LocateFixed className={`w-3.5 h-3.5 ${userLat !== null ? 'text-sky-400 animate-pulse' : 'text-slate-400'}`} />
+              )}
+              <span>{userLat !== null ? 'GPS LOCKED' : 'GPS AUTO-FIX'}</span>
+            </button>
+
+            {/* Quick Station / Waypoint Creation Buttons */}
+            {onOpenAddBase && (
+              <button
+                type="button"
+                onClick={onOpenAddBase}
+                className="px-2.5 py-0.5 rounded border border-sky-500 bg-sky-700/80 hover:bg-sky-600 text-white font-bold transition-colors flex items-center gap-1"
+                title="Commission New Research Base Location"
+              >
+                <span>+ ADD BASE</span>
+              </button>
+            )}
+
+            {onOpenAddWaypoint && (
+              <button
+                type="button"
+                onClick={onOpenAddWaypoint}
+                className="px-2.5 py-0.5 rounded border border-amber-500 bg-amber-700/80 hover:bg-amber-600 text-white font-bold transition-colors flex items-center gap-1"
+                title="Add Tactical Waypoint or Ground Fix"
+              >
+                <span>+ ADD WAYPOINT</span>
+              </button>
+            )}
+          </div>
+
+          {/* Main Map SVG Viewport */}
+          <div 
+            className="relative w-full aspect-square max-h-[580px] bg-[#050811] cursor-grab active:cursor-grabbing select-none overflow-hidden"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
         <svg
           viewBox={`0 0 ${size} ${size}`}
           className="w-full h-full"
@@ -564,6 +755,42 @@ export const PolarMap: React.FC<PolarMapProps> = ({
             </g>
           )}
 
+          {/* Tactical Custom Waypoints & Ground Fixes */}
+          {customWaypoints && customWaypoints.length > 0 && (
+            <g id="custom-tactical-waypoints">
+              {customWaypoints.map((cwp) => {
+                const isRegional = region === 'antarctica' ? cwp.lat < 0 : cwp.lat > 0;
+                if (!isRegional) return null;
+                const pt = projectCoordinates(cwp.lat, cwp.lng);
+                return (
+                  <g
+                    key={cwp.id}
+                    className="cursor-pointer group"
+                    onClick={() => setSelectedInspectable({ type: 'waypoint', data: { ...cwp, expeditionCode: 'TACTICAL FIX' } })}
+                  >
+                    <polygon
+                      points={`${pt.x},${pt.y - 7} ${pt.x + 6},${pt.y + 5} ${pt.x - 6},${pt.y + 5}`}
+                      fill="#f59e0b"
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                      className="group-hover:scale-125 transition-transform origin-center"
+                    />
+                    <text
+                      x={pt.x + 8}
+                      y={pt.y + 3}
+                      fill="#fbbf24"
+                      fontSize="8.5"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      {cwp.name}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          )}
+
           {/* Research Stations */}
           {showStations && (
             <g id="research-stations">
@@ -575,13 +802,28 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                     className="cursor-pointer group"
                     onClick={() => setSelectedInspectable({ type: 'station', data: station })}
                   >
+                    {/* Katabatic storm warning pulse ring */}
+                    {stationWeather && stationWeather[station.id]?.isKatabaticStorm && (
+                      <circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r="18"
+                        fill="none"
+                        stroke="#f43f5e"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 2"
+                        className="animate-pulse"
+                        opacity="0.9"
+                      />
+                    )}
+
                     {/* Outer target marker */}
                     <rect
                       x={pos.x - 6}
                       y={pos.y - 6}
                       width="12"
                       height="12"
-                      fill="#0284c7"
+                      fill={stationWeather && stationWeather[station.id]?.isKatabaticStorm ? "#b91c1c" : "#0284c7"}
                       stroke="#e0f2fe"
                       strokeWidth="1.5"
                       className="group-hover:scale-125 transition-transform origin-center"
@@ -600,6 +842,34 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                     >
                       {station.code} ({station.name.split(' ')[0]})
                     </text>
+
+                    {/* Live AWOS Temperature & Wind Badge */}
+                    {stationWeather && stationWeather[station.id] && (
+                      <g className="pointer-events-none">
+                        <rect
+                          x={pos.x + 9}
+                          y={pos.y + 6}
+                          width={stationWeather[station.id].isKatabaticStorm ? "102" : "80"}
+                          height="14"
+                          rx="3"
+                          fill={stationWeather[station.id].isKatabaticStorm ? "#7f1d1d" : "#082f49"}
+                          fillOpacity="0.9"
+                          stroke={stationWeather[station.id].isKatabaticStorm ? "#ef4444" : "#0284c7"}
+                          strokeWidth="0.8"
+                        />
+                        <text
+                          x={pos.x + 13}
+                          y={pos.y + 16}
+                          fill={stationWeather[station.id].isKatabaticStorm ? "#fca5a5" : "#38bdf8"}
+                          fontSize="8.5"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {stationWeather[station.id].tempC}°C • {stationWeather[station.id].windSpeedKts}kt
+                          {stationWeather[station.id].isKatabaticStorm ? ' ⚠️ GALE' : ''}
+                        </text>
+                      </g>
+                    )}
                   </g>
                 );
               })}
@@ -722,6 +992,66 @@ export const PolarMap: React.FC<PolarMapProps> = ({
             );
           })()}
 
+          {/* Real-time User GPS Position Marker */}
+          {userLat !== null && userLng !== null && showUserGps && (() => {
+            const isAntarcticGps = userLat < 0;
+            const matchesRegion = (region === 'antarctica' && isAntarcticGps) || (region === 'arctic' && !isAntarcticGps);
+            
+            // If user coordinates match polar region, project accurately; otherwise project on outer perimeter radar grid
+            const effectiveLat = matchesRegion ? userLat : (region === 'antarctica' ? -75 : 75);
+            const effectiveLng = matchesRegion ? userLng : userLng;
+            const pos = projectCoordinates(effectiveLat, effectiveLng);
+
+            return (
+              <g
+                id="realtime-user-gps-marker"
+                className="cursor-pointer"
+                onClick={() =>
+                  setSelectedInspectable({
+                    type: 'user_gps',
+                    data: {
+                      latitude: userLat,
+                      longitude: userLng,
+                      accuracyMeters: userAccuracy,
+                      altitudeMeters: userAlt,
+                      speedMps: userSpeed,
+                      isWatching: isGpsTracking,
+                      formattedAccuracy,
+                    },
+                  })
+                }
+              >
+                {/* Accuracy Radius Circle */}
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={Math.max(16, Math.min(45, (userAccuracy || 10) * 1.5))}
+                  fill="#0284c7"
+                  fillOpacity="0.2"
+                  stroke="#38bdf8"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 2"
+                />
+                
+                {/* Pulsing Beacon Ring */}
+                <circle cx={pos.x} cy={pos.y} r="12" fill="none" stroke="#38bdf8" strokeWidth="2" opacity="0.8" />
+                <circle cx={pos.x} cy={pos.y} r="6" fill="#0284c7" stroke="#ffffff" strokeWidth="2" />
+
+                {/* Crosshairs */}
+                <line x1={pos.x - 14} y1={pos.y} x2={pos.x + 14} y2={pos.y} stroke="#38bdf8" strokeWidth="1" />
+                <line x1={pos.x} y1={pos.y - 14} x2={pos.x} y2={pos.y + 14} stroke="#38bdf8" strokeWidth="1" />
+
+                {/* GPS Tag */}
+                <g transform={`translate(${pos.x + 10}, ${pos.y - 10})`}>
+                  <rect x="0" y="-9" width="135" height="17" fill="#0369a1" stroke="#38bdf8" strokeWidth="1" rx="3" opacity="0.95" />
+                  <text x="5" y="3" fill="#ffffff" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                    📍 LIVE GPS FIX ({formattedAccuracy})
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
+
         </svg>
 
         {/* Selected Inspectable Tactical Overlay Card */}
@@ -782,6 +1112,31 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                   <span className="text-slate-500">ADMIN:</span>
                   <span className="text-white">{selectedInspectable.data.country}</span>
                 </div>
+                {stationWeather[selectedInspectable.data.id] && (
+                  <div className="p-2 rounded bg-slate-900 border border-sky-800/60 my-1.5">
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="text-slate-400 font-bold">LIVE AWOS WEATHER:</span>
+                      <span className="text-emerald-400 font-bold">REAL-TIME</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500 text-[10px] block">AIR / CHILL</span>
+                        <span className="text-sky-300 font-bold">
+                          {stationWeather[selectedInspectable.data.id].tempC}°C ({stationWeather[selectedInspectable.data.id].apparentTempC}°C)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[10px] block">WIND</span>
+                        <span className="text-amber-300 font-bold">
+                          {stationWeather[selectedInspectable.data.id].windSpeedKts} kts ({stationWeather[selectedInspectable.data.id].windDirectionCardinal})
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-cyan-300 mt-1 truncate">
+                      {stationWeather[selectedInspectable.data.id].weatherDescription}
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">RUNWAY:</span>
                   <span className="text-sky-300">{selectedInspectable.data.runwayType}</span>
@@ -807,6 +1162,28 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                   <span className="text-slate-500">LEADER:</span>
                   <span className="text-white font-bold">{selectedInspectable.data.leader}</span>
                 </div>
+                {expeditionWeather[selectedInspectable.data.id] && (
+                  <div className="p-2 rounded bg-slate-900 border border-amber-800/60 my-1.5">
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="text-amber-400 font-bold">LIVE CONVOY ATMOSPHERE:</span>
+                      <span className="text-emerald-400 font-bold">FIELD AWOS</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500 text-[10px] block">AIR / CHILL</span>
+                        <span className="text-amber-300 font-bold">
+                          {expeditionWeather[selectedInspectable.data.id].tempC}°C ({expeditionWeather[selectedInspectable.data.id].apparentTempC}°C)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[10px] block">WIND</span>
+                        <span className="text-cyan-300 font-bold">
+                          {expeditionWeather[selectedInspectable.data.id].windSpeedKts} kts
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">TRAVERSE PROGRESS:</span>
                   <span className="text-sky-400 font-bold">{selectedInspectable.data.distanceCoveredKm} / {selectedInspectable.data.totalDistanceKm} km ({Math.round((selectedInspectable.data.distanceCoveredKm / selectedInspectable.data.totalDistanceKm) * 100)}%)</span>
@@ -886,6 +1263,39 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                 </p>
               </div>
             )}
+
+            {selectedInspectable.type === 'user_gps' && (
+              <div className="space-y-1.5 text-sky-200">
+                <div className="flex justify-between font-bold text-sky-400">
+                  <span>GEOLOCATION:</span>
+                  <span>DEVICE REAL-TIME FIX</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">LAT, LNG:</span>
+                  <span className="text-white font-bold">{selectedInspectable.data.latitude?.toFixed(5)}°, {selectedInspectable.data.longitude?.toFixed(5)}°</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">ACCURACY:</span>
+                  <span className="text-emerald-400">{selectedInspectable.data.formattedAccuracy}</span>
+                </div>
+                {selectedInspectable.data.altitudeMeters !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ALTITUDE:</span>
+                    <span className="text-cyan-300">{Math.round(selectedInspectable.data.altitudeMeters)}m AMSL</span>
+                  </div>
+                )}
+                {selectedInspectable.data.speedMps !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">GROUND SPEED:</span>
+                    <span className="text-amber-300">{(selectedInspectable.data.speedMps * 3.6).toFixed(1)} km/h</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-400">TRACKING:</span>
+                  <span className="text-sky-300">{selectedInspectable.data.isWatching ? 'CONTINUOUS LIVE RADAR WATCH' : 'SINGLE FIX'}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -907,8 +1317,66 @@ export const PolarMap: React.FC<PolarMapProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500/50 border border-rose-500 inline-block"></span>
             <span>Crevasse Zone</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 border border-white inline-block"></span>
+            <span>Real-time GPS Fix</span>
+          </div>
         </div>
       </div>
+
+      {/* Real-time GPS Telemetry Status Strip */}
+      {userLat !== null && userLng !== null && (
+        <div className="px-4 py-2 bg-slate-950 border-t border-sky-900/50 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 text-sky-400 font-bold">
+              <LocateFixed className="w-4 h-4 animate-pulse" />
+              <span>LIVE GPS TELEMETRY:</span>
+            </div>
+            <span className="text-white font-bold">{userLat.toFixed(5)}°, {userLng.toFixed(5)}°</span>
+            <span className="text-emerald-400">{formattedAccuracy}</span>
+            {userAlt !== null && <span className="text-cyan-300">Alt: {Math.round(userAlt)}m</span>}
+            {userSpeed !== null && <span className="text-amber-300">Speed: {(userSpeed * 3.6).toFixed(1)} km/h</span>}
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={handleAcquireAndCenterGps}
+              className="px-2 py-0.5 rounded bg-sky-950 hover:bg-sky-900 text-sky-300 border border-sky-700 text-[10px] font-bold"
+            >
+              RE-CENTER GPS
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                stopLiveTracking();
+                setShowUserGps(false);
+              }}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px]"
+            >
+              DISENGAGE GPS
+            </button>
+          </div>
+        </div>
+      )}
+
+      {geoError && (
+        <div className="px-4 py-1.5 bg-rose-950/80 border-t border-rose-800 text-[11px] font-mono text-rose-300 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span>{geoError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleAcquireAndCenterGps}
+            className="text-[10px] underline hover:text-white"
+          >
+            Retry GPS Acquisition
+          </button>
+        </div>
+      )}
+        </>
+      )}
     </div>
   );
 };

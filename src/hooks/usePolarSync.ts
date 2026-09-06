@@ -12,12 +12,15 @@ import {
   AssetStatus,
   ExpeditionPhase,
   ConnectedDevice,
+  ResearchStation,
+  Waypoint,
 } from '../types';
 import {
   INITIAL_ASSETS,
   INITIAL_EXPEDITIONS,
   INITIAL_SUPPLIES,
   INITIAL_DISPATCH_LOGS,
+  INITIAL_STATIONS,
 } from '../data/polarData';
 import {
   startEmergencyAlarm,
@@ -50,6 +53,8 @@ export function usePolarSync() {
   const [supplies, setSupplies] = useState<SupplyItem[]>(INITIAL_SUPPLIES);
   const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>(INITIAL_DISPATCH_LOGS);
   const [activeDistress, setActiveDistress] = useState<ActiveDistressAlert | null>(null);
+  const [stations, setStations] = useState<ResearchStation[]>(INITIAL_STATIONS);
+  const [customWaypoints, setCustomWaypoints] = useState<Waypoint[]>([]);
 
   // Auto-detect mobile vs desktop
   const isMobileClient = typeof window !== 'undefined' && (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768);
@@ -98,6 +103,8 @@ export function usePolarSync() {
     if (Array.isArray(state.expeditions)) setExpeditions(state.expeditions);
     if (Array.isArray(state.supplies)) setSupplies(state.supplies);
     if (Array.isArray(state.dispatchLogs)) setDispatchLogs(state.dispatchLogs);
+    if (Array.isArray(state.stations)) setStations(state.stations);
+    if (Array.isArray(state.customWaypoints)) setCustomWaypoints(state.customWaypoints);
 
     // Distress state management
     if (state.activeDistress) {
@@ -514,6 +521,150 @@ export function usePolarSync() {
     [sendSyncMessage]
   );
 
+  const addStation = useCallback(
+    (newStation: ResearchStation) => {
+      setStations((prev) => [newStation, ...prev]);
+      sendSyncMessage({ type: 'ADD_STATION', payload: newStation });
+      const log: DispatchLog = {
+        id: `log-${Date.now()}`,
+        timestamp: new Date().toUTCString().replace('GMT', 'UTC').slice(17, 25) + ' UTC',
+        callsign: 'Operations Command',
+        severity: 'routine',
+        sector: newStation.name,
+        message: `New polar base station ${newStation.code} (${newStation.name}) commissioned in sector ${newStation.region.toUpperCase()}. Elevation: ${newStation.elevationM}m, Runway: ${newStation.runwayType}.`,
+      };
+      setDispatchLogs((prev) => [log, ...prev]);
+      sendSyncMessage({ type: 'ADD_DISPATCH_LOG', payload: log });
+      playSuccessChime();
+    },
+    [sendSyncMessage]
+  );
+
+  const addWaypoint = useCallback(
+    (newWaypoint: Waypoint, expeditionId?: string) => {
+      if (expeditionId) {
+        setExpeditions((prev) =>
+          prev.map((e) => {
+            if (e.id !== expeditionId) return e;
+            const updatedWaypoints = [...e.waypoints, newWaypoint];
+            const distAdd = Number(newWaypoint.distanceFromPrevKm) || 45;
+            return {
+              ...e,
+              waypoints: updatedWaypoints,
+              totalDistanceKm: e.totalDistanceKm + distAdd,
+            };
+          })
+        );
+        sendSyncMessage({
+          type: 'ADD_WAYPOINT',
+          payload: { waypoint: newWaypoint, expeditionId },
+        });
+        const log: DispatchLog = {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toUTCString().replace('GMT', 'UTC').slice(17, 25) + ' UTC',
+          callsign: 'Navigations Desk',
+          severity: 'routine',
+          sector: newWaypoint.name,
+          message: `Waypoint ${newWaypoint.name} (${newWaypoint.lat.toFixed(2)}°, ${newWaypoint.lng.toFixed(2)}°) added to Expedition ${expeditionId}.`,
+        };
+        setDispatchLogs((prev) => [log, ...prev]);
+        sendSyncMessage({ type: 'ADD_DISPATCH_LOG', payload: log });
+      } else {
+        setCustomWaypoints((prev) => [newWaypoint, ...prev]);
+        sendSyncMessage({
+          type: 'ADD_WAYPOINT',
+          payload: { waypoint: newWaypoint },
+        });
+        const log: DispatchLog = {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toUTCString().replace('GMT', 'UTC').slice(17, 25) + ' UTC',
+          callsign: 'Field Unit',
+          severity: 'routine',
+          sector: newWaypoint.name,
+          message: `Tactical field waypoint ${newWaypoint.name} registered at ${newWaypoint.lat.toFixed(4)}°, ${newWaypoint.lng.toFixed(4)}°.`,
+        };
+        setDispatchLogs((prev) => [log, ...prev]);
+        sendSyncMessage({ type: 'ADD_DISPATCH_LOG', payload: log });
+      }
+      playSuccessChime();
+    },
+    [sendSyncMessage]
+  );
+
+  const deleteWaypoint = useCallback(
+    (waypointId: string, expeditionId?: string) => {
+      if (expeditionId) {
+        setExpeditions((prev) =>
+          prev.map((e) => {
+            if (e.id !== expeditionId) return e;
+            const updatedWaypoints = e.waypoints.filter((w) => w.id !== waypointId);
+            return {
+              ...e,
+              waypoints: updatedWaypoints,
+            };
+          })
+        );
+        sendSyncMessage({
+          type: 'DELETE_WAYPOINT',
+          payload: { waypointId, expeditionId },
+        });
+      } else {
+        setCustomWaypoints((prev) => prev.filter((w) => w.id !== waypointId));
+        setExpeditions((prev) =>
+          prev.map((e) => ({
+            ...e,
+            waypoints: e.waypoints.filter((w) => w.id !== waypointId),
+          }))
+        );
+        sendSyncMessage({
+          type: 'DELETE_WAYPOINT',
+          payload: { waypointId },
+        });
+      }
+      playSuccessChime();
+    },
+    [sendSyncMessage]
+  );
+
+  const updateWaypoint = useCallback(
+    (updatedWaypoint: Waypoint, expeditionId?: string) => {
+      if (expeditionId) {
+        setExpeditions((prev) =>
+          prev.map((e) => {
+            if (e.id !== expeditionId) return e;
+            const updatedWaypoints = e.waypoints.map((w) =>
+              w.id === updatedWaypoint.id ? updatedWaypoint : w
+            );
+            return {
+              ...e,
+              waypoints: updatedWaypoints,
+            };
+          })
+        );
+        sendSyncMessage({
+          type: 'UPDATE_WAYPOINT',
+          payload: { waypoint: updatedWaypoint, expeditionId },
+        });
+      } else {
+        setCustomWaypoints((prev) =>
+          prev.map((w) => (w.id === updatedWaypoint.id ? updatedWaypoint : w))
+        );
+        setExpeditions((prev) =>
+          prev.map((e) => ({
+            ...e,
+            waypoints: e.waypoints.map((w) => (w.id === updatedWaypoint.id ? updatedWaypoint : w)),
+          }))
+        );
+        sendSyncMessage({
+          type: 'UPDATE_WAYPOINT',
+          payload: { waypoint: updatedWaypoint },
+        });
+      }
+      playSuccessChime();
+    },
+    [sendSyncMessage]
+  );
+
   const resetData = useCallback(() => {
     fetch('/api/reset', { method: 'POST' })
       .then((res) => res.json())
@@ -533,6 +684,8 @@ export function usePolarSync() {
     supplies,
     dispatchLogs,
     activeDistress,
+    stations,
+    customWaypoints,
     connectedClients,
     syncStatus,
     isAlarmMuted,
@@ -542,6 +695,10 @@ export function usePolarSync() {
     updateAssetStatus,
     refuelAsset,
     addAsset,
+    addStation,
+    addWaypoint,
+    deleteWaypoint,
+    updateWaypoint,
     advanceWaypoint,
     updateExpeditionPhase,
     addExpedition,

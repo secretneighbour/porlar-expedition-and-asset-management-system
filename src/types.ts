@@ -165,6 +165,8 @@ export interface PolarSystemState {
   supplies: SupplyItem[];
   dispatchLogs: DispatchLog[];
   activeDistress: ActiveDistressAlert | null;
+  stations?: ResearchStation[];
+  customWaypoints?: Waypoint[];
   lastUpdated: string;
 }
 
@@ -187,6 +189,12 @@ export type SyncMessageType =
   | 'RESOLVE_DISTRESS'
   | 'UPDATE_ASSET'
   | 'UPDATE_EXPEDITION'
+  | 'ADD_EXPEDITION'
+  | 'ADD_STATION'
+  | 'ADD_WAYPOINT'
+  | 'DELETE_WAYPOINT'
+  | 'UPDATE_WAYPOINT'
+  | 'UPDATE_STATIONS'
   | 'UPDATE_CONDITION'
   | 'UPDATE_REGION'
   | 'ADD_DISPATCH_LOG'
@@ -194,9 +202,57 @@ export type SyncMessageType =
   | 'RESET_STATE'
   | 'STATE_UPDATE';
 
+export interface HourlyForecastPoint {
+  time: string; // e.g. "14:00"
+  fullTime: string;
+  tempC: number;
+  apparentTempC: number;
+  windKts: number;
+  precipitationMm: number;
+}
+
+export interface RealtimeWeatherReading {
+  id: string;
+  locationName: string;
+  stationCode?: string;
+  country?: string;
+  region: PolarRegion | 'local_gps';
+  lat: number;
+  lng: number;
+  elevationM?: number;
+  tempC: number;
+  apparentTempC: number; // Feels like / windchill
+  windSpeedKts: number;
+  windSpeedKmh: number;
+  windDirectionDeg: number;
+  windDirectionCardinal: string;
+  windGustsKts: number;
+  pressureHpa: number;
+  relativeHumidity: number;
+  precipitationMm: number;
+  weatherCode: number;
+  weatherDescription: string;
+  visibilityKm: number;
+  frostbiteRiskTime: string;
+  frostbiteRiskLevel: 'None' | 'Low' | 'Moderate' | 'High' | 'Severe' | 'Extreme';
+  isKatabaticStorm: boolean;
+  hourlyForecast?: HourlyForecastPoint[];
+  updatedAt: string;
+  source: string;
+}
+
 export interface SyncMessage {
   type: SyncMessageType;
   payload?: any;
   senderId?: string;
   timestamp?: string;
 }
+
+export interface CitySearchResult {
+  name: string;
+  lat: number;
+  lng: number;
+  country: string;
+  admin1?: string;
+}
+
