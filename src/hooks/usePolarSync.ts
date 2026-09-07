@@ -14,6 +14,7 @@ import {
   ConnectedDevice,
   ResearchStation,
   Waypoint,
+  PolarisDb,
 } from '../types';
 import {
   INITIAL_ASSETS,
@@ -22,6 +23,21 @@ import {
   INITIAL_DISPATCH_LOGS,
   INITIAL_STATIONS,
 } from '../data/polarData';
+import {
+  INITIAL_EXPEDITIONS as INITIAL_POLARIS_EXPEDITIONS,
+  INITIAL_PERSONNEL,
+  INITIAL_ASSETS as INITIAL_POLARIS_ASSETS,
+  INITIAL_INVENTORY,
+  INITIAL_SHIPMENTS,
+  INITIAL_TRANSPORTATION,
+  INITIAL_MAINTENANCE,
+  INITIAL_TASKS,
+  buildAlerts,
+  INITIAL_EXPENSES,
+  INITIAL_USERS,
+  INITIAL_AUDIT_LOG,
+  INITIAL_COMPLETED_WORK_LOGS,
+} from '../data/polarisData';
 import {
   startEmergencyAlarm,
   stopEmergencyAlarm,
@@ -56,12 +72,69 @@ export function usePolarSync() {
   const [stations, setStations] = useState<ResearchStation[]>(INITIAL_STATIONS);
   const [customWaypoints, setCustomWaypoints] = useState<Waypoint[]>([]);
 
+  // POLARIS Main Database Realtime State
+  const [polarisDb, setPolarisDbState] = useState<PolarisDb>(() => ({
+    expeditions: INITIAL_POLARIS_EXPEDITIONS,
+    personnel: INITIAL_PERSONNEL,
+    assets: INITIAL_POLARIS_ASSETS,
+    inventory: INITIAL_INVENTORY,
+    shipments: INITIAL_SHIPMENTS,
+    transportation: INITIAL_TRANSPORTATION,
+    maintenance: INITIAL_MAINTENANCE,
+    tasks: INITIAL_TASKS,
+    alerts: buildAlerts(),
+    expenses: INITIAL_EXPENSES,
+    users: INITIAL_USERS,
+    auditLog: INITIAL_AUDIT_LOG,
+    completedWorkLogs: INITIAL_COMPLETED_WORK_LOGS,
+  }));
+
   // Auto-detect mobile vs desktop
   const isMobileClient = typeof window !== 'undefined' && (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768);
   const [currentDeviceId] = useState<string>(getOrCreateDeviceId);
   const [currentDeviceType, setCurrentDeviceType] = useState<'laptop_hq' | 'mobile_field'>(
     isMobileClient ? 'mobile_field' : 'laptop_hq'
   );
+
+  // Real physical battery status monitoring via W3C Battery Status API
+  const [localBattery, setLocalBattery] = useState<{ level?: number; isCharging?: boolean }>({});
+  const localBatteryRef = useRef(localBattery);
+  localBatteryRef.current = localBattery;
+
+  useEffect(() => {
+    let batteryObj: any = null;
+
+    const updateBatteryStatus = () => {
+      if (batteryObj) {
+        setLocalBattery({
+          level: Math.round((batteryObj.level ?? 1) * 100),
+          isCharging: Boolean(batteryObj.charging),
+        });
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+      (navigator as any)
+        .getBattery()
+        .then((battery: any) => {
+          batteryObj = battery;
+          updateBatteryStatus();
+
+          battery.addEventListener('levelchange', updateBatteryStatus);
+          battery.addEventListener('chargingchange', updateBatteryStatus);
+        })
+        .catch((err: any) => {
+          console.warn('[BATTERY] Battery Status API error or unsupported:', err);
+        });
+    }
+
+    return () => {
+      if (batteryObj) {
+        batteryObj.removeEventListener('levelchange', updateBatteryStatus);
+        batteryObj.removeEventListener('chargingchange', updateBatteryStatus);
+      }
+    };
+  }, []);
 
   const [connectedClients, setConnectedClients] = useState<number>(1);
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>([
@@ -74,6 +147,19 @@ export function usePolarSync() {
   ]);
   const [syncStatus, setSyncStatus] = useState<SyncConnectionStatus>('connecting');
   const [isAlarmMuted, setIsAlarmMuted] = useState<boolean>(false);
+  const [autoSarDispatchEnabled, setAutoSarDispatchEnabled] = useState<boolean>(true);
+
+  // Check backend Autonomous SAR Dispatch status on mount
+  useEffect(() => {
+    fetch('/api/ai/sar/status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.autoSarDispatchEnabled === 'boolean') {
+          setAutoSarDispatchEnabled(data.autoSarDispatchEnabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -105,6 +191,9 @@ export function usePolarSync() {
     if (Array.isArray(state.dispatchLogs)) setDispatchLogs(state.dispatchLogs);
     if (Array.isArray(state.stations)) setStations(state.stations);
     if (Array.isArray(state.customWaypoints)) setCustomWaypoints(state.customWaypoints);
+    if (state.polarisDb && typeof state.polarisDb === 'object') {
+      setPolarisDbState(state.polarisDb);
+    }
 
     // Distress state management
     if (state.activeDistress) {
@@ -119,6 +208,20 @@ export function usePolarSync() {
       stopEmergencyAlarm();
     }
   }, []);
+
+  const syncPolDb = useCallback(
+    (updater: PolarisDb | ((prev: PolarisDb) => PolarisDb)) => {
+      setPolarisDbState((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        sendSyncMessage({
+          type: 'UPDATE_POLARIS_DB',
+          payload: next,
+        });
+        return next;
+      });
+    },
+    [sendSyncMessage]
+  );
 
   // Fetch initial state via HTTP
   const fetchInitialState = useCallback(async () => {
@@ -171,6 +274,8 @@ export function usePolarSync() {
             deviceType: currentDeviceType,
             deviceName: currentDeviceType === 'mobile_field' ? 'Mobile Phone Field Unit' : 'Base Station HQ Console',
             userAgent: navigator.userAgent,
+            batteryLevel: localBatteryRef.current.level,
+            isCharging: localBatteryRef.current.isCharging,
           },
           timestamp: new Date().toISOString(),
         };
@@ -272,6 +377,8 @@ export function usePolarSync() {
         deviceType: currentDeviceType,
         deviceName: currentDeviceType === 'mobile_field' ? 'Mobile Phone Field Unit' : 'Base Station HQ Console',
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        batteryLevel: localBatteryRef.current.level,
+        isCharging: localBatteryRef.current.isCharging,
       };
 
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -319,19 +426,40 @@ export function usePolarSync() {
   // Operational Actions (propagated across all connected devices)
 
   const triggerDistress = useCallback(
-    (data: {
-      incidentType: string;
-      location: string;
-      coordinates: string;
-      summary: string;
-      reporterCallsign?: string;
-      reportedByDevice?: 'Mobile Phone Field Unit' | 'Satellite Handheld' | 'Crawler Console' | 'Station HQ';
-      targetLat?: number;
-      targetLng?: number;
-    }) => {
+    (
+      dataOrType:
+        | string
+        | {
+            incidentType: string;
+            location: string;
+            coordinates: string;
+            summary: string;
+            reporterCallsign?: string;
+            reportedByDevice?: 'Mobile Phone Field Unit' | 'Satellite Handheld' | 'Crawler Console' | 'Station HQ';
+            targetLat?: number;
+            targetLng?: number;
+          },
+      maybeDescription?: string
+    ) => {
+      let payload: any;
+      if (typeof dataOrType === 'string') {
+        payload = {
+          incidentType: dataOrType,
+          location: 'Leverett Glacier Approach (85.2°S, 151.1°E)',
+          coordinates: '-85.25, 151.10',
+          summary: maybeDescription || 'Emergency beacon triggered from remote field device.',
+          reporterCallsign: 'EXP-701 FIELD MOBILE',
+          reportedByDevice: 'Mobile Phone Field Unit',
+          targetLat: -85.25,
+          targetLng: 151.10,
+        };
+      } else {
+        payload = dataOrType;
+      }
+
       sendSyncMessage({
         type: 'TRIGGER_DISTRESS',
-        payload: data,
+        payload,
         timestamp: new Date().toISOString(),
       });
       // Start local alarm immediately
@@ -341,6 +469,33 @@ export function usePolarSync() {
     },
     [sendSyncMessage]
   );
+
+  const toggleAutoSarMode = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/sar/toggle', { method: 'POST' });
+      const data = await res.json();
+      if (typeof data.autoSarDispatchEnabled === 'boolean') {
+        setAutoSarDispatchEnabled(data.autoSarDispatchEnabled);
+        return data.autoSarDispatchEnabled;
+      }
+    } catch (e) {
+      console.error('Failed to toggle auto SAR mode:', e);
+    }
+    return autoSarDispatchEnabled;
+  }, [autoSarDispatchEnabled]);
+
+  const triggerCrevasseFallDistress = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/sar/dispatch-crevasse-fall', { method: 'POST' });
+      const data = await res.json();
+      if (data.alert) {
+        setActiveDistress(data.alert);
+      }
+      playSuccessChime();
+    } catch (e) {
+      console.error('Failed to trigger crevasse fall scenario:', e);
+    }
+  }, []);
 
   const acknowledgeDistress = useCallback(
     (data: { acknowledgedBy: string; dispatchedSARAssetId?: string; dispatchedSARName?: string }) => {
@@ -362,6 +517,27 @@ export function usePolarSync() {
     });
     stopEmergencyAlarm();
   }, [sendSyncMessage]);
+
+  const updateDistressLocation = useCallback(
+    (lat: number, lng: number) => {
+      if (activeDistress) {
+        const updated = {
+          ...activeDistress,
+          targetLat: lat,
+          targetLng: lng,
+          coordinates: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          location: `Device Locked Fix (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`,
+        };
+        setActiveDistress(updated);
+        sendSyncMessage({
+          type: 'TRIGGER_DISTRESS',
+          payload: updated,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    },
+    [activeDistress, sendSyncMessage]
+  );
 
   const toggleMuteAlarm = useCallback(() => {
     setIsAlarmMuted((prev) => {
@@ -707,7 +883,14 @@ export function usePolarSync() {
     triggerDistress,
     acknowledgeDistress,
     resolveDistress,
+    updateDistressLocation,
+    autoSarDispatchEnabled,
+    toggleAutoSarMode,
+    triggerCrevasseFallDistress,
     resetData,
+    polarisDb,
+    syncPolDb,
+    sendSyncMessage,
     currentDeviceId,
     currentDeviceType,
     connectedDevices,

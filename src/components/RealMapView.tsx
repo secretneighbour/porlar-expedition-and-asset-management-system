@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import L from 'leaflet';
 import { 
   Compass, 
@@ -16,9 +16,14 @@ import {
   ExternalLink,
   Key,
   Maximize2,
-  Plus
+  Plus,
+  Flame,
+  ThermometerSnowflake,
+  ShieldAlert,
+  Building2
 } from 'lucide-react';
 import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, ActiveDistressAlert, RealtimeWeatherReading, Waypoint } from '../types';
+import { getSubZeroDangerZones, SubZeroDangerZone } from '../utils/dangerZones';
 
 interface RealMapViewProps {
   region: PolarRegion;
@@ -43,6 +48,7 @@ interface RealMapViewProps {
   onSelectStation?: (station: ResearchStation) => void;
   onSelectAsset?: (asset: PolarAsset) => void;
   onSelectExpedition?: (expedition: Expedition) => void;
+  onSelectDangerZone?: (zone: SubZeroDangerZone) => void;
   activeDistress?: ActiveDistressAlert | null;
   focusCoords?: { lat: number; lng: number } | null;
   googleMapsApiKey?: string;
@@ -50,9 +56,13 @@ interface RealMapViewProps {
   customWaypoints?: Waypoint[];
   onOpenAddBase?: () => void;
   onOpenAddWaypoint?: () => void;
+  onOpenAddBaseWithCoords?: (lat: number, lng: number) => void;
+  onOpenAddWaypointWithCoords?: (lat: number, lng: number) => void;
   onAddWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
   onDeleteWaypoint?: (waypointId: string, expeditionId?: string) => void;
   onUpdateWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
+  showDangerHeatmap?: boolean;
+  onToggleDangerHeatmap?: () => void;
 }
 
 /**
@@ -73,8 +83,8 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   assets,
   expeditions,
   hazards,
-  stationWeather,
-  expeditionWeather,
+  stationWeather = {},
+  expeditionWeather = {},
   userLat,
   userLng,
   userAccuracy,
@@ -90,6 +100,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   onSelectStation,
   onSelectAsset,
   onSelectExpedition,
+  onSelectDangerZone,
   activeDistress,
   focusCoords,
   googleMapsApiKey = '',
@@ -97,17 +108,31 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   customWaypoints = [],
   onOpenAddBase,
   onOpenAddWaypoint,
+  onOpenAddBaseWithCoords,
+  onOpenAddWaypointWithCoords,
   onAddWaypoint,
   onDeleteWaypoint,
   onUpdateWaypoint,
+  showDangerHeatmap: showDangerHeatmapProp,
+  onToggleDangerHeatmap,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
+  const heatmapLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const userGpsMarkerRef = useRef<L.LayerGroup | null>(null);
   const currentTileLayerRef = useRef<L.TileLayer | null>(null);
 
   const [mapType, setMapType] = useState<'satellite' | 'dark' | 'terrain' | 'osm' | 'google_hybrid'>('satellite');
+  const [localHeatmapActive, setLocalHeatmapActive] = useState<boolean>(true);
+  const [dangerFilter, setDangerFilter] = useState<'all' | 'extreme' | 'lethal'>('all');
+
+  const isHeatmapActive = showDangerHeatmapProp !== undefined ? showDangerHeatmapProp : localHeatmapActive;
+
+  // Derive dynamic sub-zero danger zones using live weather telemetry
+  const dangerZones = useMemo(() => {
+    return getSubZeroDangerZones(stationWeather, region, dangerFilter);
+  }, [stationWeather, region, dangerFilter]);
 
   // Trigger Leaflet invalidateSize safely
   const triggerInvalidateSize = useCallback(() => {
@@ -148,11 +173,12 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     }).addTo(map);
     currentTileLayerRef.current = initialTile;
 
-    // Create data layers
+    // Create data layers (Heatmap sits beneath markers)
+    heatmapLayerGroupRef.current = L.layerGroup().addTo(map);
     layerGroupRef.current = L.layerGroup().addTo(map);
     userGpsMarkerRef.current = L.layerGroup().addTo(map);
 
-    // Map Click Listener to Set Waypoint
+    // Map Click Listener to Set Waypoint / Establish Base
     map.on('click', (e: L.LeafletMouseEvent) => {
       const clickLat = e.latlng.lat;
       const clickLng = e.latlng.lng;
@@ -162,27 +188,52 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       }
       
       const popupContent = `
-        <div style="font-family: ui-monospace, monospace; padding: 4px; color: #0f172a; min-width: 180px;">
-          <div style="font-weight: 800; font-size: 11px; color: #d97706; margin-bottom: 3px;">📍 MAP CLICK LOCATION</div>
-          <div style="font-size: 11px; color: #475569; margin-bottom: 6px;">
+        <div style="font-family: ui-monospace, monospace; padding: 4px; color: #0f172a; min-width: 210px;">
+          <div style="font-weight: 800; font-size: 11px; color: #0284c7; margin-bottom: 3px; display:flex; align-items:center; gap:4px;">
+            <span>📍 POLAR GEOSPATIAL COORDINATES</span>
+          </div>
+          <div style="font-size: 11px; color: #475569; margin-bottom: 6px; background: #f8fafc; padding: 4px 6px; border-radius: 4px; border: 1px solid #e2e8f0;">
             Lat: <strong>${clickLat.toFixed(4)}°</strong><br/>
             Lng: <strong>${clickLng.toFixed(4)}°</strong>
           </div>
-          <button id="map-quick-add-btn" style="
-            width: 100%;
-            background: #d97706;
-            color: #ffffff;
-            border: none;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 11px;
-            font-family: ui-monospace, monospace;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-          ">
-            + SET WAYPOINT HERE
-          </button>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <button id="map-quick-add-wp-btn" style="
+              width: 100%;
+              background: #d97706;
+              color: #ffffff;
+              border: none;
+              padding: 6px 8px;
+              border-radius: 5px;
+              font-weight: bold;
+              font-size: 11px;
+              font-family: ui-monospace, monospace;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 4px;
+            ">
+              <span>📍</span> + SET WAYPOINT HERE
+            </button>
+            <button id="map-quick-add-base-btn" style="
+              width: 100%;
+              background: #0284c7;
+              color: #ffffff;
+              border: none;
+              padding: 6px 8px;
+              border-radius: 5px;
+              font-weight: bold;
+              font-size: 11px;
+              font-family: ui-monospace, monospace;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 4px;
+            ">
+              <span>🏢</span> + ESTABLISH BASE HERE
+            </button>
+          </div>
         </div>
       `;
 
@@ -192,11 +243,15 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         .openOn(map);
 
       setTimeout(() => {
-        const btn = document.getElementById('map-quick-add-btn');
-        if (btn) {
-          btn.onclick = () => {
+        const wpBtn = document.getElementById('map-quick-add-wp-btn');
+        const baseBtn = document.getElementById('map-quick-add-base-btn');
+
+        if (wpBtn) {
+          wpBtn.onclick = () => {
             map.closePopup();
-            if (onAddWaypoint) {
+            if (onOpenAddWaypointWithCoords) {
+              onOpenAddWaypointWithCoords(clickLat, clickLng);
+            } else if (onAddWaypoint) {
               onAddWaypoint({
                 id: `wp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                 name: `Map Fix (${clickLat.toFixed(2)}°, ${clickLng.toFixed(2)}°)`,
@@ -211,6 +266,17 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             }
           };
         }
+
+        if (baseBtn) {
+          baseBtn.onclick = () => {
+            map.closePopup();
+            if (onOpenAddBaseWithCoords) {
+              onOpenAddBaseWithCoords(clickLat, clickLng);
+            } else if (onOpenAddBase) {
+              onOpenAddBase();
+            }
+          };
+        }
       }, 100);
     });
 
@@ -219,24 +285,20 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     // Staged size invalidations to ensure proper tile loading across layout renders
     const timer1 = setTimeout(() => {
       try { map.invalidateSize(); } catch (e) {}
-    }, 50);
+    }, 150);
     const timer2 = setTimeout(() => {
       try { map.invalidateSize(); } catch (e) {}
-    }, 250);
-    const timer3 = setTimeout(() => {
-      try { map.invalidateSize(); } catch (e) {}
-    }, 800);
+    }, 600);
 
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
-      clearTimeout(timer3);
       try {
         map.remove();
       } catch (e) {}
       setMapInstance(null);
     };
-  }, []);
+  }, []); // Run once on mount
 
   // 2. Fly to region center when region changes
   useEffect(() => {
@@ -752,6 +814,168 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     }
   }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition]);
 
+  // 6.5. Draw Sub-Zero Danger Zones Heatmap Overlay
+  useEffect(() => {
+    if (!mapInstance) return;
+    const heatGroup = heatmapLayerGroupRef.current;
+    if (!heatGroup) return;
+
+    heatGroup.clearLayers();
+
+    if (!isHeatmapActive) return;
+
+    dangerZones.forEach((zone) => {
+      const [safeLat, safeLng] = safeMercatorLatLng(zone.lat, zone.lng);
+      const isLethal = zone.severityLevel === 'LETHAL';
+      const isExtreme = zone.severityLevel === 'EXTREME';
+
+      // 1. Outermost thermal diffusion halo
+      const outerRing = L.circle([safeLat, safeLng], {
+        radius: zone.radiusKm * 1000,
+        fillColor: isLethal ? '#881337' : isExtreme ? '#312e81' : '#083344',
+        fillOpacity: 0.16,
+        stroke: false,
+        interactive: false,
+      });
+      heatGroup.addLayer(outerRing);
+
+      // 2. Mid-hazard isothermal gradient
+      const midRing = L.circle([safeLat, safeLng], {
+        radius: zone.radiusKm * 600,
+        fillColor: isLethal ? '#e11d48' : isExtreme ? '#4f46e5' : '#0284c7',
+        fillOpacity: 0.26,
+        stroke: false,
+        interactive: false,
+      });
+      heatGroup.addLayer(midRing);
+
+      // 3. Core cryogenic threshold perimeter
+      const coreRing = L.circle([safeLat, safeLng], {
+        radius: zone.radiusKm * 300,
+        fillColor: isLethal ? '#9f1239' : isExtreme ? '#6366f1' : '#06b6d4',
+        fillOpacity: 0.42,
+        color: isLethal ? '#f43f5e' : isExtreme ? '#818cf8' : '#38bdf8',
+        weight: 2,
+        dashArray: isLethal ? '4, 4' : '3, 3',
+      });
+
+      // Pin badge HTML
+      const badgeHtml = `
+        <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer; pointer-events:auto;">
+          <div style="
+            background: ${isLethal ? 'rgba(159,18,57,0.95)' : isExtreme ? 'rgba(49,46,129,0.95)' : 'rgba(8,51,68,0.95)'};
+            border: 2px solid ${isLethal ? '#fda4af' : isExtreme ? '#818cf8' : '#38bdf8'};
+            color: #ffffff;
+            font-family: ui-monospace, monospace;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 6px;
+            border-radius: 6px;
+            box-shadow: 0 0 16px ${isLethal ? 'rgba(225,29,72,0.9)' : isExtreme ? 'rgba(79,70,229,0.8)' : 'rgba(2,132,199,0.7)'};
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          ">
+            <span>${isLethal ? '⚠️' : '❄️'}</span>
+            <span>${zone.tempC}°C</span>
+            <span style="
+              background: ${isLethal ? '#e11d48' : isExtreme ? '#4f46e5' : '#0284c7'};
+              color: #ffffff;
+              font-size: 8.5px;
+              padding: 1px 4px;
+              border-radius: 3px;
+            ">${zone.severityLevel}</span>
+          </div>
+          <div style="
+            font-size: 8.5px;
+            font-family: ui-monospace, monospace;
+            color: ${isLethal ? '#fecdd3' : isExtreme ? '#c7d2fe' : '#bae6fd'};
+            background: rgba(15, 23, 42, 0.85);
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin-top: 2px;
+            border: 1px solid rgba(255,255,255,0.1);
+          ">
+            Wind: ${zone.windSpeedKts}kt • Feels ${zone.apparentTempC}°C
+          </div>
+        </div>
+      `;
+
+      const badgeIcon = L.divIcon({
+        html: badgeHtml,
+        className: 'danger-heatmap-pin',
+        iconSize: [120, 36],
+        iconAnchor: [60, 18],
+      });
+
+      const dangerMarker = L.marker([safeLat, safeLng], { icon: badgeIcon });
+
+      const popupContent = `
+        <div style="font-family: ui-monospace, monospace; min-width: 270px; color: #0f172a; padding: 4px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 4px;">
+            <span style="
+              background: ${isLethal ? '#ffe4e6' : isExtreme ? '#e0e7ff' : '#e0f2fe'};
+              color: ${isLethal ? '#9f1239' : isExtreme ? '#3730a3' : '#0369a1'};
+              font-size: 9px;
+              font-weight: 800;
+              padding: 2px 6px;
+              border-radius: 4px;
+              border: 1px solid ${isLethal ? '#f43f5e' : isExtreme ? '#6366f1' : '#0284c7'};
+            ">
+              SUB-ZERO DANGER ZONE // ${zone.severityLevel}
+            </span>
+            <span style="font-size: 10px; color: #64748b;">R: ${zone.radiusKm} km</span>
+          </div>
+          
+          <div style="font-weight: 800; font-size: 13px; color: #0f172a; margin-bottom: 4px;">${zone.name}</div>
+          
+          <div style="background: #0f172a; color: #f8fafc; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+              <span style="font-size: 18px; font-weight: 900; color: ${isLethal ? '#fb7185' : isExtreme ? '#a5b4fc' : '#38bdf8'};">
+                ${zone.tempC}°C
+              </span>
+              <span style="font-size: 11px; color: #94a3b8;">
+                Apparent Chill: <strong style="color:#ffffff;">${zone.apparentTempC}°C</strong>
+              </span>
+            </div>
+            <div style="font-size: 10px; color: #cbd5e1; margin-top: 4px; display:grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+              <div>Wind: <strong>${zone.windSpeedKts} kts</strong></div>
+              <div>Gusts: <strong>${zone.windGustsKts} kts</strong></div>
+              <div>Pressure: <strong>${zone.pressureHpa} hPa</strong></div>
+              <div>Rec. Min: <strong>${zone.historicalMinC}°C</strong></div>
+            </div>
+          </div>
+
+          <div style="background: ${isLethal ? '#fff1f2' : '#f8fafc'}; border: 1px solid ${isLethal ? '#fecdd3' : '#e2e8f0'}; border-radius: 6px; padding: 6px; font-size: 10.5px; margin-bottom: 6px;">
+            <div style="color: #be123c; font-weight: 800; margin-bottom: 2px;">⏱️ SURVIVAL TIME WINDOWS:</div>
+            <div style="color: #334155;">• Unprotected Human Survival: <strong>< ${zone.survivalTimeMinutes} min</strong></div>
+            <div style="color: #334155;">• Exposed Skin Frostbite: <strong>< ${zone.frostbiteTimeMinutes} min</strong></div>
+            ${zone.fuelCloudPointHazard ? '<div style="color: #b91c1c; font-weight: 700; margin-top: 2px;">⚠️ Arctic Diesel Waxing / Cloud Point Warning</div>' : ''}
+          </div>
+
+          <div style="font-size: 10px; color: #475569; margin-bottom: 6px;">
+            <strong>Advisory:</strong> ${zone.survivalAdvisory}
+          </div>
+
+          <div style="font-size: 9.5px; color: #64748b; background: #f1f5f9; padding: 4px; border-radius: 4px;">
+            <strong>Equipment:</strong> ${zone.equipmentAdvisory}
+          </div>
+        </div>
+      `;
+
+      dangerMarker.bindPopup(popupContent);
+      coreRing.bindPopup(popupContent);
+
+      dangerMarker.on('click', () => {
+        if (onSelectDangerZone) onSelectDangerZone(zone);
+      });
+
+      heatGroup.addLayer(coreRing);
+      heatGroup.addLayer(dangerMarker);
+    });
+  }, [mapInstance, dangerZones, isHeatmapActive, onSelectDangerZone]);
+
   // 7. User Live GPS Pin
   useEffect(() => {
     if (!mapInstance) return;
@@ -983,6 +1207,64 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           )}
         </div>
 
+        {/* Sub-Zero Danger Zones Heatmap Controls */}
+        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              if (onToggleDangerHeatmap) onToggleDangerHeatmap();
+              else setLocalHeatmapActive(!localHeatmapActive);
+            }}
+            className={`px-2.5 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-colors ${
+              isHeatmapActive
+                ? 'bg-rose-600 text-white shadow-[0_0_12px_rgba(225,29,72,0.4)]'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+            title="Toggle Sub-Zero Danger Zones Thermal Heatmap"
+          >
+            <ThermometerSnowflake className="w-3.5 h-3.5" />
+            <span>DANGER HEATMAP: {isHeatmapActive ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {isHeatmapActive && (
+            <div className="flex items-center gap-0.5 pl-1 border-l border-slate-800 font-mono text-[10px]">
+              <button
+                type="button"
+                onClick={() => setDangerFilter('all')}
+                className={`px-1.5 py-0.5 rounded ${
+                  dangerFilter === 'all'
+                    ? 'bg-sky-700 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                ALL (&lt; -25°C)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDangerFilter('extreme')}
+                className={`px-1.5 py-0.5 rounded ${
+                  dangerFilter === 'extreme'
+                    ? 'bg-indigo-700 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                EXTREME (&lt; -35°C)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDangerFilter('lethal')}
+                className={`px-1.5 py-0.5 rounded ${
+                  dangerFilter === 'lethal'
+                    ? 'bg-rose-700 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                LETHAL (&lt; -45°C)
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Polar Quick Jump Presets */}
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-slate-500 font-mono text-[10px] uppercase">JUMP:</span>
@@ -1140,27 +1422,50 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         )}
 
         {/* Map Legend Overlay */}
-        <div className="absolute bottom-3 left-3 z-[400] bg-slate-950/85 backdrop-blur border border-slate-800 p-2.5 rounded-lg shadow-xl text-[11px] font-mono text-slate-300 flex flex-wrap items-center gap-3 pointer-events-none">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-sky-600 border border-white inline-block"></span>
-            <span>Research Base</span>
+        <div className="absolute bottom-3 left-3 z-[400] bg-slate-950/90 backdrop-blur border border-slate-800 p-2.5 rounded-lg shadow-xl text-[11px] font-mono text-slate-300 flex flex-col gap-2 pointer-events-none max-w-xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-sky-600 border border-white inline-block"></span>
+              <span>Research Base</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-amber-600 border border-white inline-block"></span>
+              <span>Traverse Convoy</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-emerald-600 border border-white inline-block"></span>
+              <span>Polar Aircraft</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-rose-600 border border-white inline-block"></span>
+              <span>Crevasse Field</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-sky-400 border border-white inline-block"></span>
+              <span>Your Live GPS</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-amber-600 border border-white inline-block"></span>
-            <span>Traverse Convoy</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-emerald-600 border border-white inline-block"></span>
-            <span>Polar Aircraft</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-600 border border-white inline-block"></span>
-            <span>Crevasse Field</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-sky-400 border border-white inline-block"></span>
-            <span>Your Live GPS</span>
-          </div>
+
+          {isHeatmapActive && (
+            <div className="pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center gap-3 text-[10px]">
+              <span className="text-slate-400 font-bold uppercase flex items-center gap-1">
+                <ThermometerSnowflake className="w-3 h-3 text-rose-400" />
+                SURVIVAL THRESHOLDS:
+              </span>
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-600 border border-rose-300 inline-block"></span>
+                <span className="text-rose-300">&lt; -45°C Lethal (&lt;15m survival)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 border border-indigo-300 inline-block"></span>
+                <span className="text-indigo-300">-35°C to -45°C Extreme (&lt;10m frostbite)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-600 border border-sky-300 inline-block"></span>
+                <span className="text-sky-300">-25°C to -35°C High Cold Risk</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

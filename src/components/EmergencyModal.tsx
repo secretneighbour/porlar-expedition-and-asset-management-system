@@ -18,10 +18,10 @@ import { PolarAsset } from '../types';
 import { useGeolocation } from '../hooks/useGeolocation';
 
 interface EmergencyModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
-  assets: PolarAsset[];
-  onTriggerEmergencyBroadcast: (incidentData: {
+  assets?: PolarAsset[];
+  onTriggerEmergencyBroadcast?: (incidentData: {
     incidentType: string;
     location: string;
     coordinates: string;
@@ -29,13 +29,18 @@ interface EmergencyModalProps {
     reporterCallsign?: string;
     reportedByDevice?: 'Mobile Phone Field Unit' | 'Satellite Handheld' | 'Crawler Console' | 'Station HQ';
   }) => void;
+  onTriggerDistress?: (type: string, description: string) => void;
+  activeDistress?: any;
+  onAcknowledge?: any;
+  onResolve?: any;
 }
 
 export const EmergencyModal: React.FC<EmergencyModalProps> = ({
-  isOpen,
+  isOpen = true,
   onClose,
-  assets,
+  assets = [],
   onTriggerEmergencyBroadcast,
+  onTriggerDistress,
 }) => {
   const [incidentType, setIncidentType] = useState('Crevasse Fall / Structural Ice Breach');
   const [locationName, setLocationName] = useState('Leverett Glacier Approach (85.2°S, 151.1°E)');
@@ -69,14 +74,20 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
 
   const handleBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
-    onTriggerEmergencyBroadcast({
+    const payload = {
       incidentType,
       location: locationName.trim(),
       coordinates: coordinates.trim(),
       summary: `${notes.trim()} (Urgency: ${medicalUrgency}, Souls: ${personnelCount})`,
       reporterCallsign: reporterCallsign.trim() || 'FIELD UNIT',
       reportedByDevice,
-    });
+    };
+
+    if (onTriggerEmergencyBroadcast) {
+      onTriggerEmergencyBroadcast(payload);
+    } else if (onTriggerDistress) {
+      onTriggerDistress(incidentType, payload.summary);
+    }
     onClose();
   };
 
@@ -104,10 +115,10 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-950 border-2 border-rose-600 rounded-xl max-w-2xl w-full p-5 shadow-2xl shadow-rose-950/80 text-xs font-mono text-slate-200">
+      <div className="bg-slate-950 border-2 border-rose-600 rounded-xl max-w-2xl w-full shadow-2xl shadow-rose-950/80 text-xs font-mono text-slate-200 flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-start justify-between pb-3 border-b border-rose-800/80 mb-3">
+        <div className="p-4 bg-slate-950 border-b border-rose-800/80 flex items-start justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-rose-950 border border-rose-600 text-rose-400">
               <ShieldAlert className="w-6 h-6 animate-pulse" />
@@ -131,12 +142,23 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
           </button>
         </div>
 
-        {/* Live sync disclaimer badge */}
-        <div className="mb-3 p-2.5 rounded-lg bg-sky-950/40 border border-sky-600/40 flex items-center gap-2 text-[11px] text-sky-200">
-          <Smartphone className="w-4 h-4 text-sky-400 shrink-0 animate-pulse" />
-          <span>
-            <strong>Instant Multi-Device Alert:</strong> Triggering this distress beacon immediately flashes the operations screen on the base manager's laptop, sounds an emergency audio klaxon, and queues SAR scramble.
-          </span>
+        {/* Scrollable Content Body */}
+        <div className="p-5 overflow-y-auto space-y-3">
+        {/* Live sync & Autonomous SAR badge */}
+        <div className="mb-3 space-y-2">
+          <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2 text-[11px] text-emerald-200">
+            <span className="p-1 rounded bg-emerald-500/20 text-emerald-400 font-bold text-xs">AI AUTO-S.A.R.</span>
+            <span>
+              <strong>Zero-Click Dispatch Active:</strong> As soon as this signal transmits, AI autonomously calculates the nearest base, samples its micro-weather, and commands the nearest S.A.R. drone and rescue team without requiring a human click.
+            </span>
+          </div>
+
+          <div className="p-2 rounded-lg bg-sky-950/40 border border-sky-600/40 flex items-center gap-2 text-[10px] text-sky-200">
+            <Smartphone className="w-3.5 h-3.5 text-sky-400 shrink-0 animate-pulse" />
+            <span>
+              <strong>Cross-Device Mesh Sync:</strong> Broadcasts to all connected field mobiles, base laptops, and telemetry radars instantly via WebSocket.
+            </span>
+          </div>
         </div>
 
         <form onSubmit={handleBroadcast} className="space-y-3">
@@ -356,6 +378,8 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
             </button>
           </div>
         </form>
+
+        </div>
 
       </div>
     </div>

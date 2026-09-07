@@ -1,6 +1,6 @@
 {
   "name": "Polar Expedition and Asset Management System",
-  "description": "Tactical operations hub for polar expeditions, research stations, icebreaker and crawler telemetry, environmental safety monitoring, and survival asset allocation.",
+  "description": "Tactical operations hub for polar expeditions, research stations, icebreaker and crawler telemetry, environmental safety monitoring, survival asset allocation, and ML-driven predictive maintenance under extreme -50°C polar conditions.",
   "requestFramePermissions": [
     "geolocation"
   ],

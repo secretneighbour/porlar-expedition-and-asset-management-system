@@ -149,8 +149,29 @@ export const PolarMap: React.FC<PolarMapProps> = ({
     };
   }, [region, center, maxRadius]);
 
-  // Handle programmatic radar lock onto coordinates
+  // Handle programmatic radar lock onto coordinates or active distress
   React.useEffect(() => {
+    if (activeDistress) {
+      let lat = activeDistress.targetLat;
+      let lng = activeDistress.targetLng;
+      if ((lat === undefined || lng === undefined) && activeDistress.coordinates) {
+        const parts = activeDistress.coordinates.split(',').map((p: string) => parseFloat(p.trim()));
+        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          lat = parts[0];
+          lng = parts[1];
+        }
+      }
+      if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+        const pos = projectCoordinates(lat, lng);
+        setZoomLevel(1.8);
+        setPan({
+          x: Math.max(-350, Math.min(350, (center - pos.x) * 1.8)),
+          y: Math.max(-350, Math.min(350, (center - pos.y) * 1.8)),
+        });
+        return;
+      }
+    }
+
     if (focusCoords && typeof focusCoords.lat === 'number' && typeof focusCoords.lng === 'number') {
       const pos = projectCoordinates(focusCoords.lat, focusCoords.lng);
       setZoomLevel(1.8);
@@ -159,10 +180,31 @@ export const PolarMap: React.FC<PolarMapProps> = ({
         y: Math.max(-400, Math.min(400, (center - pos.y) * 1.8)),
       });
     }
-  }, [focusCoords, projectCoordinates, center]);
+  }, [focusCoords, activeDistress, projectCoordinates, center]);
 
   const handleAcquireAndCenterGps = async () => {
     try {
+      if (activeDistress) {
+        let lat = activeDistress.targetLat;
+        let lng = activeDistress.targetLng;
+        if ((lat === undefined || lng === undefined) && activeDistress.coordinates) {
+          const parts = activeDistress.coordinates.split(',').map((p: string) => parseFloat(p.trim()));
+          if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            lat = parts[0];
+            lng = parts[1];
+          }
+        }
+        if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+          const pos = projectCoordinates(lat, lng);
+          setZoomLevel(1.8);
+          setPan({
+            x: Math.max(-350, Math.min(350, (center - pos.x) * 1.8)),
+            y: Math.max(-350, Math.min(350, (center - pos.y) * 1.8)),
+          });
+          return;
+        }
+      }
+
       const fix = await acquireSingleFix();
       startLiveTracking();
 
@@ -175,13 +217,19 @@ export const PolarMap: React.FC<PolarMapProps> = ({
           y: Math.max(-350, Math.min(350, (center - pos.y) * 1.8)),
         });
       } else {
-        // User is observing from a non-polar region (e.g. Operations HQ / home base)
-        // Keep radar centered on primary polar station without throwing view off-screen
         setZoomLevel(1.0);
         setPan({ x: 0, y: 0 });
       }
     } catch (e) {
-      // Handled in hook
+      console.warn('GPS acquisition error, locking to polar backup coordinates:', e);
+      const fallbackLat = activeDistress?.targetLat || -77.846;
+      const fallbackLng = activeDistress?.targetLng || 166.668;
+      const pos = projectCoordinates(fallbackLat, fallbackLng);
+      setZoomLevel(1.8);
+      setPan({
+        x: Math.max(-350, Math.min(350, (center - pos.x) * 1.8)),
+        y: Math.max(-350, Math.min(350, (center - pos.y) * 1.8)),
+      });
     }
   };
 

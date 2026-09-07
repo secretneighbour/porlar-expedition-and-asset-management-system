@@ -10,7 +10,13 @@ import {
   ShieldAlert, 
   ExternalLink,
   Radio,
-  X
+  X,
+  Zap,
+  Battery,
+  BatteryCharging,
+  BatteryFull,
+  BatteryMedium,
+  BatteryLow
 } from 'lucide-react';
 import { ConnectedDevice } from '../types';
 
@@ -216,9 +222,47 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-emerald-400 text-[10px] font-bold">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <span>ONLINE</span>
+                    <div className="flex items-center gap-2.5">
+                      {/* Battery Status Badge for Connected Node */}
+                      {typeof dev.batteryLevel === 'number' ? (
+                        <div
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold border ${
+                            dev.isCharging
+                              ? 'bg-amber-950/80 border-amber-600/80 text-amber-300'
+                              : dev.batteryLevel <= 20
+                              ? 'bg-rose-950/80 border-rose-600/80 text-rose-300 animate-pulse'
+                              : dev.batteryLevel <= 40
+                              ? 'bg-amber-950/60 border-amber-700/60 text-amber-300'
+                              : 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300'
+                          }`}
+                          title={dev.isCharging ? `Charging (${dev.batteryLevel}%)` : `Hardware Battery: ${dev.batteryLevel}%`}
+                        >
+                          {dev.isCharging ? (
+                            <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                          ) : dev.batteryLevel > 70 ? (
+                            <BatteryFull className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : dev.batteryLevel > 30 ? (
+                            <BatteryMedium className="w-3.5 h-3.5 text-amber-400" />
+                          ) : (
+                            <BatteryLow className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                          )}
+                          <span>{dev.batteryLevel}%</span>
+                          {dev.isCharging && <span className="text-[8px] text-amber-400 uppercase font-black">⚡</span>}
+                        </div>
+                      ) : (
+                        <div
+                          className="flex items-center gap-1 px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-400"
+                          title="Connected to AC Line / Wall Power"
+                        >
+                          <Zap className="w-3 h-3 text-sky-400" />
+                          <span>AC MAIN</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 text-emerald-400 text-[10px] font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>ONLINE</span>
+                      </div>
                     </div>
                   </div>
                 );

@@ -28,6 +28,8 @@ interface AddWaypointModalProps {
   userLat?: number | null;
   userLng?: number | null;
   userCityName?: string | null;
+  initialLat?: number | null;
+  initialLng?: number | null;
 }
 
 interface WaypointPreset {
@@ -114,6 +116,8 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
   userLat,
   userLng,
   userCityName,
+  initialLat,
+  initialLng,
 }) => {
   const activeExpeditionProp = selectedExpeditionId || preselectedExpeditionId;
 
@@ -153,19 +157,24 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
         setTargetExpeditionId('');
       }
 
-      // Default coordinates from selected expedition or GPS
-      const targetExp = expeditions.find((e) => e.id === (activeExpeditionProp || expeditions[0]?.id));
-      if (targetExp && targetExp.waypoints.length > 0) {
-        const lastWp = targetExp.waypoints[targetExp.waypoints.length - 1];
-        setLatInput(lastWp.lat.toFixed(4));
-        setLngInput(lastWp.lng.toFixed(4));
-        setElevationInput(lastWp.elevationM.toString());
-      } else if (userLat !== null && userLat !== undefined && userLng !== null && userLng !== undefined) {
-        setLatInput(Number(userLat).toFixed(4));
-        setLngInput(Number(userLng).toFixed(4));
+      // Default coordinates from selected expedition or GPS or click coords
+      if (initialLat !== undefined && initialLat !== null && initialLng !== undefined && initialLng !== null) {
+        setLatInput(Number(initialLat).toFixed(4));
+        setLngInput(Number(initialLng).toFixed(4));
       } else {
-        setLatInput('-81.2500');
-        setLngInput('142.5000');
+        const targetExp = expeditions.find((e) => e.id === (activeExpeditionProp || expeditions[0]?.id));
+        if (targetExp && targetExp.waypoints.length > 0) {
+          const lastWp = targetExp.waypoints[targetExp.waypoints.length - 1];
+          setLatInput(lastWp.lat.toFixed(4));
+          setLngInput(lastWp.lng.toFixed(4));
+          setElevationInput(lastWp.elevationM.toString());
+        } else if (userLat !== null && userLat !== undefined && userLng !== null && userLng !== undefined) {
+          setLatInput(Number(userLat).toFixed(4));
+          setLngInput(Number(userLng).toFixed(4));
+        } else {
+          setLatInput('-81.2500');
+          setLngInput('142.5000');
+        }
       }
 
       setTimeout(() => nameInputRef.current?.focus(), 50);
@@ -278,15 +287,15 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl space-y-5 my-8 text-slate-100 font-mono text-xs">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 font-mono text-xs">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 sm:px-6 py-4 bg-slate-950 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-950 border border-amber-600 text-amber-400">
               <Navigation className="w-5 h-5" />
@@ -309,6 +318,8 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
           </button>
         </div>
 
+        {/* Scrollable Body */}
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
         {/* Validation Error Banner */}
         {validationError && (
           <div className="p-3 rounded-xl bg-rose-950/90 border border-rose-600 text-rose-200 flex items-center justify-between gap-2 animate-shake">
@@ -610,6 +621,7 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
           </div>
 
         </form>
+        </div>
       </div>
     </div>
   );

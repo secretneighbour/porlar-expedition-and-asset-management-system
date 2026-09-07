@@ -12,6 +12,7 @@ export default defineConfig(() => {
       },
     },
     server: {
+      allowedHosts: true as const,
       // Hot Module Replacement (HMR) configuration
       hmr: process.env.DISABLE_HMR !== 'true',
       // File watching configuration to ignore runtime state persistence files

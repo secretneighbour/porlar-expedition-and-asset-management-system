@@ -69,8 +69,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-950 border border-slate-700 rounded-xl max-w-xl w-full p-5 shadow-2xl text-xs font-mono text-slate-200">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+      <div className="bg-slate-950 border border-slate-700 rounded-xl max-w-xl w-full shadow-2xl text-xs font-mono text-slate-200 flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Truck className="w-5 h-5 text-sky-400" />
             <h2 className="text-base font-bold text-white font-display uppercase tracking-wider">
@@ -82,7 +82,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-400 uppercase text-[10px] mb-1">ASSET CALLSIGN / CODE:</label>

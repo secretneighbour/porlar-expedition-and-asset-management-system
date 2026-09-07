@@ -138,6 +138,26 @@ export interface HazardZone {
   notes: string;
 }
 
+export interface AutonomousSARTelemetry {
+  nearestBaseName: string;
+  nearestBaseDistanceKm: number;
+  nearestBaseCoords: string;
+  weatherSummary: string;
+  tempC: number;
+  windSpeedKt: number;
+  visibilityKm: number;
+  weatherFlyable: boolean;
+  dispatchedAssetType: 'drone' | 'crawler' | 'dual_sortie';
+  dispatchedDroneName: string;
+  dispatchedGroundTeamName: string;
+  droneEtaMinutes: number;
+  groundEtaMinutes: number;
+  dispatchTimestamp: string;
+  executionTimeMs: number;
+  autonomousDecisionReasoning: string;
+  zeroClickExecuted: boolean;
+}
+
 export interface ActiveDistressAlert {
   id: string;
   timestamp: string;
@@ -155,6 +175,23 @@ export interface ActiveDistressAlert {
   dispatchedSARName?: string;
   targetLat?: number;
   targetLng?: number;
+  autonomousSAR?: AutonomousSARTelemetry;
+}
+
+export interface PolarisDb {
+  expeditions: any[];
+  personnel: any[];
+  assets: any[];
+  inventory: any[];
+  shipments: any[];
+  transportation: any[];
+  maintenance: any[];
+  tasks: any[];
+  alerts: any[];
+  expenses: any[];
+  users: any[];
+  auditLog: any[];
+  completedWorkLogs?: CompletedWorkLogEntry[];
 }
 
 export interface PolarSystemState {
@@ -167,6 +204,7 @@ export interface PolarSystemState {
   activeDistress: ActiveDistressAlert | null;
   stations?: ResearchStation[];
   customWaypoints?: Waypoint[];
+  polarisDb?: PolarisDb;
   lastUpdated: string;
 }
 
@@ -177,6 +215,8 @@ export interface ConnectedDevice {
   userAgent?: string;
   ip?: string;
   lastSeen: number;
+  batteryLevel?: number; // Real hardware battery % (0 - 100)
+  isCharging?: boolean;  // Real hardware charging state
 }
 
 export type SyncMessageType =
@@ -200,6 +240,8 @@ export type SyncMessageType =
   | 'ADD_DISPATCH_LOG'
   | 'RESTOCK_SUPPLY'
   | 'RESET_STATE'
+  | 'UPDATE_POLARIS_DB'
+  | 'UPDATE_POLARIS_COLLECTION'
   | 'STATE_UPDATE';
 
 export interface HourlyForecastPoint {
@@ -254,5 +296,151 @@ export interface CitySearchResult {
   lng: number;
   country: string;
   admin1?: string;
+}
+
+export interface PredictiveMaintenanceRecord {
+  id: string;
+  assetId: string;
+  assetName: string;
+  category: string;
+  component: string;
+  currentCondition: string;
+  traditionalStatus: string;
+  riskScore: number;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  predictedFailureHorizon: string;
+  ambientTempTriggerC: number;
+  weatherFactor: string;
+  predictionHeadline: string;
+  rootCauseAnalysis: string;
+  recommendedAction: string;
+  downtimeSavedHours: number;
+  costSavedUsd: number;
+  partRequired: string;
+  spareAvailableInStock: boolean;
+  spareStockCount: number;
+  assignedTechnician: string;
+  telemetryMetrics: {
+    beltTensionMm: number;
+    vibrationRms: number;
+    coldSoakHours: number;
+    lubricantViscosityDegradation: number;
+  };
+  isPrevented: boolean;
+  preventedAt?: string;
+}
+
+export interface DynamicWeatherInventoryState {
+  itemStockId: string;
+  itemName: string;
+  stationName: string;
+  currentFuelLiters: number; // 15,000L
+  standardBurnRateLitersPerDay: number; // 500L/day
+  blizzardBurnRateLitersPerDay: number; // 1,450L/day (290% heating load)
+  staticMinStockThreshold: number; // 4,000L
+  dynamicMinStockThreshold: number; // 8,500L
+  currentWeatherScenario: 'blizzard_3day' | 'normal_polar';
+  blizzardForecastDays: number;
+  blizzardSeverity: string;
+  ambientTempC: number; // -52°C
+  windSpeedKnots: number; // 55 kt
+  windChillC: number; // -68°C
+  daysRemainingStatic: number; // 30 days
+  daysRemainingUnderBlizzard: number; // 10.3 days
+  thresholdAdjustedAutomatically: boolean;
+  earlySupplyShipRequested: boolean;
+  shipRequestDetails?: {
+    shipName: string; // "MV Vasiliy Golovnin (Polar Icebreaker & Tanker)"
+    requestedCargo: string; // "45,000 Liters Polar Diesel Fuel (F-34)"
+    departurePort: string; // "Cape Town Logistics Hub"
+    etaDays: number;
+    requestTimestamp: string;
+    requestUrgency: 'CRITICAL_EARLY_BLIZZARD_DISPATCH';
+    rationale: string;
+    confirmedByVessel: boolean;
+  };
+}
+
+export interface CrevasseDetection {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  widthMeters: number;
+  depthMeters: number;
+  orientationDeg: number;
+  dangerLevel: 'CRITICAL_COLLAPSE_ZONE' | 'SEVERE_SHEAR' | 'MODERATE_FISSURE';
+  intersectsOldRoute: boolean;
+  satelliteSensor: string; // "Sentinel-1 SAR C-Band + WorldView-3 30cm"
+  detectedTimestamp: string;
+  description: string;
+}
+
+export interface SmartRoutePlan {
+  id: string;
+  title: string;
+  corridor: string;
+  lastSurveyDate: string;
+  satellitePass: string;
+  crevassesDetected: CrevasseDetection[];
+  legacyRoute: {
+    name: string;
+    distanceKm: number;
+    safetyScorePercent: number; // 8%
+    hazardsCount: number;
+    status: 'HAZARDOUS_COMPROMISED';
+    warningMessage: string;
+    waypoints: Array<{ name: string; lat: number; lng: number; isHazardPoint?: boolean; note?: string }>;
+  };
+  aiSafeRoute: {
+    name: string;
+    distanceKm: number;
+    safetyScorePercent: number; // 99.4%
+    blueIceCorridorKm: number;
+    bufferDistanceMeters: number;
+    status: 'AI_OPTIMIZED_SAFE';
+    clearedBy: string; // "Polar Computer Vision Deep Ice Fissure Neural Net"
+    waypoints: Array<{ name: string; lat: number; lng: number; description?: string }>;
+  };
+  truckConvoyUnits: Array<{
+    id: string;
+    name: string;
+    model: string;
+    weightTons: number;
+    status: 'Active Route Sync' | 'Standby in Depot';
+    routeSyncTimestamp: string;
+  }>;
+  automatedPushActive: boolean;
+  lastPushedAt?: string;
+}
+
+export interface AiOptimizationMetrics {
+  totalRequests: number;
+  geminiApiLiveCalls: number;
+  cacheHits: number;
+  coalescedRequests: number;
+  estimatedTokensUsed: number;
+  estimatedTokensSaved: number;
+  quotaReductionPercent: number;
+  avgLatencyMs: number;
+  cacheEntriesActive: number;
+  uptimeSeconds: number;
+}
+
+export interface CompletedWorkLogEntry {
+  id: string;
+  timestamp: string;
+  timeStr: string;
+  category: 'task' | 'maintenance' | 'alert' | 'route' | 'inventory' | 'sar';
+  title: string;
+  entityId?: string;
+  entityName?: string;
+  stationOrExpedition?: string;
+  assignedToOrOperator?: string;
+  clearedBy: 'AI Autonomous Janitor' | 'Operator Manual' | 'Predictive AI';
+  actionTaken: string;
+  resolutionNotes: string;
+  avertedImpactOrSavings?: string;
+  status: 'Archived & Verified';
 }
 

@@ -10,6 +10,8 @@ interface AddBaseModalProps {
   userLat?: number | null;
   userLng?: number | null;
   userCityName?: string | null;
+  initialLat?: number | null;
+  initialLng?: number | null;
 }
 
 export const AddBaseModal: React.FC<AddBaseModalProps> = ({
@@ -20,13 +22,36 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
   userLat,
   userLng,
   userCityName,
+  initialLat,
+  initialLng,
 }) => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [country, setCountry] = useState('International Consortium');
   const [region, setRegion] = useState<PolarRegion>(defaultRegion);
-  const [latInput, setLatInput] = useState<string>(defaultRegion === 'antarctica' ? '-78.5' : '78.5');
-  const [lngInput, setLngInput] = useState<string>('100.0');
+  const [latInput, setLatInput] = useState<string>(
+    initialLat !== undefined && initialLat !== null
+      ? initialLat.toFixed(4)
+      : defaultRegion === 'antarctica'
+      ? '-78.5'
+      : '78.5'
+  );
+  const [lngInput, setLngInput] = useState<string>(
+    initialLng !== undefined && initialLng !== null ? initialLng.toFixed(4) : '100.0'
+  );
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialLat !== undefined && initialLat !== null) {
+        setLatInput(initialLat.toFixed(4));
+        if (initialLat < 0) setRegion('antarctica');
+        else setRegion('arctic');
+      }
+      if (initialLng !== undefined && initialLng !== null) {
+        setLngInput(initialLng.toFixed(4));
+      }
+    }
+  }, [isOpen, initialLat, initialLng]);
   const [elevationInput, setElevationInput] = useState<string>('1200');
   const [runwayType, setRunwayType] = useState<ResearchStation['runwayType']>('Skiway (Snow)');
   const [fuelReserveInput, setFuelReserveInput] = useState<string>('250000');
@@ -77,10 +102,10 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full p-6 shadow-2xl space-y-5 my-8">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950 shrink-0">
           <div className="flex items-center gap-2">
             <Building2 className="w-5 h-5 text-sky-400" />
             <h2 className="text-lg font-bold text-white font-display tracking-wide uppercase">
@@ -96,7 +121,7 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs font-mono">
           {/* Base Name & Code */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2 space-y-1">
