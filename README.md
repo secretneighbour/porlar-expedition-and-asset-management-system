@@ -10,6 +10,7 @@ A mission-critical tactical operations console and real-time telemetry workstati
 ## 📋 Table of Contents
 
 - [🚀 Quick Start](#-quick-start)
+  - [🛠️ Troubleshooting NPM `EALLOWSCRIPTS` / `--allow-scripts` Error](#️-troubleshooting-npm-eallowscripts---allow-scripts-error)
 - [✨ Key Operational Views & Features](#-key-operational-views--features)
 - [🔥 Sub-Zero Danger Zone Heatmap & Polar GIS](#-sub-zero-danger-zone-heatmap--polar-gis)
 - [🛠️ AI Predictive Maintenance System (-50°C Cold-Soak Modeling)](#️-ai-predictive-maintenance-system--50c-cold-soak-modeling)
@@ -21,11 +22,12 @@ A mission-critical tactical operations console and real-time telemetry workstati
 - [⚡ Auto-Resolved by AI Alert System (Self-Healing Autonomous Operations)](#-auto-resolved-by-ai-alert-system-self-healing-autonomous-operations)
 - [🧹 AI Automated Work Clearing & Forensic Action Logging](#-ai-automated-work-clearing--forensic-action-logging)
 - [🖥️ Pre-Boot System Check (Terminal-Style Hardware & Telemetry POST)](#️-pre-boot-system-check-terminal-style-hardware--telemetry-post)
-- [🧩 Module Reference & Technology Architecture](#-module-reference--technology-architecture)
-  - [Core NPM Packages & Dependencies](#core-npm-packages--dependencies)
-  - [Frontend Architecture & Component Modules](#frontend-architecture--component-modules)
+- [🧩 Comprehensive Modules & Dependencies Reference](#-comprehensive-modules--dependencies-reference)
+  - [Production NPM Dependencies](#production-npm-dependencies)
+  - [Development Dependencies](#development-dependencies)
+  - [Frontend Component Modules](#frontend-component-modules)
   - [Custom React Hooks & Telemetry Services](#custom-react-hooks--telemetry-services)
-  - [Server-Side Backend & API Architecture](#server-side-backend--api-architecture)
+  - [Server-Side Backend & API Modules](#server-side-backend--api-modules)
 - [📱 Connecting Mobile Phones & Field Devices](#-connecting-mobile-phones--field-devices)
 - [🌐 Exposing Field Consoles over Public Internet (ngrok Usage)](#-exposing-field-consoles-over-public-internet-ngrok-usage)
   - [Step-by-Step ngrok Guide](#step-by-step-ngrok-guide)
@@ -58,6 +60,33 @@ npm run dev
 ```
 
 Access the console in your browser at `http://localhost:3000`.
+
+---
+
+### 🛠️ Troubleshooting NPM `EALLOWSCRIPTS` / `--allow-scripts` Error
+
+If you encounter an error when executing `npm install --allow-scripts`:
+
+```text
+npm error code EALLOWSCRIPTS
+npm error --allow-scripts is not allowed in project-scoped installs.
+npm error Add the entries to the "allowScripts" field in package.json, or to .npmrc, instead.
+```
+
+#### **Why this occurs:**
+In modern versions of NPM (NPM v10+ / Node.js v22+), `--allow-scripts` is no longer supported as a command-line flag during project-level `npm install`. Passing `--allow-scripts` triggers `code EALLOWSCRIPTS` or `code EUNKNOWNCONFIG`.
+
+#### **How to resolve:**
+1. **Simply run `npm install` without flags**:
+   ```bash
+   npm install
+   ```
+2. **Pre-configured `.npmrc` file**:
+   This repository includes a root `.npmrc` file with:
+   ```ini
+   ignore-scripts=false
+   ```
+   This configuration ensures NPM automatically permits standard lifecycle scripts (such as `esbuild` or `vite` binary setups) during installation without requiring non-standard CLI flags.
 
 ---
 
@@ -438,44 +467,85 @@ Prior to initializing the main operational dashboard upon login (or when trigger
 
 ---
 
+## 🧩 Comprehensive Modules & Dependencies Reference
+
 This system is built using a resilient, high-performance TypeScript stack tailored for real-time mission telemetry, low-latency device synchronization, GIS geospatial rendering, and sub-zero machine learning modeling.
-
-### Core NPM Packages & Dependencies
-
-| Package / Module | Category | Purpose & Why It Was Chosen |
-| :--- | :--- | :--- |
-| **`@google/genai`** (`^2.4.0`) | Server-Side AI SDK | Official Google Gen AI TypeScript SDK used for tactical field reconnaissance, predictive failure analysis, dynamic blizzard heating forecasting, and autonomous SAR decisioning using `gemini-3.8-flash`. |
-| **`react` & `react-dom`** (`^19.0.1`) | UI Framework | Powers the reactive command console, responsive dashboards, and sub-component rendering with optimized virtual DOM diffing for rapid telemetry updates. |
-| **`vite`** (`^6.2.3`) & **`@vitejs/plugin-react`** | Build & Bundling Tool | Provides near-instant compilation, ES module tree-shaking, and serves as an integrated Express dev middleware with strict host-binding (`0.0.0.0:3000`). |
-| **`express`** (`^4.21.2`) | HTTP & REST Backend | Lightweight, battle-tested Node.js web server handling AI routes, distress beacon intake, dispatch audit logs, and serving compiled static SPA assets in production. |
-| **`ws`** (`^8.21.3`) | Real-Time WebSockets | Powers zero-latency bi-directional state synchronization between field mobile units and base station HQ consoles, enabling instantaneous Mayday alarms and heartbeats. |
-| **`leaflet`** (`^1.9.4`) & **`@types/leaflet`** | GIS Cartography | Industry-standard open-source mapping engine used for rendering Antarctic & Arctic basemaps, custom expedition path polylines, sub-zero cold-soak heatmaps, and interactive station markers. |
-| **`@vis.gl/react-google-maps`** (`^1.10.0`) | Satellite Maps Integration | Enables optional Google Maps Platform high-resolution satellite imagery overlay and terrain layers when a Google Maps API Key is provided. |
-| **`recharts`** (`^3.10.1`) | Data Visualization | Renders high-frequency telemetry charts: FFT vibration harmonics, sub-zero temperature stress curves, fuel burn trajectories, and battery discharge rates. |
-| **`motion`** (`^12.23.24`) | Fluid Motion & UI Animation | Provides hardware-accelerated entering animations, layout transitions, radar sweep effects, and modal dialog physics without blocking the main JavaScript thread. |
-| **`lucide-react`** (`^0.546.0`) | Tactical Iconography | Clean, consistent vector icon library representing vehicles (Snowcats, Twin Otters), sensors (SAR, AWOS, GPR), weather (chill, wind, blizzards), and emergency klaxon states. |
-| **`qrcode`** (`^1.5.4`) & **`@types/qrcode`** | Device Pairing | Generates high-density QR code data URLs directly on the server and client to enable instant 1-scan mobile smartphone pairing over LAN/WAN. |
-| **`dotenv`** (`^17.2.3`) | Environment Management | Loads environment variables (`GEMINI_API_KEY`, `PORT`) securely on the server-side without exposing secrets to client browser bundles. |
-| **`tailwindcss`** (`^4.1.14`) & **`@tailwindcss/vite`** | Utility-First Styling | High-performance CSS styling delivering dark tactical HUD interfaces, responsive bento grids, and sub-zero color palettes with zero runtime overhead. |
-| **`esbuild`** (`^0.25.0`) | Server Compiler | Compiles `server.ts` into a self-contained CommonJS bundle (`dist/server.cjs`) for standalone production startup and container deployment. |
-| **`tsx`** (`^4.21.0`) | TypeScript Execution Engine | Direct TypeScript runtime engine for fast, zero-transpile local development startup. |
-| **`typescript`** (`~5.8.2`) | Static Type System | Guarantees strict type safety across complex glaciological records, multi-device sync packets, and telemetry data models. |
 
 ---
 
-### Frontend Architecture & Component Modules
+### Production NPM Dependencies
 
-The frontend is structured into domain-specific, modular components located under `/src/components/`:
+Below is the complete inventory of all production packages declared in `package.json` under `"dependencies"`, along with their specific function and justification for selection:
 
-* **`DashboardView.tsx`**: The primary operational HUD uniting active expedition progress, station headcounts, real-time AWOS weather tickers, predictive maintenance alerts, and the embedded Smart Route Optimizer.
-* **`RealMapView.tsx` / `MapView`**: High-performance Leaflet GIS polar map with coordinate projection, interactive waypoint placement, station shelter markers, and multi-tier sub-zero cold pool heatmap layers.
-* **`SmartRouteOptimizer.tsx`**: Daily satellite computer vision and real-time AWOS hazard pathfinder. Dynamically calculates safe blue-ice bypasses around active crevasse chasms with a 300m buffer and pushes waypoints to heavy crawler navigation computers.
-* **`PredictiveMaintenance.tsx`**: Environmental mechanical stress simulator modeling elastomer rubber vitrification, belt failure risk, and oil viscosity degradation at -50°C.
-* **`DynamicWeatherInventory.tsx`**: Blizzard fuel consumption forecaster modeling exponential convective heating surges, automatic safety buffer adjustments, and automated supply ship dispatches.
-* **`Modules.tsx` (Personnel, Assets, Inventory, Shipments, Transportation, Tasks)**: Operational enterprise data modules managing personnel rosters, vehicle fleet statuses, ration depots, and maritime supply voyages.
+| Module / Package | Version | Category | Primary Purpose & Selection Rationale |
+| :--- | :--- | :--- | :--- |
+| **`@google/genai`** | `^2.4.0` | AI / LLM Engine | **Official Google Gen AI TypeScript SDK**. Selected to execute server-side AI intelligence using `gemini-3.8-flash`. Powers tactical field reconnaissance, predictive failure analysis under -50°C cold-soak stress, dynamic blizzard heating forecast models, and autonomous zero-click S.A.R. dispatch. |
+| **`express`** | `^4.21.2` | REST & HTTP Server | **Lightweight Node.js Backend Framework**. Chosen for its minimal memory footprint and high throughput. Handles REST endpoints (`/api/ai/*`, `/api/distress`), hosts the real-time WebSocket synchronization engine, and serves compiled static SPA assets in production. |
+| **`ws`** | `^8.21.3` | Real-Time WebSockets | **High-Performance WebSocket Client/Server**. Chosen for low-latency bi-directional state synchronization between field smartphones and base station HQ consoles. Powers real-time Mayday distress broadcasts, terminal heartbeats, and live action log streaming. |
+| **`leaflet`** | `^1.9.4` | GIS & Cartography | **Industry-Standard Open-Source Mapping Library**. Selected for rendering Antarctic & Arctic polar maps, custom expedition path polylines, interactive station shelter markers, and multi-tier sub-zero cold-soak heatmaps without external paid tile dependencies. |
+| **`@types/leaflet`** | `^1.9.22` | Type Definitions | **TypeScript Declarations for Leaflet**. Ensures strict type checking and auto-completion when defining Leaflet layers, map instances, lat/lng bounds, and custom vector icons. |
+| **`@vis.gl/react-google-maps`** | `^1.10.0` | Satellite Maps | **Official Google Maps React Wrapper**. Used to integrate high-resolution Google Maps Platform satellite aerial imagery and terrain layers when an optional Google Maps API Key is entered in the console settings. |
+| **`react`** | `^19.0.1` | Core UI Library | **Declarative Frontend Framework**. Chosen for its component-driven architecture and optimized virtual DOM diffing, enabling rapid telemetry re-renders across multi-pane polar command dashboards. |
+| **`react-dom`** | `^19.0.1` | DOM Renderer | **React Rendering Engine**. Renders React component trees into browser DOM nodes. |
+| **`recharts`** | `^3.10.1` | Telemetry Charts | **SVG Data Visualization Library**. Chosen for responsive telemetry charts displaying FFT vibration harmonics, sub-zero elastomer temperature stress curves, fuel burn trajectories, and battery discharge rates. |
+| **`motion`** | `^12.23.24` | UI Motion & Animation | **Hardware-Accelerated Animation Engine** (formerly Framer Motion). Selected for smooth view transitions, radar sweep animations, entering effects, and modal dialog physics without blocking the main JavaScript thread. |
+| **`lucide-react`** | `^0.546.0` | Tactical Iconography | **Vector Icon System**. Selected for clean, consistent UI iconography representing heavy crawlers (Snowcats, Twin Otters), sensors (SAR, AWOS, GPR), weather (chill, wind, blizzards), and emergency klaxons. |
+| **`qrcode`** | `^1.5.4` | Device Pairing | **QR Code Generation Library**. Selected to generate high-density QR code data URLs on both server and client, enabling instant 1-scan smartphone pairing over LAN/WAN without manual IP entry. |
+| **`dotenv`** | `^17.2.3` | Environment Config | **Environment Variable Loader**. Used in `server.ts` to securely load secrets (`GEMINI_API_KEY`, `PORT`) from `.env` files on the server-side without leaking API keys into client browser JavaScript bundles. |
+| **`vite`** | `^6.2.3` | Build Tool & Dev Server | **Next-Generation Frontend Tooling**. Selected for ultra-fast HMR, ES module tree-shaking, and serving as integrated Express dev middleware with host-binding (`0.0.0.0:3000`). |
+| **`@vitejs/plugin-react`** | `^5.0.4` | Vite React Plugin | **Vite React Integration**. Enables React Fast Refresh and JSX/TSX compilation inside Vite. |
+| **`@tailwindcss/vite`** | `^4.1.14` | Styling Engine | **Tailwind CSS v4 Vite Plugin**. Enables zero-config, high-performance CSS compilation directly inside the Vite build pipeline. |
+
+---
+
+### Development Dependencies
+
+Below is the inventory of development packages declared in `package.json` under `"devDependencies"`:
+
+| Module / Package | Version | Primary Purpose & Selection Rationale |
+| :--- | :--- | :--- |
+| **`typescript`** | `~5.8.2` | **Static Type System**. Ensures strict compile-time type safety across complex glaciological records, multi-device WebSocket sync packets, and telemetry data models (`tsc --noEmit`). |
+| **`tsx`** | `^4.21.0` | **Direct TypeScript Execution Engine**. Used in development (`npm run dev`) to execute `server.ts` directly with zero build delay or transpile overhead. |
+| **`esbuild`** | `^0.25.0` | **High-Speed Bundler**. Used in production builds (`npm run build`) to bundle `server.ts` and its dependencies into a standalone CommonJS file (`dist/server.cjs`) for production runtime. |
+| **`tailwindcss`** | `^4.1.14` | **Utility-First CSS Framework**. Provides rapid styling utilities for dark tactical HUD interfaces, responsive bento grids, and sub-zero color palettes with zero runtime CSS overhead. |
+| **`autoprefixer`** | `^10.4.21` | **PostCSS CSS Parser**. Automatically adds vendor prefixes to CSS rules for cross-browser compatibility across legacy field laptops and mobile devices. |
+| **`@types/express`** | `^4.17.21` | **TypeScript Definitions for Express**. Type definitions for Express request/response objects and router handlers. |
+| **`@types/node`** | `^22.14.0` | **TypeScript Definitions for Node.js**. Type definitions for core Node.js modules (`fs`, `path`, `http`, `process`, `crypto`). |
+| **`@types/ws`** | `^8.18.1` | **TypeScript Definitions for WebSocket**. Type definitions for WebSocket server and client instances. |
+| **`@types/qrcode`** | `^1.5.6` | **TypeScript Definitions for QRCode**. Type definitions for canvas and data URL QR code generation. |
+| **`@types/recharts`** | `^2.0.1` | **TypeScript Definitions for Recharts**. Type definitions for chart containers, tooltips, axes, and series components. |
+
+---
+
+### Frontend Component Modules
+
+Located under `/src/components/`, these modular components encapsulate specific domain logic:
+
+* **`Shell.tsx`**: Main application layout shell with topbar telemetry indicators, station status chips, quick action buttons, and side navigation menu.
+* **`DashboardView.tsx`**: Primary operational HUD consolidating active expedition progress, research station headcounts, live AWOS weather tickers, predictive maintenance alerts, and the embedded Smart Route Optimizer.
+* **`RealMapView.tsx` / `PolarMap.tsx`**: Interactive Leaflet GIS cartography workstation with stereographic projections, custom waypoint pinning, station shelter markers, and multi-ring sub-zero cold pool heatmaps.
+* **`SmartRouteOptimizer.tsx`**: Satellite computer vision pathfinder avoiding crevasse chasms and katabatic squall corridors. Dynamically computes safe blue-ice bypasses and pushes waypoints to crawler navigation units.
+* **`PredictiveMaintenance.tsx`**: Mechanical cold-soak stress simulator (-50°C) modeling elastomer rubber vitrification, belt failure risk, oil viscosity degradation, and 1-click preventive service execution.
+* **`DynamicWeatherInventory.tsx`**: Blizzard fuel consumption forecaster calculating exponential thermal heating surges, automatic safety buffer adjustments, and automated supply ship dispatches.
+* **`AiActionLogsPanel.tsx`**: Live scrolling telemetry feed displaying real-time autonomous AI actions with domain category filters (Logistics, Power, Maintenance, SAR, Weather).
+* **`PreBootSystemCheck.tsx`**: Retro-tactical terminal POST diagnostic suite verifying hardware sensors, power microgrids, and satellite uplinks before console boot.
+* **`EmergencyModal.tsx` & `ActiveDistressBanner.tsx`**: Full-screen Mayday distress alert system with audible two-tone klaxons, tactical override controls, and zero-click automated S.A.R. scramble triggers.
+* **`DevicePairingModal.tsx`**: QR code pairing modal enabling instant multi-node mobile smartphone connection over local networks or public tunnels.
+* **`ApiKeyModal.tsx`**: Resource optimization console and Gemini API key management workstation with real-time token savings metrics and cache purge controls.
+* **`Modules.tsx`**: Comprehensive enterprise data management views:
+  - **Personnel**: Expedition rosters, medical clearances, and polar survival badges.
+  - **Fleet Assets**: PistenBully crawlers, Twin Otter ski-planes, coring rigs, and mobile shelter pods.
+  - **Inventory & Consumables**: Arctic diesel (F-34/JP-8), Jet-A1, rations, and hypothermia kits.
+  - **Shipments & Logistics**: Icebreaker supply ship voyages, cargo manifests, and ETA tracking.
+  - **Transportation**: Traverse convoy schedules and vehicle deployment.
+  - **Tasks**: Station maintenance checklists and field work items.
 * **`ExpeditionsView.tsx`**: In-depth traverse planning studio with sequential waypoint cards, elevation profiles, distance progression trackers, and crew assignments.
-* **`ActiveDistressBanner.tsx` & `EmergencyModal.tsx`**: Full-screen emergency alert system with audible two-tone klaxons, tactical override buttons, and zero-click automated S.A.R. scramble triggers.
-* **`DevicePairingModal.tsx` & `ApiKeyModal.tsx`**: Real-time QR code generation for multi-node mobile terminal pairing and in-app secure API key configuration.
+* **`ViewsPart2.tsx`**: Secondary command modules:
+  - **Alerts & Notifications**: Real-time and historical alert center featuring `[⚡ Auto-Resolved by AI]` self-healing tags.
+  - **AI Cleared Work Logs**: Immutable forensic audit log archive storing completed maintenance and cleared work items.
+  - **Reports**: Mission summaries and field environmental logs.
+  - **Financial Expenses**: Polar expedition operational budget tracking.
+  - **System Audit Inspector**: Detailed cryptographic audit ledger modal.
 
 ---
 
@@ -483,23 +553,27 @@ The frontend is structured into domain-specific, modular components located unde
 
 Located under `/src/hooks/` and `/src/utils/`:
 
-* **`useGeolocation.ts`**: Real-time device geolocation service with high-accuracy GPS tracking, reverse city geocoding, speed calculation, altitude estimation, and IP fallback.
-* **`useRealtimeWeather.ts`**: Weather integration engine connecting directly to the Open-Meteo AWOS API. Fetches real-time ambient temperatures, apparent wind chill, wind velocity, barometric pressure, and WMO polar precipitation codes for all research stations and the operator's live coordinates.
-* **`usePolarSync.ts`**: Multi-client state synchronization engine managing WebSocket connections, terminal heartbeats, mutual Mayday broadcasting, and optimistic local database updates.
-* **`weatherHazards.ts`**: Polar environmental hazard evaluation utility that calculates lethal cold-soak thresholds, frostbite onset windows, katabatic roll risks, ground whiteout conditions, and aviation flyability categories.
-* **`audioAlert.ts`**: Web Audio API synthesizer generating tactical beeps, dispatch confirmation chimes, and loud emergency klaxon sirens without relying on external audio asset files.
+* **`useGeolocation.ts`**: High-accuracy device GPS tracking hook with reverse geocoding, speed estimation, altitude calculation, and IP location fallback.
+* **`useRealtimeWeather.ts`**: Open-Meteo AWOS weather integration hook fetching real-time temperatures, apparent wind chill, katabatic wind velocity, barometric pressure, and WMO precipitation codes for all polar stations.
+* **`usePolarSync.ts`**: Multi-client state synchronization hook managing WebSocket connection states, terminal heartbeats, mutual Mayday broadcasts, and optimistic state updates.
+* **`weatherHazards.ts`**: Glaciological hazard evaluation engine calculating lethal cold-soak thresholds (<12m human survival limit), katabatic vehicle roll risks, whiteout visibility loss, and aviation flyability ratings.
+* **`dangerZones.ts`**: Heatmap radius and gradient calculation engine mapping sub-zero cold pools and katabatic shear funnels onto GIS basemaps.
+* **`audioAlert.ts`**: Web Audio API synthesizer generating tactical terminal bleeps, dispatch confirmation chimes, and emergency klaxon sirens without external sound files.
 
 ---
 
-### Server-Side Backend & API Architecture
+### Server-Side Backend & API Modules
 
-The backend (`server.ts`) delivers a robust, secure API layer:
+Located in `server.ts`:
 
-* **`/api/ai/predictive-maintenance`**: Analyzes machine operating telemetry against -50°C cold-soak physical models via Gemini 3.8 Flash.
-* **`/api/ai/sar/dispatch-crevasse-fall`**: Computes nearest research stations via Haversine range formulas and autonomously mobilizes thermal FLIR drones and tracked extraction teams.
-* **`/api/ai/weather-inventory/evaluate`**: Models 3-day blizzard heating loads and dynamically raises minimum safety fuel reserves.
-* **`/api/ai/smart-route/optimize`**: Ingests live device coordinates, satellite radar void detections, and weather telemetry to output safe, hazard-free traverse corridors.
-* **`/api/distress` & WebSocket Server (`ws://`)**: Handles real-time terminal synchronization, emergency broadcast alarms, and cross-device heartbeat monitoring.
+* **`AiOptimizationEngine`**: In-memory LRU cache, concurrent request coalescer, and prompt compression engine that reduces Gemini API token usage by 40-60%.
+* **Predictive Maintenance API (`POST /api/ai/predictive-maintenance`)**: Evaluates machine operating hours against -50°C cold-soak physical stress models using Gemini 3.8 Flash.
+* **Zero-Click S.A.R. API (`POST /api/ai/sar/dispatch-crevasse-fall`)**: Computes geodesic Haversine distance to nearest research stations and scrambles thermal FLIR drones and tracked extraction teams automatically.
+* **Weather Inventory API (`POST /api/ai/weather-inventory/evaluate`)**: Ingests 3-day blizzard forecasts, projects thermal fuel burn surges (+290%), and raises minimum stock buffers dynamically.
+* **Smart Route API (`POST /api/ai/smart-route/optimize`)**: Ingests live device coordinates and satellite radar void detections to output safe blue-ice bypass corridors.
+* **WebSocket Server (`ws://`)**: Handles zero-latency terminal synchronization, cross-device Mayday alarms, and heartbeat monitoring across HQ consoles and mobile phones.
+
+---
 
 ---
 
