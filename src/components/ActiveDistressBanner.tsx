@@ -114,12 +114,21 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
   return (
     <div
       id="distress-active-banner"
-      className={`w-full rounded-xl border font-mono transition-all shadow-2xl overflow-hidden my-3 ${
-        hasAutonomousSAR
-          ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/50 border-emerald-500/80 text-slate-100 ring-1 ring-emerald-500/30'
+      style={{
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        boxShadow: hasAutonomousSAR 
+          ? '0 10px 40px rgba(16, 185, 129, 0.2), 0 0 20px rgba(124, 58, 237, 0.15)'
           : isAcknowledged
-          ? 'bg-amber-950/40 border-amber-600/80 text-amber-100'
-          : 'bg-rose-950/90 border-rose-600 text-rose-100 animate-pulse-border'
+          ? '0 10px 40px rgba(245, 158, 11, 0.2)'
+          : '0 10px 40px rgba(239, 68, 68, 0.35), 0 0 25px rgba(124, 58, 237, 0.2)'
+      }}
+      className={`w-full rounded-2xl border font-mono transition-all overflow-hidden my-3 ${
+        hasAutonomousSAR
+          ? 'bg-gradient-to-br from-[#150B2E]/95 via-[#1E1240]/90 to-emerald-950/60 border-emerald-500/80 text-slate-100 ring-1 ring-emerald-500/30'
+          : isAcknowledged
+          ? 'bg-gradient-to-br from-[#150B2E]/95 via-amber-950/50 to-[#1E1240]/90 border-amber-500/80 text-amber-100'
+          : 'bg-gradient-to-br from-[#150B2E]/95 via-rose-950/90 to-[#1E1240]/90 border-rose-500 text-rose-100 animate-pulse-border'
       }`}
     >
       {/* Top Banner Notice: What it was vs What AI does */}

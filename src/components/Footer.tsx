@@ -20,15 +20,20 @@ export function Footer({ t, db, currentDeviceId, currentDeviceType }: FooterProp
   return (
     <>
       <footer 
-        style={{ background: t.panel, borderTop: `1px solid ${t.border}` }} 
+        style={{ 
+          background: 'rgba(21, 11, 46, 0.85)', 
+          backdropFilter: 'blur(16px)', 
+          WebkitBackdropFilter: 'blur(16px)', 
+          borderTop: '1px solid rgba(196, 181, 253, 0.16)' 
+        }} 
         className="px-6 py-3 flex items-center justify-between text-xs font-mono text-slate-400 shrink-0 select-none flex-wrap gap-3"
       >
         {/* Left: Offline Cache Status Indicator */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsModalOpen(true)}
-            style={{ background: t.bgAlt, borderColor: 'rgba(16, 185, 129, 0.4)' }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-emerald-950/40 cursor-pointer transition-all group shadow-sm"
+            style={{ background: 'rgba(255, 255, 255, 0.04)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border hover:bg-emerald-950/30 cursor-pointer transition-all group shadow-sm"
             title="Click to open Offline Cache & Local Node Storage Inspector"
           >
             <div className="relative flex items-center justify-center">
@@ -37,17 +42,30 @@ export function Footer({ t, db, currentDeviceId, currentDeviceType }: FooterProp
             </div>
             <HardDrive className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
             <span className="font-bold text-emerald-300">Offline Cache: 99.8% Synchronized</span>
-            <span className="hidden sm:inline text-slate-500">|</span>
-            <span className="hidden sm:inline text-slate-300">{totalCachedRecords} Critical Records Cached Locally</span>
+            <span className="hidden sm:inline text-purple-300/40">|</span>
+            <span className="hidden sm:inline text-purple-200/80">{totalCachedRecords} Critical Records Cached Locally</span>
           </button>
         </div>
 
-        {/* Center/Right: Satellite Uplink & Node info */}
+        {/* Center: Attribution Line */}
+        <div className="flex items-center gap-1.5 text-xs text-purple-300/70" id="attribution-line">
+          <span>Powered by</span>
+          <a
+            href="https://wondermayank.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-purple-300 font-semibold hover:text-white transition-colors underline decoration-purple-400/40"
+          >
+            wondermayank.in
+          </a>
+        </div>
+
+        {/* Right: Satellite Uplink & Node info */}
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-1.5 text-[11px]">
-            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <Cpu className="w-3.5 h-3.5 text-purple-300" />
             <span style={{ color: t.textDim }}>Node:</span>
-            <span className="text-cyan-400 font-semibold">{currentDeviceId}</span>
+            <span className="text-purple-200 font-semibold">{currentDeviceId}</span>
           </div>
 
           <span style={{ color: t.textFaint }} className="hidden md:inline">&middot;</span>
@@ -60,7 +78,7 @@ export function Footer({ t, db, currentDeviceId, currentDeviceType }: FooterProp
 
           <button
             onClick={() => setIsModalOpen(true)}
-            style={{ color: t.accent }}
+            style={{ color: '#C4B5FD' }}
             className="flex items-center gap-1 hover:underline cursor-pointer font-medium ml-2"
           >
             <Info className="w-3.5 h-3.5" />

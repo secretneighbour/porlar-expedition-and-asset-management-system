@@ -280,8 +280,8 @@ export function PredictiveMaintenance({
           <button
             onClick={() => runAiEvaluation(primaryAlert)}
             disabled={loadingAi}
-            style={{ background: t.accent, color: "#04222A" }}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm shadow-sky-950"
+            style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm shadow-purple-950"
           >
             {loadingAi ? (
               <>
@@ -333,11 +333,11 @@ export function PredictiveMaintenance({
                   key={preset.val}
                   onClick={() => handleTempChange(preset.val)}
                   style={{
-                    background: ambientTemp === preset.val ? t.accent : t.bgAlt,
-                    color: ambientTemp === preset.val ? '#04222A' : t.textDim,
-                    border: `1px solid ${ambientTemp === preset.val ? t.accent : t.border}`
+                    background: ambientTemp === preset.val ? 'linear-gradient(135deg, #7C3AED, #60A5FA)' : t.bgAlt,
+                    color: ambientTemp === preset.val ? '#FFFFFF' : t.textDim,
+                    border: `1px solid ${ambientTemp === preset.val ? 'transparent' : t.border}`
                   }}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-medium transition-all cursor-pointer"
                 >
                   {preset.label}
                 </button>
@@ -531,8 +531,8 @@ export function PredictiveMaintenance({
               <button
                 onClick={() => handleExecuteMaintenanceToday(primaryAlert)}
                 disabled={!canEdit}
-                style={{ background: t.green, color: '#04222A' }}
-                className="w-full py-3 px-4 rounded-xl text-sm font-bold cursor-pointer hover:opacity-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-950 font-sans"
+                style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#FFFFFF', boxShadow: '0 8px 22px rgba(16, 185, 129, 0.35)' }}
+                className="w-full py-3 px-4 rounded-xl text-sm font-bold cursor-pointer hover:opacity-95 transition-all flex items-center justify-center gap-2 font-sans"
               >
                 <CheckCircle2 size={18} />
                 <span>Maintain Today Itself (Execute Swap)</span>
@@ -679,11 +679,11 @@ export function PredictiveMaintenance({
                 key={flt}
                 onClick={() => setActiveFilter(flt)}
                 style={{
-                  background: activeFilter === flt ? t.accent : t.bgAlt,
-                  color: activeFilter === flt ? '#04222A' : t.textDim,
-                  border: `1px solid ${activeFilter === flt ? t.accent : t.border}`
+                  background: activeFilter === flt ? 'linear-gradient(135deg, #7C3AED, #60A5FA)' : t.bgAlt,
+                  color: activeFilter === flt ? '#FFFFFF' : t.textDim,
+                  border: `1px solid ${activeFilter === flt ? 'transparent' : t.border}`
                 }}
-                className="px-3 py-1 rounded-lg font-medium cursor-pointer transition-colors"
+                className="px-3 py-1 rounded-xl font-medium cursor-pointer transition-colors"
               >
                 {flt}
               </button>
@@ -760,8 +760,8 @@ export function PredictiveMaintenance({
                           handleExecuteMaintenanceToday(r);
                         }}
                         disabled={!canEdit}
-                        style={{ background: t.accent, color: '#04222A' }}
-                        className="px-2.5 py-1 rounded text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1"
+                        style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: '#FFFFFF' }}
+                        className="px-2.5 py-1 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1"
                       >
                         <Wrench size={11} />
                         <span>Maintain Today</span>
@@ -834,8 +834,8 @@ export function PredictiveMaintenance({
                     setSelectedRecord(null);
                   }}
                   disabled={!canEdit}
-                  style={{ background: t.green, color: '#04222A' }}
-                  className="px-4 py-2 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 flex items-center gap-1.5"
+                  style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#FFFFFF' }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 flex items-center gap-1.5"
                 >
                   <Wrench size={13} />
                   <span>Execute Preventive Maintenance Today</span>
@@ -877,8 +877,8 @@ export function PredictiveMaintenance({
 
             <button
               onClick={() => setActionSuccessModal(null)}
-              style={{ background: t.accent, color: '#04222A' }}
-              className="px-5 py-2 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 mt-2"
+              style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: '#FFFFFF' }}
+              className="px-5 py-2 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 mt-2"
             >
               Continue Monitoring Fleet
             </button>

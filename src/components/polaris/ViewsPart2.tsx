@@ -175,6 +175,7 @@ export function MapView({
   updateDistressLocation,
   googleMapsApiKey,
   onOpenApiKeyModal,
+  isSimulation = false,
 }: {
   t: any;
   db: any;
@@ -183,6 +184,7 @@ export function MapView({
   updateDistressLocation?: (lat: number, lng: number) => void;
   googleMapsApiKey?: string;
   onOpenApiKeyModal?: () => void;
+  isSimulation?: boolean;
 }) {
   const [selected, setSelected] = useState<any>(null);
   const [mapMode, setMapMode] = useState<'satellite' | 'radar' | 'smart_route'>('satellite');
@@ -376,9 +378,10 @@ export function MapView({
       estimatedReturnDate: e.endDate || '2026-03-20',
       totalDistanceKm: 650,
       distanceCoveredKm: 280,
-      currentLat: isAntarctica ? -71.2 - (i * 1.5) : 79.1 + (i * 0.3),
-      currentLng: isAntarctica ? 12.5 + (i * 4.0) : 12.2 + (i * 0.5),
-      waypoints: [],
+      currentLat: e.currentLat !== undefined ? e.currentLat : (isAntarctica ? -71.2 - (i * 1.5) : 79.1 + (i * 0.3)),
+      currentLng: e.currentLng !== undefined ? e.currentLng : (isAntarctica ? 12.5 + (i * 4.0) : 12.2 + (i * 0.5)),
+      waypoints: e.waypoints || [],
+      actualTrack: e.actualTrack || [],
       fuelBurnPerDayL: 85,
       rationsDaysRemaining: 24,
       currentWeather: {
@@ -434,10 +437,30 @@ export function MapView({
   const handleAddWaypoint = (newWaypoint: Waypoint, expeditionId?: string) => {
     setCustomWaypoints((prev) => [...prev, newWaypoint]);
     if (setDb) {
-      setDb((prev: any) => ({
-        ...prev,
-        customWaypoints: [...(prev.customWaypoints || []), newWaypoint],
-      }));
+      setDb((prev: any) => {
+        if (expeditionId) {
+          const nextExpeditions = (prev.expeditions || []).map((exp: any) => {
+            if (exp.id === expeditionId) {
+              const currentWps = exp.waypoints || [];
+              const seq = newWaypoint.sequence || (currentWps.length + 1);
+              return {
+                ...exp,
+                waypoints: [...currentWps, { ...newWaypoint, sequence: seq }],
+              };
+            }
+            return exp;
+          });
+          return {
+            ...prev,
+            expeditions: nextExpeditions,
+            customWaypoints: [...(prev.customWaypoints || []), newWaypoint],
+          };
+        }
+        return {
+          ...prev,
+          customWaypoints: [...(prev.customWaypoints || []), newWaypoint],
+        };
+      });
     }
     setFocusCoords({ lat: newWaypoint.lat, lng: newWaypoint.lng });
     setIsAddWaypointOpen(false);
@@ -448,16 +471,44 @@ export function MapView({
     });
   };
 
-  const handleDeleteWaypoint = (id: string) => {
+  const handleDeleteWaypoint = (id: string, expeditionId?: string) => {
     setCustomWaypoints((prev) => prev.filter((w) => w.id !== id));
     if (setDb) {
       setDb((prev: any) => ({
         ...prev,
         customWaypoints: (prev.customWaypoints || []).filter((w: any) => w.id !== id),
+        expeditions: (prev.expeditions || []).map((exp: any) => {
+          if (expeditionId && exp.id !== expeditionId) return exp;
+          return {
+            ...exp,
+            waypoints: (exp.waypoints || []).filter((w: any) => w.id !== id),
+          };
+        }),
       }));
     }
     if (selected?.id === id) {
       setSelected(null);
+    }
+  };
+
+  const handleUpdateWaypoint = (updatedWp: Waypoint, expeditionId?: string) => {
+    setCustomWaypoints((prev) => prev.map((w) => (w.id === updatedWp.id ? { ...w, ...updatedWp } : w)));
+    if (setDb) {
+      setDb((prev: any) => ({
+        ...prev,
+        customWaypoints: (prev.customWaypoints || []).map((w: any) => (w.id === updatedWp.id ? { ...w, ...updatedWp } : w)),
+        expeditions: (prev.expeditions || []).map((exp: any) => {
+          if (expeditionId && exp.id !== expeditionId) return exp;
+          const hasWp = (exp.waypoints || []).some((w: any) => w.id === updatedWp.id);
+          if (hasWp) {
+            return {
+              ...exp,
+              waypoints: (exp.waypoints || []).map((w: any) => (w.id === updatedWp.id ? { ...w, ...updatedWp } : w)),
+            };
+          }
+          return exp;
+        }),
+      }));
     }
   };
 
@@ -619,7 +670,7 @@ export function MapView({
       {/* Smart Route Optimizer full panel if active */}
       {mapMode === 'smart_route' && (
         <div className="mb-4">
-          <SmartRouteOptimizer t={t} db={db} setDb={setDb} />
+          <SmartRouteOptimizer t={t} db={db} setDb={setDb} isSimulation={isSimulation} />
         </div>
       )}
 
@@ -667,9 +718,12 @@ export function MapView({
                 }}
                 onOpenAddBaseWithCoords={handleOpenAddBaseWithCoords}
                 onOpenAddWaypointWithCoords={handleOpenAddWaypointWithCoords}
+                onAddWaypoint={handleAddWaypoint}
+                onUpdateWaypoint={handleUpdateWaypoint}
                 onDeleteWaypoint={handleDeleteWaypoint}
                 showDangerHeatmap={isHeatmapActive}
                 onToggleDangerHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}
+                isSimulation={isSimulation}
               />
             </div>
           ) : (
@@ -1922,8 +1976,8 @@ export function AuditLog({ t, db }: { t: any; db: any }) {
             <div className="flex justify-end pt-2">
               <button 
                 onClick={() => setInspectModalData(null)} 
-                style={{ background: t.accent, color: "#04222A" }} 
-                className="px-4 py-2 rounded-lg text-xs font-bold cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} 
+                className="px-5 py-2 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 transition-opacity"
               >
                 Close Dossier
               </button>
@@ -1973,8 +2027,8 @@ export function SettingsPage({ t, theme, setTheme, user, onOpenApiKeyModal }: { 
             <p style={{ color: t.textDim }} className="text-xs mb-3">Configure Gemini AI Reconnaissance engine and Google Maps Platform high-resolution satellite cartography.</p>
             <button
               onClick={onOpenApiKeyModal}
-              style={{ background: t.accent, color: "#04222A" }}
-              className="px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md hover:opacity-90 transition-opacity"
+              style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
             >
               <Key size={14} />
               <span>Configure API Keys (Gemini &amp; Google Maps)</span>
@@ -2028,7 +2082,7 @@ export function LoginView({ t, onLogin, theme, setTheme }: { t: any; onLogin: (r
               );
             })}
           </div>
-          <button disabled={!role} onClick={() => role && onLogin(role)} style={{ background: role ? t.accent : t.bgAlt, color: role ? "#04222A" : t.textFaint, fontFamily: FONT_BODY }} className="w-full py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:cursor-not-allowed cursor-pointer">
+          <button disabled={!role} onClick={() => role && onLogin(role)} style={{ background: role ? 'linear-gradient(135deg, #7C3AED, #60A5FA)' : t.bgAlt, color: role ? "#FFFFFF" : t.textFaint, fontFamily: FONT_BODY }} className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-purple-950/40">
             Enter Command Center <ArrowRight size={15} />
           </button>
         </div>

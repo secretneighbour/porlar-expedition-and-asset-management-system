@@ -20,9 +20,14 @@ import {
   SlidersHorizontal,
   Route,
   ShieldAlert,
-  Ruler
+  Ruler,
+  X,
+  RefreshCw,
+  XCircle,
+  ArrowRight
 } from 'lucide-react';
-import { Expedition, Waypoint } from '../types';
+import { Expedition, Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest } from '../types';
+import { emitAiActionBroadcast } from '../data/polarisData';
 
 interface WaypointPlannerPageProps {
   expeditions: Expedition[];
@@ -132,9 +137,108 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
 
+  // Waypoint Priority & Mandatory Flags
+  const [priorityInput, setPriorityInput] = useState<'mandatory' | 'high' | 'normal' | 'low'>('normal');
+  const [isMandatoryInput, setIsMandatoryInput] = useState(false);
+
+  // Gemini Route Optimizer States
+  const [aiOptimizing, setAiOptimizing] = useState(false);
+  const [aiProposal, setAiProposal] = useState<WaypointOptimizationResult | null>(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const activeExpedition = expeditions.find((e) => e.id === selectedExpId) || expeditions[0];
+
+  // Run Gemini AI Waypoint Route Optimization
+  const handleRunAiWaypointOptimizer = async () => {
+    if (!activeExpedition || !activeExpedition.waypoints || activeExpedition.waypoints.length < 2) {
+      setValidationError('At least 2 registered waypoints are required on active expedition for route optimization.');
+      return;
+    }
+
+    setAiOptimizing(true);
+    setAiError(null);
+
+    const payload: WaypointOptimizationRequest = {
+      waypoints: activeExpedition.waypoints,
+      environment: {
+        tempC: activeExpedition.currentWeather?.tempC ?? -35,
+        apparentTempC: activeExpedition.currentWeather?.windchillC ?? -48,
+        windSpeedKts: activeExpedition.currentWeather?.windKnots ?? 22,
+        weatherDescription: 'Traverse meteorological observation',
+        dangerZones: [
+          { id: 'dz-katabatic', name: 'Polar Katabatic Funnel', lat: -78.4, lng: 110.2, radiusKm: 35, severityLevel: 'EXTREME' }
+        ]
+      },
+      constraints: {
+        mandatoryWaypointIds: activeExpedition.waypoints.filter((w) => w.isMandatory || w.priority === 'mandatory').map((w) => w.id),
+      },
+    };
+
+    try {
+      emitAiActionBroadcast({
+        category: 'logistics',
+        message: `Analyzing ${activeExpedition.waypoints.length} waypoints on ${activeExpedition.name} via Gemini 3.8 Flash AI...`,
+        stationOrAsset: activeExpedition.name,
+        impact: 'Hazard avoidance and sequence optimization'
+      });
+
+      const res = await fetch('/api/ai/waypoints/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.status === 'ok' && data.plan) {
+        setAiProposal(data.plan);
+        setIsAiModalOpen(true);
+        emitAiActionBroadcast({
+          category: 'logistics',
+          message: `AI route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
+          stationOrAsset: activeExpedition.name,
+          impact: 'Awaiting operator review in Waypoint Studio.'
+        });
+      } else {
+        setAiError(data.message || 'Route optimization failed.');
+      }
+    } catch (err: any) {
+      setAiError(err.message || 'Failed to communicate with AI optimization service.');
+    } finally {
+      setAiOptimizing(false);
+    }
+  };
+
+  const handleAcceptAiRoute = () => {
+    if (!aiProposal || !activeExpedition) return;
+
+    aiProposal.orderedWaypoints.forEach((wp) => {
+      onUpdateWaypoint(wp, activeExpedition.id);
+    });
+
+    emitAiActionBroadcast({
+      category: 'logistics',
+      message: `OPERATOR APPROVED AI ROUTE: Waypoint sequence updated to ${aiProposal.recommendedOrder.join(' → ')}.`,
+      stationOrAsset: activeExpedition.name,
+      impact: `Distance optimized to ${aiProposal.estimatedDistanceKm} km (${aiProposal.riskLevel} risk).`
+    });
+
+    setSuccessToast(`Applied AI optimized sequence (${aiProposal.recommendedOrder.length} waypoints reordered).`);
+    setIsAiModalOpen(false);
+    setAiProposal(null);
+  };
+
+  const handleRejectAiRoute = () => {
+    emitAiActionBroadcast({
+      category: 'logistics',
+      message: `Operator rejected proposed AI route. Original waypoint sequence retained.`,
+      stationOrAsset: activeExpedition?.name,
+      impact: 'Legacy path active.'
+    });
+    setIsAiModalOpen(false);
+    setAiProposal(null);
+  };
 
   const filteredWaypoints = activeExpedition?.waypoints.filter((wp) =>
     wp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -279,6 +383,8 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
       distanceFromPrevKm: isNaN(parsedDist) ? 50 : parsedDist,
       passed: false,
       hazardNote: hazardNote.trim() || undefined,
+      priority: priorityInput,
+      isMandatory: isMandatoryInput || priorityInput === 'mandatory',
     };
 
     const expId = targetType === 'expedition' && selectedExpId ? selectedExpId : undefined;
@@ -381,6 +487,22 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
             >
               <Download className="w-4 h-4 text-sky-400 shrink-0" />
               <span>EXPORT GPX ({activeExpedition.waypoints.length} WPs)</span>
+            </button>
+          )}
+
+          {activeExpedition && activeExpedition.waypoints.length >= 2 && (
+            <button
+              type="button"
+              onClick={handleRunAiWaypointOptimizer}
+              disabled={aiOptimizing}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white font-bold border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center justify-center gap-2 transition-all cursor-pointer text-xs"
+            >
+              {aiOptimizing ? (
+                <Loader2 className="w-4 h-4 text-purple-200 animate-spin shrink-0" />
+              ) : (
+                <Sparkles className="w-4 h-4 text-purple-200 shrink-0" />
+              )}
+              <span>{aiOptimizing ? 'AI OPTIMIZING...' : `AI ROUTE OPTIMIZER (${activeExpedition.waypoints.length} WPs)`}</span>
             </button>
           )}
         </div>
@@ -638,6 +760,52 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
               </div>
             </div>
 
+            {/* Mission Priority & Mandatory Constraint */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+              <label className="text-slate-300 uppercase font-bold text-[10px] sm:text-[11px] block">
+                MISSION PRIORITY & AI CONSTRAINT:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['mandatory', 'high', 'normal', 'low'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => {
+                      setPriorityInput(p);
+                      if (p === 'mandatory') setIsMandatoryInput(true);
+                    }}
+                    className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase transition-colors border cursor-pointer ${
+                      priorityInput === p
+                        ? p === 'mandatory'
+                          ? 'bg-rose-950 text-rose-300 border-rose-600'
+                          : p === 'high'
+                          ? 'bg-amber-950 text-amber-300 border-amber-600'
+                          : p === 'normal'
+                          ? 'bg-sky-950 text-sky-300 border-sky-600'
+                          : 'bg-slate-900 text-slate-300 border-slate-600'
+                        : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={isMandatoryInput || priorityInput === 'mandatory'}
+                  onChange={(e) => {
+                    setIsMandatoryInput(e.target.checked);
+                    if (e.target.checked) setPriorityInput('mandatory');
+                    else if (priorityInput === 'mandatory') setPriorityInput('normal');
+                  }}
+                  className="rounded bg-slate-900 border-slate-700 text-rose-500 focus:ring-0"
+                />
+                <span className="font-bold text-rose-300">Mandatory Waypoint</span>
+                <span className="text-slate-500 text-[10px]">(AI pathfinder will never omit this stop)</span>
+              </label>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="submit"
@@ -745,6 +913,11 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                         <span className="font-bold text-white text-xs truncate flex items-center gap-1.5">
                           <span className="text-slate-500 text-[10px]">#{idx + 1}</span>
                           <span>{wp.name}</span>
+                          {(wp.isMandatory || wp.priority === 'mandatory') && (
+                            <span className="px-1.5 py-0.2 rounded text-[8.5px] bg-rose-950 text-rose-300 border border-rose-800 font-mono font-bold">
+                              MANDATORY
+                            </span>
+                          )}
                         </span>
                         <span className="text-[11px] text-slate-400 font-mono shrink-0">
                           {wp.elevationM}m AMSL
@@ -792,6 +965,174 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
         </div>
 
       </div>
+
+      {/* Gemini AI Route Recommendation & Operator Approval Modal */}
+      {isAiModalOpen && aiProposal && (
+        <div className="fixed inset-0 z-[1000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-purple-500/80 rounded-2xl max-w-xl w-full p-5 shadow-[0_0_40px_rgba(168,85,247,0.35)] text-xs font-mono space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-purple-900/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-950 border border-purple-700 text-purple-300">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-base text-purple-200 flex items-center gap-2">
+                    <span>AI ROUTE OPTIMIZATION</span>
+                    <span className="px-2 py-0.5 rounded bg-purple-900 text-purple-300 text-[10px] uppercase font-bold">
+                      PROPOSED
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                    <span>Expedition: {activeExpedition.name}</span>
+                    <span>•</span>
+                    <span className={aiProposal.mode === 'gemini_ai_live' ? 'text-emerald-400 font-bold' : aiProposal.mode === 'gemini_ai_cached' ? 'text-sky-400 font-bold' : 'text-amber-400 font-bold'}>
+                      {aiProposal.mode === 'gemini_ai_live' ? 'GEMINI 3.8 FLASH' : aiProposal.mode === 'gemini_ai_cached' ? 'AI CACHED' : 'OFFLINE HEURISTIC'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAiModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sequence Comparison Box */}
+            <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800 space-y-2.5">
+              <div>
+                <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
+                  CURRENT WAYPOINT SEQUENCE:
+                </div>
+                <div className="text-slate-300 text-xs font-bold flex flex-wrap items-center gap-1.5">
+                  {(activeExpedition?.waypoints || []).map((w, i) => (
+                    <React.Fragment key={w.id}>
+                      <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">{w.name || w.id}</span>
+                      {i < (activeExpedition?.waypoints?.length || 0) - 1 && <span className="text-slate-500">→</span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">
+                  Current Traverse Total: {totalDistanceKm} km
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-2.5">
+                <div className="text-[10px] text-purple-400 uppercase font-bold tracking-wider mb-1 flex items-center justify-between">
+                  <span>AI RECOMMENDED SEQUENCE:</span>
+                  <span className={aiProposal.estimatedDistanceKm <= totalDistanceKm ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                    {aiProposal.estimatedDistanceKm <= totalDistanceKm
+                      ? `Δ -${(totalDistanceKm - aiProposal.estimatedDistanceKm).toFixed(1)} km saved`
+                      : `Δ +${(aiProposal.estimatedDistanceKm - totalDistanceKm).toFixed(1)} km detour`}
+                  </span>
+                </div>
+                <div className="text-purple-200 text-xs font-bold flex flex-wrap items-center gap-1.5">
+                  {aiProposal.orderedWaypoints.map((w, i) => (
+                    <React.Fragment key={w.id}>
+                      <span className="bg-purple-950 px-2 py-0.5 rounded border border-purple-700 text-purple-200 font-mono">
+                        {w.name || w.id}
+                      </span>
+                      {i < aiProposal.orderedWaypoints.length - 1 && <span className="text-purple-400">→</span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase">EST. DISTANCE</div>
+                <div className="text-sm font-bold text-white mt-0.5">{aiProposal.estimatedDistanceKm} km</div>
+              </div>
+              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase">EST. DURATION</div>
+                <div className="text-sm font-bold text-cyan-300 mt-0.5">{aiProposal.estimatedDurationHours} hrs</div>
+              </div>
+              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase">RISK ASSESSMENT</div>
+                <div
+                  className={`text-xs font-black mt-1 px-2 py-0.5 rounded inline-block ${
+                    aiProposal.riskLevel === 'LOW'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                      : aiProposal.riskLevel === 'MEDIUM'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-700'
+                      : 'bg-rose-950 text-rose-300 border border-rose-700'
+                  }`}
+                >
+                  {aiProposal.riskLevel}
+                </div>
+              </div>
+            </div>
+
+            {/* AI Reasoning */}
+            <div>
+              <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">
+                ANALYSIS & REASONING:
+              </div>
+              <ul className="space-y-1.5 text-xs text-slate-300">
+                {aiProposal.reasoning.map((r, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-purple-400 font-bold">•</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Warnings if any */}
+            {aiProposal.warnings && aiProposal.warnings.length > 0 && (
+              <div className="bg-rose-950/60 border border-rose-800/80 p-2.5 rounded-xl">
+                <div className="text-[10px] text-rose-300 font-bold uppercase mb-1 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  <span>OPERATIONAL WARNINGS:</span>
+                </div>
+                <ul className="space-y-1 text-xs text-rose-200">
+                  {aiProposal.warnings.map((w, i) => (
+                    <li key={i}>• {w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="pt-3 border-t border-purple-900/60 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleRunAiWaypointOptimizer}
+                disabled={aiOptimizing}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${aiOptimizing ? 'animate-spin' : ''}`} />
+                <span>Recalculate</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRejectAiRoute}
+                  className="px-4 py-2 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Reject</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAcceptAiRoute}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Accept & Apply</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -114,11 +114,20 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-950 border-2 border-rose-600 rounded-xl max-w-2xl w-full shadow-2xl shadow-rose-950/80 text-xs font-mono text-slate-200 flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
+      <div 
+        style={{
+          background: 'rgba(21, 11, 46, 0.94)',
+          border: '1px solid rgba(239, 68, 68, 0.6)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(239, 68, 68, 0.25)'
+        }}
+        className="rounded-2xl max-w-2xl w-full text-xs font-mono text-slate-200 flex flex-col max-h-[90vh] overflow-hidden"
+      >
         
         {/* Header */}
-        <div className="p-4 bg-slate-950 border-b border-rose-800/80 flex items-start justify-between shrink-0">
+        <div className="p-4 bg-slate-950/60 border-b border-rose-800/50 flex items-start justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-rose-950 border border-rose-600 text-rose-400">
               <ShieldAlert className="w-6 h-6 animate-pulse" />

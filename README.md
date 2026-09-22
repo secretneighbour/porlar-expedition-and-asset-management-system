@@ -11,6 +11,8 @@ A mission-critical tactical operations console and real-time telemetry workstati
 
 - [🚀 Quick Start](#-quick-start)
   - [🛠️ Troubleshooting NPM `EALLOWSCRIPTS` / `--allow-scripts` Error](#️-troubleshooting-npm-eallowscripts---allow-scripts-error)
+- [🎨 Unified Polar Operations Design System & Frontend Architecture](#-unified-polar-operations-design-system--frontend-architecture)
+- [🔐 Polar Ops Console Authentication & Role-Based Access Control](#-polar-ops-console-authentication--role-based-access-control)
 - [✨ Key Operational Views & Features](#-key-operational-views--features)
 - [🔥 Sub-Zero Danger Zone Heatmap & Polar GIS](#-sub-zero-danger-zone-heatmap--polar-gis)
 - [🛠️ AI Predictive Maintenance System (-50°C Cold-Soak Modeling)](#️-ai-predictive-maintenance-system--50c-cold-soak-modeling)
@@ -22,6 +24,9 @@ A mission-critical tactical operations console and real-time telemetry workstati
 - [⚡ Auto-Resolved by AI Alert System (Self-Healing Autonomous Operations)](#-auto-resolved-by-ai-alert-system-self-healing-autonomous-operations)
 - [🧹 AI Automated Work Clearing & Forensic Action Logging](#-ai-automated-work-clearing--forensic-action-logging)
 - [🖥️ Pre-Boot System Check (Terminal-Style Hardware & Telemetry POST)](#️-pre-boot-system-check-terminal-style-hardware--telemetry-post)
+- [🎮 Mission Simulation & Operator Training Mode](#-mission-simulation--operator-training-mode)
+- [📍 Waypoint Tracing & Live Route Telemetry on Map](#-waypoint-tracing--live-route-telemetry-on-map)
+- [🤖 Gemini-Powered Waypoint Route Optimization](#-gemini-powered-waypoint-route-optimization)
 - [🧩 Comprehensive Modules & Dependencies Reference](#-comprehensive-modules--dependencies-reference)
   - [Production NPM Dependencies](#production-npm-dependencies)
   - [Development Dependencies](#development-dependencies)
@@ -94,21 +99,109 @@ In modern versions of NPM (NPM v10+ / Node.js v22+), `--allow-scripts` is no lon
 
 | View | Capabilities |
 | :--- | :--- |
+| **🔐 Polar Ops Console Auth** | Glassmorphic tactical authentication portal with multi-radial lighting (`#7C3AED`, `#60A5FA`), role-based access for Researcher, Asset Management, and Transportation, server-side authorization enforcement, and forensic session auditing. |
+| **📊 Polar Operations Command Center** | Information-dense polar operations dashboard featuring live mission progress, environmental telemetry, crawler fleet readiness, active AI recommendations, and embedded real-time AI action logs. |
+| **🌡️ Live Operations & Environmental Telemetry** | Dedicated AWOS meteorological workstation: ambient temperature, katabatic wind velocity, barometric pressure, wind chill indexes, and real-time frostbite hazard calculations. |
+| **🧭 Polar Map & Geospatial GIS** | Dual-projection cartography with Leaflet GIS and stereographic radar. Real-time GPS device tracking, interactive coordinate pinning, danger zone overlays, and custom base commissioning. |
 | **🤖 AI Predictive Maintenance** | Pre-failure machine learning forecaster modeling severe polar cold-soak (-50°C) stress, elastomer vitrification curves, vibration harmonics (FFT), and parts pre-allocation to avert field breakdowns. |
 | **🔥 Danger Zone Heatmap** | Dynamic multi-ring gradient heatmap overlay visualizing sub-zero cold pools, katabatic shear funnels, human survival windows (<12m lethal threshold), and Arctic diesel fuel waxing perimeters. |
-| **🧭 Real-World & Polar Cartography** | Dual projection mapping system with Leaflet GIS and Stereographic Polar Radar. Click anywhere on the map to set custom Waypoints or establish new Outposts with auto-populated coordinates. |
-| **🚛 Fleet & Asset Telemetry** | Real-time monitoring of heavy PistenBully crawlers, Twin Otter ski-planes, coring rigs, and mobile shelter pods. Track fuel/battery levels, sub-zero cold-soak statuses, and SATCOM health. |
-| **📍 Waypoint Planner Studio** | Clean split-pane interface to pin, edit, and step sequential waypoints (+50km auto-advance). Features 1-click map pinning, instant card removals, and batch route clearing. |
-| **⚡ Automated S.A.R. Dispatch (Zero-Click)** | Autonomous Search & Rescue command system: upon distress beacon reception (e.g., Crevasse Fall), the engine automatically computes the nearest base, assesses weather flyability, and dispatches Drone Falcon-X and tracked extraction teams without requiring human operator clicks. |
-| **❄️ Dynamic Weather Inventory Engine** | AI weather forecasting reader: predicts 3-day severe blizzard impact (-48°C, 95 km/h winds), models exponential heater burn surge (500L/day → 1,450L/day), dynamically elevates minimum stock safety buffer (4,000L → 8,500L), and dispatches early supply ship orders to MV Vasiliy Golovnin. |
+| **📍 Waypoint Planner Studio** | Clean split-pane interface to pin, edit, and step sequential waypoints (+50km auto-advance). Features 1-click map pinning, instant card removals, and GPX navigation file exports. |
 | **🛰️ Smart Route Optimization (Satellite CV)** | High-resolution satellite computer vision engine detecting shifting ice shelves and active crevasse hazards; recalculates daily safe bypass corridors for 28-ton heavy supply trucks and pushes waypoints directly to crawler GPS terminals. |
-| **🚨 Mayday Distress & SAR Console** | Bi-directionally synchronized Mayday alarm system. Transmit field distress alerts from mobile phones; trigger audible klaxon alarms and automated SAR scramble protocols on HQ laptops. |
-| **⛺ Research Stations & Outposts** | Operational status, personnel headcounts, runway conditions, and emergency shelter capacities across McMurdo, Amundsen-Scott, Vostok, Concordia, Halley VI, and custom bases. |
+| **⚡ Automated S.A.R. Mission Console** | Autonomous Search & Rescue command workstation: upon distress beacon reception (e.g., Crevasse Fall), the engine automatically computes the nearest base, assesses weather flyability, and dispatches Drone Falcon-X and tracked extraction teams with zero human latency. |
+| **❄️ Dynamic Weather Inventory Engine** | AI weather forecasting reader: predicts 3-day severe blizzard impact (-48°C, 95 km/h winds), models exponential heater burn surge (500L/day → 1,450L/day), dynamically elevates minimum stock safety buffer (4,000L → 8,500L), and dispatches early supply ship orders to MV Vasiliy Golovnin. |
+| **🚨 Mayday Distress & Emergency Broadcast** | Bi-directionally synchronized Mayday alarm system. Transmit field distress alerts from mobile phones; trigger audible klaxon alarms and automated SAR scramble protocols on HQ laptops. |
+| **📻 Tactical Dispatch Logbook & AI Recon** | Tactical field communications logbook with automated Gemini 3.8 Flash reconnaissance evaluation, severity-based filtering, callsign tracking, and sector monitoring. |
+| **⛺ Research Stations & Outposts Studio** | Comprehensive operational status, personnel headcounts, runway conditions, and emergency shelter capacities across McMurdo, Amundsen-Scott, Vostok, Concordia, Halley VI, Maitri, Bharati, Himadri, and custom outposts. |
+| **🚛 Fleet & Asset Telemetry** | Real-time monitoring of heavy PistenBully crawlers, Twin Otter ski-planes, coring rigs, and mobile shelter pods. Track fuel/battery levels, sub-zero cold-soak statuses, and SATCOM health. |
 | **📦 Consumables & Depot Allocation** | Burn-rate tracking for Arctic diesel (F-34/JP-8), Jet-A1, rations, and medical hypothermia kits with automated resupply orders. |
-| **🌡️ AWOS Weather & Katabatic Risk** | Live environmental telemetry: ambient temperature, wind chill, barometric pressure, whiteout warnings, and frostbite time calculators. |
-| **🧠 AI Tactical Recon (Gemini 3.8 Flash)** | Server-side AI intelligence engine evaluating traverse route hazards, crevasse field proximity, and cold-weather mechanical risk mitigations. |
 | **📜 AI Action Logs Stream** | Real-time continuously scrolling telemetry and autonomous event feed (`[10:45 AM] AI: Rerouting supply convoy...`, `[10:47 AM] AI: Optimizing generator fuel...`) across polar stations with category filters and pause/resume controls. |
 | **⚡ Auto-Resolved by AI Alerts** | Autonomous self-healing infrastructure giving historical and real-time alerts green `[⚡ Auto-Resolved by AI]` tags with complete forensic action logs and averted-impact explanations. |
+| **🧹 AI Cleared Work Logs Archive** | Automated forensic task clearing engine with dual `ACTIVE TASK QUEUE` and `⚡ AI CLEARED WORK LOGS` views, one-click `AI AUTO-CLEAR ALL DONE`, and immutable verification logs. |
+| **🎮 Mission Simulation & Training Sandbox** | Integrated tactical training mode allowing operators to simulate extreme crises (blizzards, crawler tensioner failures, SATCOM blackouts, crevasse fall Maydays). Features 5 pre-built scenarios, 11 manual inject triggers, 1x-25x playback controls, moving convoy map interpolation, 3-tier AI safety classification (OBSERVE, ASSIST, AUTONOMOUS), AAR evaluation reports, and strict isolation from production data. |
+| **🎨 4 Tactical Themes & CRT Scanlines** | Complete customizable tactical visual identities: Cyan Polar, Phosphor Green (P300 CRT), Amber CRT, and Polar Daylight, accompanied by toggleable CRT cathode-beam scanlines and Web Audio acoustic feedback. |
+| **📱 Multi-Device Pairing & GPS Sync** | QR-code automated mobile pairing, mesh heartbeat synchronization, and Web Serial / Web Geolocation external hardware GPS integration. |
+
+---
+
+## 🎨 Unified Polar Operations Design System & Frontend Architecture
+
+The entire frontend of the Polar Expedition & Asset Management System has been unified under the design language established in `polar-login.html`. From the authentication portal through to the dashboards, operational maps, predictive maintenance studio, logistics pipelines, and administrative settings, every screen feels like a cohesive, futuristic operations console.
+
+### 🔮 Core Color Palette
+* **Primary Operations Purple**: `#7C3AED` (`--purple-700`)
+* **Light Accent Purple**: `#A78BFA` (`--purple-400`)
+* **Soft Polar Violet**: `#C4B5FD` (`--purple-300`)
+* **Telemetry Cyan / Blue**: `#60A5FA` (`--blue-400`)
+* **Ice Glaze Blue**: `#B9D9DC` (`--blue-200`)
+* **Primary Console Text**: `#F5F3FF` (`--ink`)
+* **Secondary Telemetry Text**: `#C9C1E8` (`--ink-soft`)
+* **Deep Polar Night Gradients**: `#2E1065` &rarr; `#1E1240` &rarr; `#150B2E`
+* **Semantic Status Accents**: Compatible emerald green (`#10B981` / `#5EEAB0`), amber warning (`#F59E0B`), and emergency rose red (`#EF4444` / `#F43F5E`).
+
+### 🌌 Multi-Radial Ambient Lighting Background
+The background system utilizes a fixed-canvas multi-radial lighting architecture:
+```css
+body {
+  background:
+    radial-gradient(circle at 10% 15%, rgba(167,139,250,0.30), transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(96,165,250,0.20), transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(196,181,253,0.18), transparent 45%),
+    linear-gradient(160deg, #2E1065 0%, #1E1240 55%, #150B2E 100%);
+  background-attachment: fixed;
+}
+```
+All child cards, panels, and sidebars utilize translucent glass (`rgba(255, 255, 255, 0.05)` and `rgba(21, 11, 46, 0.84)`), allowing the ambient glowing gradients to shine through consistently.
+
+### 💎 Glassmorphism Primitives
+* **`GlassCard` / `StatCard`**: 20px-26px rounded corners, `backdrop-filter: blur(20px)`, subtle frosted border `rgba(196, 181, 253, 0.18)`, and soft deep drop shadow.
+* **`GlassTable`**: Frosted table containers with subtle separators, sticky glass headers, and purple hover states.
+* **`GlassModal`**: Centered floating glass dialogs with deep dark frosted backdrop, Space Grotesk headers, and gradient action buttons.
+* **`Button System`**: Primary operations button with `linear-gradient(135deg, #7C3AED, #60A5FA)` and box-shadow `0 10px 25px rgba(124, 58, 237, 0.38)`, secondary glass buttons, and danger/success semantic buttons.
+* **`Input System`**: Glass inputs with `rgba(255, 255, 255, 0.05)`, subtle border, and purple focus ring `0 0 0 3px rgba(124, 58, 237, 0.22)`.
+
+### 🔤 Typography
+* **Headings & Metric Displays**: `Space Grotesk` (weights 500, 600, 700) for logos, top headers, KPI values, and section titles.
+* **Body, Forms & Controls**: `Inter` (weights 400, 500, 600, 700) for tables, forms, labels, status pills, and toolbars.
+
+### 🎛️ Tactical Themes, CRT Scanlines & Audio Feedback
+* **Cyan Polar (Default)**: Deep space navy background (`#060B18`), cyan highlights (`#00F2FE`), and sky-blue telemetry accents (`#38BDF8`).
+* **Phosphor Green**: Vintage P300 cathode-ray terminal green monochrome (`#22C55E`, `#040D08`), high-contrast tactical night vision mode.
+* **Amber CRT**: 1980s polar radar cathode workstation amber monochrome (`#F59E0B`, `#0D0804`), optimized for high-glare blizzard whiteout viewing.
+* **Polar Daylight**: Ultra-crisp high-contrast daylight mode (`#F8FAFC`, `#0F172A`), for outdoor snow glare operations.
+* **CRT Scanlines Beam Overlay**: Toggleable cathode beam horizontal raster scanlines (`.crt-scanlines`) simulating authentic military CRT display tubes.
+* **Web Audio API Acoustic Synthesizer**: Zero-asset procedural sound generation: tactical chirp on nav transitions, dual-tone emergency klaxon (880Hz-587Hz) on Mayday, and confirmation chimes on SAR dispatch.
+
+### 🧭 7-Section Categorized Command Navigation
+1. **COMMAND**: Dashboard, Live Operations (AWOS Met), Polar Map (Leaflet & Radar GIS).
+2. **EXPEDITION**: Expeditions, Waypoint Planner Studio, Smart Routes, Transportation.
+3. **ASSETS**: Fleet Telemetry, Maintenance, Consumables & Inventory, Shipments & Cargo, Research Stations & Outposts, Personnel Roster.
+4. **AI OPERATIONS**: Predictive Maintenance (-50°C Simulator), Smart Route AI, Weather Inventory AI, AI Action Logs Stream, AI Alerts, AI Cleared Work Logs Archive.
+5. **INCIDENTS**: Search & Rescue (S.A.R.) Mission Console, Alerts & Advisories, Emergency Dispatch Logbook.
+6. **ANALYTICS**: Operational Reports, Financial Expenses, Forensic Audit Trail.
+7. **SYSTEM**: Multi-Terminal Pairing, API Key / AI Resource Optimization, Pre-Boot POST Diagnostics, User Management, Console Settings.
+
+### 🛡️ Attribution Preservation
+Preserves credit to [wondermayank.in](https://wondermayank.in) on both the login screen and the operations console footer, complete with active runtime integrity validation.
+
+---
+
+## 🔐 Polar Ops Console Authentication & Role-Based Access Control
+
+The login workstation has been engineered as a high-fidelity tactical entry console following the **Polar Ops Console** specification (`polar-login.html`):
+
+### 🛡️ Role-Based Access & Server-Side Authorization
+* **Researcher**: Maps to *Scientist / Team Member*, providing immediate access to field tasks, mission status, and live scientific observations.
+* **Asset Management**: Maps to *Asset Manager*, routing station engineers directly to crawler health telemetry, -50°C cold-soak vitrification models, and maintenance schedules.
+* **Transportation**: Maps to *Logistics Officer*, directing transport leads to fuel reserves, supply chain pipelines, and tracked convoys.
+* **Zero-Trust Role Enforcement**: Authorization is strictly controlled on the backend (`POST /api/auth/login`). Attempting to log into a portal using an account without matching privileges returns `403 Forbidden` (`Role authorization mismatch`), preventing client-side role forgery.
+
+### 🧪 Standard Demo Accounts
+| Role | User ID | Password | Destination Route |
+| :--- | :--- | :--- | :--- |
+| **Researcher** | `RSC-0142` | `polar2026` | `dashboard` (Command Center) |
+| **Asset Management** | `AST-0101` | `polar2026` | `assets` (Fleet Telemetry) |
+| **Transportation** | `TRN-0301` | `polar2026` | `transportation` (Supply Convoys) |
+| **Super Admin** | `ADM-0001` | `polar2026` | `dashboard` (Full System Access) |
 
 ---
 
@@ -464,6 +557,337 @@ Prior to initializing the main operational dashboard upon login (or when trigger
    - **CRT Scanlines**: Toggleable retro scanline display overlay.
    - **Playback Controls**: Pause, accelerate (5X Fast-Forward), re-run diagnostic, or export raw cryptographic `.log` reports.
    - **Fault Simulation**: Test artificial sub-zero sensor anomalies and watch the AI Autonomous Janitor immediately execute auto-remediation.
+
+---
+
+## 🎮 Mission Simulation & Operator Training Mode
+
+The **Mission Simulation / Training Mode** is an integrated tactical sandbox designed to train polar base operators, expedition commanders, and logistics dispatchers in extreme Arctic and Antarctic operational crisis response without endangering lives or perturbing live operational data.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ [SIMULATION MODE ACTIVE] // T+14:32 // SPEED: 5X // SCENARIO: TRANS-ANTARCTIC RESUPPLY           │
+│ PHASE: CREVASSE BYPASS & RE-ROUTE // TARGET ASSET: CONVOY PBD-ALPHA (-71.36°S, 12.15°E)          │
+│ [PAUSE] [1X] [2X] [5X] [10X] [25X] [INJECT EVENT ▼] [TIMELINE DRAWER] [END SIM / AAR]            │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🛡️ Strict Simulation vs. Live Operational Data Isolation
+A fundamental architectural mandate is that simulation state must **never overwrite or pollute live operational databases**.
+* **Deep In-Memory Sandbox**: When Simulation Mode is initiated, the system executes an isolated deep-clone of the current operational state (`liveDb` & `liveAssets`).
+* **Dynamic Active State Routing**: All 24+ downstream views (`DashboardView`, `MapView`, `PredictiveMaintenance`, `DynamicWeatherInventory`, `SmartRouteOptimizer`, `SarConsoleView`, `Alerts`, `Tasks`, `AiActionLogsPanel`) bind reactively to `activeDb` and `activeAssets`.
+* **Zero Disk Leakage**: Production files (`polar_state.json`) remain untouched. Field interventions executed during simulation (e.g. approving an AI maintenance task or dispatching SAR) mutate only the in-memory simulation container.
+* **Safe Exit & State Restoration**: Exiting simulation mode immediately restores live satellite telemetry and database pointers in 0 ms without requiring a page reload.
+
+---
+
+### 🎛️ Simulation Control Center & Tactical Amber HUD
+Operators can launch and monitor simulations either from the full-page **`Training Sim`** workstation in the left navigation sidebar or via the persistent quick-action **`[TRAIN SIM]`** badge in the console header.
+
+1. **Persistent Tactical Amber HUD Bar**:
+   - Displays real-time scenario status, elapsed mission clock (`T+MM:SS`), active phase, and target convoy.
+   - **Playback Controls**: Play, Pause, Resume, Reset to T+00:00, and Stop.
+   - **Time Multipliers**: `1×` (real-time), `2×`, `5×` (recommended), `10×`, and `25×` (high-speed stress testing).
+   - **Flyout Chronological Timeline Drawer**: Allows operators to review past and upcoming scheduled events with severity-colored status tags.
+   - **Quick Manual Event Injection Popover**: Instant access to all 11 tactical crisis triggers.
+
+2. **Full-Page Simulation Workstation (`SimulationControlCenter.tsx`)**:
+   - Scenario briefing dossier, risk indicators, asset rosters, and meteorological condition telemetry.
+   - Live simulated AWOS gauges: Ambient Temp (-50°C to -24°C), Wind Velocity (kt), Wind Chill (°C), and Barometric Pressure (hPa).
+   - Real-time event log with manual injection deck and instant map jump-link.
+
+---
+
+### 📜 5 Realistic Pre-Built Training Scenarios
+
+| Scenario ID | Title | Duration | Crisis Sequence & System Response |
+| :--- | :--- | :--- | :--- |
+| **`SIM-SCEN-01`** | **Trans-Antarctic Resupply Traverse** | 40 mins (equiv.) | **T+00:00** Convoy departs Maitri Depot &rarr; **T+08:00** Ambient temp drops to -44°C &rarr; **T+10:00** PBD-Alpha track vibration rises &rarr; **T+12:00** AI detects abnormal harmonics &rarr; **T+13:00** AI proposes hydraulic trace warming &rarr; **T+16:00** Katabatic blizzard warning issued &rarr; **T+17:00** Satellite CV reroutes convoy &rarr; **T+22:00** Heating fuel burn surges &rarr; **T+30:00** Iridium SATCOM fades &rarr; **T+35:00** Crevasse fall Mayday beacon received &rarr; **SAR automated protocol scrambles rescue drone**. |
+| **`SIM-SCEN-02`** | **Critical Vehicle Mechanical Failure** | 25 mins (equiv.) | **T+00:00** Snowcat Heavy Tractor in transit &rarr; **T+04:00** Harmonic vibration rises to 4.8 mm/s &rarr; **T+07:00** AI Predictive Maintenance generates pre-failure advisory &rarr; **T+11:00** Tensioner bracket fractures at -48°C; asset halted &rarr; **T+14:00** AI route optimizer reroutes trailing vehicles &rarr; **T+17:00** Logistics reserves HNBR spare track belt from Depot B &rarr; **T+21:00** Field emergency repair completed &rarr; **Telemetry normalized**. |
+| **`SIM-SCEN-03`** | **Severe Katabatic Whiteout Blizzard** | 30 mins (equiv.) | **T+00:00** Nominal conditions at Maitri &rarr; **T+04:00** Katabatic winds escalate to 48 kt &rarr; **T+08:00** Wind chill hits -58°C, Visibility <500m &rarr; **T+12:00** COND-1 Blizzard Warning issued; sub-zero danger zone expands 45km &rarr; **T+16:00** Heating fuel burn rate escalates to 1,450L/day &rarr; **T+20:00** AI elevates emergency fuel buffer from 4,000L to 8,500L &rarr; **T+24:00** Automated resupply order issued to MV Vasiliy Golovnin &rarr; **Defensive station lockdown active**. |
+| **`SIM-SCEN-04`** | **SATCOM Blackout & Offline Mesh Sync** | 28 mins (equiv.) | **T+00:00** Full Iridium NEXT constellation lock &rarr; **T+04:00** Solar flare ionospheric disturbance degrades signal &rarr; **T+08:00** Complete SATCOM blackout; system automatically transitions to **Offline Cache** mode &rarr; **T+14:00** Field operators queue waypoints and dispatch notes into local cryptographic store &rarr; **T+26:00** Satellite constellation link restored &rarr; **Bi-directional event queue synchronizes with 100% forensic integrity**. |
+| **`SIM-SCEN-05`** | **Crevasse Fall & Zero-Click Mayday SAR** | 24 mins (equiv.) | **T+00:00** Research team conducting blue-ice coring &rarr; **T+04:00** Autonomous crevasse detection beacon triggers 406 MHz Mayday; audible emergency klaxon sounds across consoles &rarr; **T+05:00** AI SAR engine identifies Amundsen-Scott as nearest staging outpost &rarr; **T+06:00** SAR Drone Falcon-X launched on autonomous vector &rarr; **T+08:00** Tracked Sno-Cat extraction team deployed &rarr; **T+20:00** Survivors secured and hoisted &rarr; **Incident resolved with zero casualties**. |
+
+---
+
+### 💉 11-Trigger Manual Event Injection Deck
+During any simulation, trainers can test operator reflexes by injecting real-time tactical anomalies directly into the active event bus:
+1. 🌨️ **Katabatic Blizzard Warning**: Ambient temp drops -15°C, wind increases to 55 kt, whiteout danger zone expands.
+2. 🚛 **Track Tensioner Shear**: PBD-Alpha engine health drops to 44%, vibration spikes to 7.8 mm/s, asset halted.
+3. 📡 **SATCOM Blackout**: Simulates satellite blackout, dropping network into offline event caching.
+4. 🛰️ **GPS Vector Drift**: Degrades positional accuracy (+/- 2.4 km offset advisory).
+5. 🚨 **Crevasse Mayday**: Broadcasts critical 406.025 MHz distress beacon, triggering audio klaxons and SAR scramble.
+6. ⛽ **Fuel Line Freeze**: Traces diesel wax coagulation, dropping fuel level to 12% critical advisory.
+7. 🔧 **Engine Overheat**: Simulates fan belt failure under heavy towing load (98°C coolant temp).
+8. 🌡️ **Extreme Cold-Soak (-65°C)**: Triggers severe sub-zero thermal stress curve across all outdoor assets.
+9. 🧊 **New Crevasse Zone**: Generates dynamic hazardous crevasse cluster on map intersecting active traverse.
+10. 🔋 **Battery Thermal Depletion**: Simulates cabin heating load dropping LiFePO4 battery bank to 14%.
+11. 📍 **Convoy Vector Jump**: Steps convoy 25 km forward along the traverse corridor.
+
+---
+
+### 🗺️ Map Integration & Waypoint Coordinate Interpolation
+The simulation directly drives the **existing Leaflet GIS and Polar Stereographic radar maps**:
+* **Real-time Waypoint Interpolation**: Convoy PBD-Alpha moves continuously between predefined polar staging coordinates (`Maitri Depot Gate` &rarr; `Intermediate Staging Gate` &rarr; `Blue-Ice Ridge Bypass` &rarr; `Firn Dome Staging` &rarr; `East Sastrugi Approach` &rarr; `South Pole Inland Depot`).
+* **Hazard & Distress Overlays**: Crevasse fall coordinates (`-71.42°S, 12.22°E`) and dynamic danger zones render directly on top of the active Leaflet layers with pulsating tactical markers.
+
+---
+
+### 🤖 AI Autonomous Action Safety Classification
+Simulation mode categorizes all autonomous and assistive decisions according to 3 operational safety tiers:
+
+```
+[OBSERVE]    AI detects telemetry anomalies, models degradation curves, and issues informational advisories.
+[ASSIST]     AI calculates route bypasses or parts pre-orders; presents structured recommendations requiring operator confirmation.
+[AUTONOMOUS] AI executes pre-approved, zero-latency emergency mitigations automatically (e.g., SAR drone scramble, emergency heating trace activation).
+```
+
+Every AI decision streams in real-time into the existing **AI Action Logs** feed with color-coded safety level badges (`[OBSERVE]`, `[ASSIST]`, `[AUTONOMOUS]`).
+
+---
+
+### 📋 After-Action Report (AAR) & Deterministic Replay
+Upon scenario completion or manual termination, the system generates an operational **After-Action Report (AAR)**:
+* **Performance Grading**: Evaluates operator interventions, response times, and unresolved critical events (Grade: `A+` to `C-`).
+* **Forensic KPI Summary**: Total events executed, alerts triggered, AI decisions taken, SAR missions resolved, and communication outages weathered.
+* **JSON Export**: Export the complete cryptographic scenario log for institutional training audits.
+* **1-Click Replay**: Re-runs the exact scenario deterministically from `T+00:00`.
+
+---
+
+## 📍 Waypoint Tracing & Live Route Telemetry on Map
+
+The **Polar Expedition & Asset Management System** features an advanced, high-latitude **Waypoint Tracing & Geospatial Navigation Engine** integrated directly into the core `RealMapView.tsx`, `PolarMap.tsx`, and `SmartRouteOptimizer.tsx` components.
+
+Designed specifically for Antarctic and Arctic traverses where whiteouts and shifting blue-ice crevasse chasms make visual navigation impossible, the waypoint tracing system accurately connects, traces, colors, and tracks every planned and actual movement of polar convoys and scientific survey teams.
+
+```text
+               WP-04 [PENDING]
+                     ●
+                    ╱
+                   ╱  (Remaining Path: Dashed Sky Cyan)
+                  ╱
+          WP-03 ●  [ACTIVE TARGET] (Arrival Radius Geofence Ring)
+                ╱
+               ╱
+      CURRENT ●  TRK-Alpha Heavy Snowcat (-71.20°, 12.08°)
+             ╱
+            ╱  (Traveled Route: Solid Emerald with Glow)
+    WP-02  ●  [COMPLETED ✓]
+          ╱
+         ╱
+ WP-01  ●  [COMPLETED ✓] Base Camp Depot
+```
+
+---
+
+### 🌐 1. Geodesic Mathematics & High-Latitude Mercator Stability
+
+Operating near the geographic poles introduces mathematical challenges due to longitude convergence and Mercator projection singularities. The tracing engine implements rigorous geodesic utilities (`src/utils/waypointTracing.ts`):
+
+* **Haversine Great-Circle Distance**:
+  $$\Delta\sigma = 2 \arcsin \sqrt{\sin^2\left(\frac{\Delta\phi}{2}\right) + \cos\phi_1 \cos\phi_2 \sin^2\left(\frac{\Delta\lambda}{2}\right)}$$
+  $$d = R \cdot \Delta\sigma \quad (R = 6371.0 \text{ km})$$
+  Accurately calculates real-world ground distances between traverse waypoints even across extreme polar latitudes.
+* **Forward Azimuth / Bearing Calculation**:
+  $$\theta = \text{atan2}\left(\sin\Delta\lambda \cos\phi_2, \; \cos\phi_1 \sin\phi_2 - \sin\phi_1 \cos\phi_2 \cos\Delta\lambda\right)$$
+  Computes true geodesic bearings ($0^\circ$ to $360^\circ$) from convoy positions to the active waypoint target.
+* **EPSG:3857 Mathematical Boundary Clamping**:
+  High-latitude coordinates are safeguarded via `safeMercatorLatLng(lat, lng)`, strictly clamping latitude to $[-85.0^\circ, +85.0^\circ]$ and normalizing longitude within $[-180.0^\circ, +180.0^\circ]$. This guarantees Leaflet vector layers and projection formulas never encounter `NaN` or `Infinity`.
+
+---
+
+### 🎨 2. Dual-Layer Traveled vs. Remaining Route Polyline Tracing
+
+The route is dynamically partitioned in real time based on the active position of the tracked expedition crawler:
+
+1. **Traveled / Completed Route (`traveledPathCoords`)**:
+   - Spans from the departure station through all completed waypoints up to the convoy's current GPS position.
+   - Styled with a high-visibility solid **Emerald Green** (`#10B981`, weight 4.0, opacity 0.95) underlaid with a luminous neon glow (`#059669`, weight 7.0, opacity 0.35) for instant whiteout readability.
+2. **Remaining Planned Route (`remainingPathCoords`)**:
+   - Extends forward from the convoy's current position through the active target waypoint and subsequent pending waypoints to the final expedition destination.
+   - Styled with a high-contrast dashed **Sky Cyan** polyline (`#38BDF8`, weight 3.5, dashArray `8, 8`, opacity 0.85).
+3. **Continuous Polyline Coherence**:
+   - The route lines are not decorative; they connect true geographic coordinates and automatically re-render whenever waypoints are added, removed, edited, or reordered.
+
+---
+
+### 🛰️ 3. Actual GPS Track Breadcrumbs vs. Planned Route
+
+In extreme polar terrain, heavy crawlers frequently detour around active sastrugi drift ridges, crevasse fields, and pressure ridges. The map visually distinguishes between:
+
+* **Planned Route Corridor**: Theoretical path connecting planned navigation waypoints.
+* **Actual GPS Track History (`actualTrack`)**:
+  - Rendered as an **Amber Gold** dashed polyline (`#F59E0B`, weight 2.5, dashArray `3, 4`, opacity 0.85).
+  - Logs actual coordinates received from real GPS hardware, mobile phone Web Geolocation fixes, or the Mission Simulation engine.
+  - Toggleable via the top toolbar button: **`GPS TRACK: ON / OFF`**.
+
+---
+
+### 🎯 4. Automatic Waypoint Progress & Arrival Geofence
+
+The system continuously evaluates convoy progress relative to the waypoint sequence:
+
+* **Waypoint Status Lifecycle**:
+  ```text
+  Pending (Slate Outline) ──► Active / Current (Glowing Cyan Halo) ──► Completed (Emerald Check ✓)
+  ```
+* **Configurable Arrival Radius**:
+  - Configured via the toolbar selector: **`RADIUS: 1km | 3km | 5km | 10km`** (Default: `3.0 km`).
+  - When the convoy enters the arrival radius:
+    1. The active waypoint is marked `passed: true` and `status: 'completed'`.
+    2. The next waypoint in the sequence is automatically promoted to `status: 'current'`.
+    3. The state change is saved back to `db.expeditions`.
+* **Visual Arrival Geofence**:
+  - The current active waypoint displays a translucent cyan geofence circle with a dashed border representing the active detection boundary.
+
+---
+
+### 🎥 5. Auto-Center / Camera Follow Mode
+
+Operators managing live convoys across expansive polar maps can engage automated camera tracking:
+
+* **`FOLLOW ASSET: ON`**:
+  - Map camera smoothly animates (`mapInstance.panTo([lat, lng], { animate: true, duration: 0.8 })`) to center on the active expedition crawler whenever coordinates update.
+  - Active toggle button pulses with a glowing emerald green indicator.
+* **Operator Decoupling (`dragstart`)**:
+  - If the operator manually clicks and drags to inspect another base or sector, Follow Mode instantly switches to `OFF` automatically, ensuring the camera never fights the user's manual navigation.
+
+---
+
+### 🧭 6. Interactive Tactical Waypoint Inspector & Action Controls
+
+Clicking any waypoint node on the map reveals a rich tactical glassmorphism popup:
+
+* **Header**: Waypoint sequence badge (e.g. `WP-03: Supply Depot`) and status badge (`PENDING`, `CURRENT`, or `COMPLETED`).
+* **Telemetry Data Grid**:
+  - Exact coordinates: Lat / Lng (4 decimal precision)
+  - Elevation: AMSL (Above Mean Sea Level)
+  - Distance from convoy: Formatted in meters or kilometers (e.g. `12.4 km`)
+  - Sequential ETA: Estimated arrival time based on convoy ground speed (e.g. `2h 15m`)
+  - Sequence order: `3 / 6`
+  - Active arrival radius: `3 km`
+* **Hazard Advisories**: Crevasse warning banners, blue-ice alerts, and slope warnings.
+* **Direct Operator Actions**:
+  - **`🎯 Target This`**: Manually overrides the active waypoint target.
+  - **`✓ Mark Done / Pending`**: Toggles waypoint completion status.
+  - **`▲ Move Up` / `▼ Move Down`**: Reorders waypoint sequence with instantaneous route recalculation.
+  - **`🗑 Delete`**: Removes the waypoint from the expedition traverse.
+
+---
+
+### 🔄 7. Route Optimizer & Mission Simulation Integration
+
+The waypoint tracing engine is fully integrated with existing subsystems:
+
+1. **Smart Route Optimizer (`SmartRouteOptimizer.tsx`)**:
+   - When the AI discovers safer blue-ice corridors avoiding crevasses, clicking **`Push Route to Trucks`** dispatches the optimized safe waypoints directly to the active expedition in `db.expeditions`.
+   - The map immediately updates the waypoint pins, sequence, and traveled/remaining corridors.
+2. **Mission Simulation / Training Sandbox (`useSimulation.ts`)**:
+   - During simulation scenarios, Convoy PBD-Alpha moves along realistic Antarctic traverse waypoints.
+   - The simulation ticker pushes real-time breadcrumbs to `actualTrack`, updates current coordinates, auto-advances waypoints as the arrival radius is breached, and follows the simulated convoy when Follow Mode is enabled.
+
+---
+
+## 🤖 Gemini-Powered Waypoint Route Optimization
+
+The system integrates a **hybrid AI + deterministic polar pathfinding engine** that uses Gemini to analyze candidate waypoints and recommend an optimized safe routing sequence for expedition convoys.
+
+### Architecture Overview
+
+```
+Operator Request
+     │
+     ▼
+POST /api/ai/waypoints/optimize
+     │
+     ├─ 1. CACHE CHECK (aiOptimizer LRU, 10-min TTL, deterministic key)
+     │      └─ If cache HIT → return instantly (saves ~1,400 tokens)
+     │
+     ├─ 2. GEMINI AI ANALYSIS (gemini-3.8-flash)
+     │      ├─ Prompt: waypoint candidates, asset telemetry, weather, danger zones
+     │      └─ Structured JSON schema: recommendedOrder, reasoning, estimatedDistance, riskLevel
+     │
+     ├─ 3. ANTI-HALLUCINATION VALIDATION
+     │      ├─ Reject unknown waypoint IDs not in candidate set
+     │      ├─ Reject duplicates
+     │      ├─ Preserve mandatory waypoints (origin + destination)
+     │      ├─ Bind coordinates from system data (never invent coordinates)
+     │      └─ On failure → FALLBACK to deterministic optimizer
+     │
+     ├─ 4. DETERMINISTIC FALLBACK (polar heuristic)
+     │      ├─ Greedy nearest-neighbor + 2-opt improvement
+     │      ├─ Haversine geodesic distance computation
+     │      └─ Hazard penalty scoring for danger zones & crevasses
+     │
+     └─ 5. OPERATOR APPROVAL WORKFLOW
+            ├─ Route status: PROPOSED (not yet active)
+            ├─ Operator: Accept & Apply → writes to db.expeditions
+            ├─ Operator: Reject → preserves legacy path
+            └─ Operator: Recalculate → triggers new Gemini pass
+```
+
+### Key Features
+
+| Feature | Description |
+|:---|:---|
+| **Gemini Analysis** | `gemini-3.8-flash` analyzes waypoint candidates with weather hazards, crevasse fields, and polar danger zones |
+| **Anti-Hallucination** | Backend validates all returned IDs against input candidates; rejects invented coordinates |
+| **Mandatory Waypoints** | Start and end waypoints are always preserved — never reordered or removed |
+| **Deterministic Fallback** | Greedy nearest-neighbor + 2-opt tour with geodesic Haversine distance if AI fails |
+| **Operator Approval** | Route remains PROPOSED until operator explicitly accepts via Accept & Apply |
+| **Simulation Mode** | Full isolation: simulation routes write only to `simDb`, live data is never mutated |
+| **AI Action Logs** | All optimization requests, results, and approvals broadcast via `polar-ai-action-event` |
+| **Caching** | 10-minute LRU cache with request coalescing saves repeated analysis tokens |
+| **Map Overlay** | Proposed AI route renders as glowing violet dashed polyline (`#a855f7`) alongside current emerald route |
+
+### API Endpoint
+
+**`POST /api/ai/waypoints/optimize`**
+
+```json
+{
+  "waypoints": [
+    { "id": "WP-01", "name": "Base Depot", "lat": -70.76, "lng": 11.73, "isMandatory": true },
+    { "id": "WP-03", "name": "Ridge Bypass", "lat": -71.42, "lng": 12.22 },
+    { "id": "WP-06", "name": "Maitri Coastal Base", "lat": -72.05, "lng": 12.98, "isMandatory": true }
+  ],
+  "asset": { "id": "AST-0001", "name": "TRK-Alpha Heavy Snowcat", "lat": -70.76, "lng": 11.73 },
+  "environment": { "tempC": -42, "windSpeedKts": 38, "visibilityKm": 1.2 },
+  "constraints": { "mandatoryWaypointIds": ["WP-01", "WP-06"], "maxTravelDistanceKm": 600 }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "cached": false,
+  "result": {
+    "recommendedOrder": ["WP-01", "WP-03", "WP-06"],
+    "orderedWaypoints": [ ... ],
+    "reasoning": ["Avoids Crevasse C-104 ...", "Minimizes katabatic exposure ..."],
+    "estimatedDistance": 162.8,
+    "estimatedDuration": 407,
+    "riskLevel": "LOW",
+    "warnings": [],
+    "confidence": 0.94,
+    "engineUsed": "gemini-3.8-flash",
+    "validationDetails": { "allCandidateIdsValid": true, "mandatoryPreserved": true }
+  }
+}
+```
+
+### Components Involved
+
+| Component | Role |
+|:---|:---|
+| [`src/components/polaris/SmartRouteOptimizer.tsx`](src/components/polaris/SmartRouteOptimizer.tsx) | Primary Gemini optimize button, proposal scorecard, and operator approval controls |
+| [`src/components/RealMapView.tsx`](src/components/RealMapView.tsx) | Renders proposed violet polyline and AI sequence badges on the Leaflet map |
+| [`src/components/WaypointPlannerPage.tsx`](src/components/WaypointPlannerPage.tsx) | Waypoint planner with priority/mandatory flags and AI optimize modal |
+| [`src/utils/deterministicRouteOptimizer.ts`](src/utils/deterministicRouteOptimizer.ts) | Deterministic fallback: nearest-neighbor + 2-opt, Haversine geodesic math, hazard penalty |
+| [`src/types.ts`](src/types.ts) | `WaypointOptimizationRequest` and `WaypointOptimizationResult` TypeScript interfaces |
+| [`server.ts`](server.ts) | `POST /api/ai/waypoints/optimize` — backend AI gateway with validation and caching |
 
 ---
 

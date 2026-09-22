@@ -1,67 +1,291 @@
 import {
   LayoutGrid, Compass, Users, Boxes, Package, Ship, Truck, Wrench,
   ClipboardList, MapPin, Bell, Wallet, FileText, ScrollText, UserCog, Settings as SettingsIcon,
-  ShieldCheck, AlertOctagon, Sparkles, Activity, ShieldAlert
+  ShieldCheck, AlertOctagon, Sparkles, Activity, ShieldAlert, Navigation, Route, Cpu,
+  Flame, Terminal, QrCode, Radio, CloudSnow, Sun, Moon, Target
 } from 'lucide-react';
 import { PredictiveMaintenanceRecord } from '../types';
 
-/* ============================== DESIGN TOKENS ============================== */
-export const THEME = {
-  dark: {
-    bg: "#0A1826", bgAlt: "#0E2033", panel: "#122B44", panelAlt: "#0F2337",
-    border: "#1E3A54", text: "#DCEAF2", textDim: "#7C93A8", textFaint: "#546C82",
-    accent: "#2FB6C7", accentSoft: "#123B44", amber: "#E8A33D", amberSoft: "#3A2C12",
-    red: "#E15B5B", redSoft: "#3A1616", green: "#3FAE72", greenSoft: "#123522",
-    blue: "#4C8FE0", blueSoft: "#122A44", sidebar: "#081422", white: "#F4FAFD"
+/* ============================== TACTICAL DESIGN TOKENS ============================== */
+export const THEME: Record<string, any> = {
+  // 1. Cyan Polar (Tactical Command Center)
+  cyan: {
+    name: "Cyan Polar",
+    bg: "#060B18",
+    bgAlt: "rgba(0, 242, 254, 0.04)",
+    panel: "rgba(10, 17, 40, 0.78)",
+    panelAlt: "rgba(15, 23, 42, 0.92)",
+    border: "rgba(56, 189, 248, 0.22)",
+    borderLight: "rgba(56, 189, 248, 0.38)",
+    text: "#F8FAFC",
+    textDim: "#94A3B8",
+    textFaint: "#64748B",
+    accent: "#00F2FE",
+    accentSoft: "rgba(0, 242, 254, 0.16)",
+    cyan: "#00F2FE",
+    blue: "#38BDF8",
+    blueSoft: "rgba(56, 189, 248, 0.18)",
+    green: "#10B981",
+    greenSoft: "rgba(16, 185, 129, 0.18)",
+    amber: "#F59E0B",
+    amberSoft: "rgba(245, 158, 11, 0.18)",
+    red: "#EF4444",
+    redSoft: "rgba(239, 68, 68, 0.18)",
+    sidebar: "#060C1B",
+    white: "#FFFFFF",
+    cardBg: "rgba(10, 17, 40, 0.78)",
+    cardBorder: "rgba(56, 189, 248, 0.22)",
+    cardBlur: "blur(16px)",
+    cardShadow: "0 14px 40px rgba(0, 0, 0, 0.55)",
+    btnGradient: "linear-gradient(135deg, #0284C7, #00F2FE)",
+    btnShadow: "0 8px 20px rgba(0, 242, 254, 0.3)",
   },
+
+  // 2. Phosphor Green (Tactical P300 Terminal)
+  green: {
+    name: "Phosphor Green",
+    bg: "#040D08",
+    bgAlt: "rgba(34, 197, 94, 0.05)",
+    panel: "rgba(6, 20, 13, 0.82)",
+    panelAlt: "rgba(8, 28, 18, 0.92)",
+    border: "rgba(34, 197, 94, 0.24)",
+    borderLight: "rgba(34, 197, 94, 0.42)",
+    text: "#F0FDF4",
+    textDim: "#86EFAC",
+    textFaint: "#4ADE80",
+    accent: "#22C55E",
+    accentSoft: "rgba(34, 197, 94, 0.18)",
+    cyan: "#4ADE80",
+    blue: "#22C55E",
+    blueSoft: "rgba(34, 197, 94, 0.15)",
+    green: "#22C55E",
+    greenSoft: "rgba(34, 197, 94, 0.2)",
+    amber: "#EAB308",
+    amberSoft: "rgba(234, 179, 8, 0.18)",
+    red: "#F43F5E",
+    redSoft: "rgba(244, 63, 94, 0.18)",
+    sidebar: "#040D08",
+    white: "#F0FDF4",
+    cardBg: "rgba(6, 20, 13, 0.82)",
+    cardBorder: "rgba(34, 197, 94, 0.24)",
+    cardBlur: "blur(12px)",
+    cardShadow: "0 12px 40px rgba(0, 0, 0, 0.65)",
+    btnGradient: "linear-gradient(135deg, #15803D, #22C55E)",
+    btnShadow: "0 8px 20px rgba(34, 197, 94, 0.3)",
+  },
+
+  // 3. Amber CRT (High-Contrast Cathode Workstation)
+  amber: {
+    name: "Amber CRT",
+    bg: "#0D0804",
+    bgAlt: "rgba(245, 158, 11, 0.05)",
+    panel: "rgba(23, 15, 7, 0.85)",
+    panelAlt: "rgba(36, 23, 10, 0.94)",
+    border: "rgba(245, 158, 11, 0.26)",
+    borderLight: "rgba(245, 158, 11, 0.44)",
+    text: "#FFFBEB",
+    textDim: "#FDE68A",
+    textFaint: "#F59E0B",
+    accent: "#F59E0B",
+    accentSoft: "rgba(245, 158, 11, 0.18)",
+    cyan: "#FBBF24",
+    blue: "#F59E0B",
+    blueSoft: "rgba(245, 158, 11, 0.15)",
+    green: "#10B981",
+    greenSoft: "rgba(16, 185, 129, 0.18)",
+    amber: "#F59E0B",
+    amberSoft: "rgba(245, 158, 11, 0.2)",
+    red: "#EF4444",
+    redSoft: "rgba(239, 68, 68, 0.18)",
+    sidebar: "#0D0804",
+    white: "#FFFBEB",
+    cardBg: "rgba(23, 15, 7, 0.85)",
+    cardBorder: "rgba(245, 158, 11, 0.26)",
+    cardBlur: "blur(12px)",
+    cardShadow: "0 12px 40px rgba(0, 0, 0, 0.65)",
+    btnGradient: "linear-gradient(135deg, #B45309, #F59E0B)",
+    btnShadow: "0 8px 20px rgba(245, 158, 11, 0.3)",
+  },
+
+  // 4. Polar Daylight (High-Contrast White)
   light: {
-    bg: "#F1F6F9", bgAlt: "#E7EFF4", panel: "#FFFFFF", panelAlt: "#F6FAFC",
-    border: "#D6E2E9", text: "#0F2438", textDim: "#4C6478", textFaint: "#8098AA",
-    accent: "#127182", accentSoft: "#DFF1F4", amber: "#B8722A", amberSoft: "#FBEBD8",
-    red: "#C13F3F", redSoft: "#FBE4E4", green: "#278556", greenSoft: "#E1F5EA",
-    blue: "#2E63A6", blueSoft: "#E5EEF9", sidebar: "#0F2438", white: "#0F2438"
+    name: "Daylight Mode",
+    bg: "#F8FAFC",
+    bgAlt: "rgba(15, 23, 42, 0.04)",
+    panel: "#FFFFFF",
+    panelAlt: "#F1F5F9",
+    border: "rgba(15, 23, 42, 0.14)",
+    borderLight: "rgba(15, 23, 42, 0.22)",
+    text: "#0F172A",
+    textDim: "#475569",
+    textFaint: "#64748B",
+    accent: "#0284C7",
+    accentSoft: "rgba(2, 132, 199, 0.14)",
+    cyan: "#0284C7",
+    blue: "#2563EB",
+    blueSoft: "rgba(37, 99, 235, 0.12)",
+    green: "#059669",
+    greenSoft: "rgba(5, 150, 105, 0.14)",
+    amber: "#D97706",
+    amberSoft: "rgba(217, 119, 6, 0.14)",
+    red: "#DC2626",
+    redSoft: "rgba(220, 38, 38, 0.14)",
+    sidebar: "#0F172A",
+    white: "#0F172A",
+    cardBg: "#FFFFFF",
+    cardBorder: "rgba(15, 23, 42, 0.14)",
+    cardBlur: "none",
+    cardShadow: "0 10px 25px rgba(0, 0, 0, 0.06)",
+    btnGradient: "linear-gradient(135deg, #0284C7, #0369A1)",
+    btnShadow: "0 6px 15px rgba(2, 132, 199, 0.25)",
   }
 };
 
-export const FONT_HEAD = "'Space Grotesk', 'Segoe UI', sans-serif";
-export const FONT_BODY = "'Inter', 'Segoe UI', sans-serif";
+// Aliases for backward compatibility
+THEME.dark = THEME.cyan;
+
+export const FONT_HEAD = "'Space Grotesk', 'Inter', sans-serif";
+export const FONT_BODY = "'Inter', sans-serif";
 
 /* ============================== STATIONS & NAV ============================== */
 export const STATIONS = [
   { id: "MAITRI", name: "Maitri", region: "Antarctica", loc: "Schirmacher Oasis", x: 34, y: 62 },
   { id: "BHARATI", name: "Bharati", region: "Antarctica", loc: "Larsemann Hills", x: 58, y: 74 },
   { id: "HIMADRI", name: "Himadri", region: "Arctic", loc: "Ny-Alesund, Svalbard", x: 68, y: 28 },
+  { id: "MCMURDO", name: "McMurdo", region: "Antarctica", loc: "Ross Island", x: 42, y: 82 },
 ];
 
 export const ROLES = ["Super Admin", "Expedition Manager", "Logistics Officer", "Asset Manager", "Maintenance Officer", "Scientist / Team Member"];
 
 export const PERMISSIONS: Record<string, string[]> = {
-  "Super Admin": ["dashboard","expeditions","personnel","assets","inventory","shipments","transportation","maintenance","tasks","map","alerts","expenses","reports","audit","users","settings"],
-  "Expedition Manager": ["dashboard","expeditions","personnel","assets","inventory","shipments","transportation","maintenance","tasks","map","alerts","expenses","reports","settings"],
-  "Logistics Officer": ["dashboard","inventory","shipments","transportation","map","alerts","reports","settings"],
-  "Asset Manager": ["dashboard","assets","maintenance","map","alerts","reports","settings"],
-  "Maintenance Officer": ["dashboard","maintenance","assets","alerts","settings"],
-  "Scientist / Team Member": ["dashboard","tasks","assets","alerts","settings"],
+  "Super Admin": [
+    "dashboard", "simulation", "live-ops", "map",
+    "expeditions", "waypoints", "routes", "transportation",
+    "assets", "maintenance", "inventory", "shipments", "stations", "personnel",
+    "predictive-maintenance", "smart-route", "weather-inventory", "ai-action-logs", "ai-alerts", "ai-cleared-work",
+    "sar", "alerts", "emergency-events",
+    "reports", "expenses", "audit",
+    "device-pairing", "api-config", "post-diagnostics", "users", "settings"
+  ],
+  "Expedition Manager": [
+    "dashboard", "simulation", "live-ops", "map",
+    "expeditions", "waypoints", "routes", "transportation",
+    "assets", "maintenance", "inventory", "shipments", "stations", "personnel",
+    "predictive-maintenance", "smart-route", "weather-inventory", "ai-action-logs", "ai-alerts", "ai-cleared-work",
+    "sar", "alerts", "emergency-events",
+    "reports", "expenses", "settings"
+  ],
+  "Logistics Officer": [
+    "dashboard", "simulation", "live-ops", "map",
+    "expeditions", "transportation", "routes",
+    "inventory", "shipments", "stations",
+    "weather-inventory", "smart-route", "ai-action-logs",
+    "alerts", "reports", "expenses", "settings"
+  ],
+  "Asset Manager": [
+    "dashboard", "simulation", "live-ops", "map",
+    "assets", "maintenance", "predictive-maintenance",
+    "inventory", "stations", "ai-action-logs",
+    "alerts", "reports", "settings"
+  ],
+  "Maintenance Officer": [
+    "dashboard", "simulation", "live-ops", "assets", "maintenance", "predictive-maintenance", "alerts", "settings"
+  ],
+  "Scientist / Team Member": [
+    "dashboard", "simulation", "live-ops", "map", "expeditions", "waypoints", "tasks", "assets", "alerts", "settings"
+  ],
+  "Researcher": [
+    "dashboard", "simulation", "live-ops", "map", "expeditions", "waypoints", "tasks", "assets", "alerts", "settings"
+  ],
+  "Asset Management": [
+    "dashboard", "simulation", "live-ops", "map", "assets", "maintenance", "predictive-maintenance", "inventory", "stations", "alerts", "reports", "settings"
+  ],
+  "Transportation": [
+    "dashboard", "simulation", "live-ops", "map", "transportation", "routes", "inventory", "shipments", "weather-inventory", "smart-route", "alerts", "reports", "settings"
+  ],
 };
 
-export const NAV = [
-  { key: "dashboard", label: "Command Center", icon: LayoutGrid },
-  { key: "expeditions", label: "Expeditions", icon: Compass },
-  { key: "personnel", label: "Personnel", icon: Users },
-  { key: "assets", label: "Assets", icon: Boxes },
-  { key: "inventory", label: "Inventory", icon: Package },
-  { key: "shipments", label: "Shipments", icon: Ship },
-  { key: "transportation", label: "Transportation", icon: Truck },
-  { key: "maintenance", label: "Maintenance", icon: Wrench },
-  { key: "tasks", label: "Tasks", icon: ClipboardList },
-  { key: "map", label: "Live Ops Map", icon: MapPin },
-  { key: "alerts", label: "Alerts", icon: Bell },
-  { key: "expenses", label: "Expenses", icon: Wallet },
-  { key: "reports", label: "Reports", icon: FileText },
-  { key: "audit", label: "Audit Log", icon: ScrollText },
-  { key: "users", label: "Users", icon: UserCog },
-  { key: "settings", label: "Settings", icon: SettingsIcon },
+export interface NavItem {
+  key: string;
+  label: string;
+  icon: any;
+  badge?: string;
+}
+
+export interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+export const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "COMMAND",
+    items: [
+      { key: "dashboard", label: "Dashboard", icon: LayoutGrid },
+      { key: "simulation", label: "Training Sim", icon: Target, badge: "TRAIN" },
+      { key: "live-ops", label: "Live Operations", icon: Activity, badge: "-48°C" },
+      { key: "map", label: "Polar GIS Map", icon: MapPin },
+    ]
+  },
+  {
+    title: "EXPEDITION",
+    items: [
+      { key: "expeditions", label: "Expeditions", icon: Compass },
+      { key: "waypoints", label: "Waypoint Studio", icon: Navigation },
+      { key: "routes", label: "Smart Route AI", icon: Route, badge: "CV" },
+      { key: "transportation", label: "Transportation", icon: Truck },
+    ]
+  },
+  {
+    title: "ASSETS",
+    items: [
+      { key: "assets", label: "Fleet Telemetry", icon: Boxes },
+      { key: "maintenance", label: "Maintenance", icon: Wrench },
+      { key: "inventory", label: "Inventory", icon: Package },
+      { key: "shipments", label: "Logistics Ships", icon: Ship },
+      { key: "stations", label: "Research Stations", icon: ShieldCheck },
+      { key: "personnel", label: "Personnel", icon: Users },
+    ]
+  },
+  {
+    title: "AI OPERATIONS",
+    items: [
+      { key: "predictive-maintenance", label: "Predictive Maint", icon: Cpu, badge: "ML" },
+      { key: "weather-inventory", label: "Weather Fuel Model", icon: CloudSnow, badge: "AI" },
+      { key: "ai-action-logs", label: "AI Action Feed", icon: Terminal, badge: "LIVE" },
+      { key: "ai-alerts", label: "AI Resolved Alerts", icon: AlertOctagon },
+      { key: "ai-cleared-work", label: "AI Cleared Work", icon: ShieldCheck },
+    ]
+  },
+  {
+    title: "INCIDENTS",
+    items: [
+      { key: "sar", label: "Mayday & S.A.R.", icon: ShieldAlert, badge: "AUTO" },
+      { key: "alerts", label: "Alerts & Alarms", icon: Bell },
+      { key: "emergency-events", label: "Dispatch Logbook", icon: Radio },
+    ]
+  },
+  {
+    title: "ANALYTICS",
+    items: [
+      { key: "reports", label: "Mission Reports", icon: FileText },
+      { key: "expenses", label: "Financials", icon: Wallet },
+      { key: "audit", label: "System Audit Trail", icon: ScrollText },
+    ]
+  },
+  {
+    title: "SYSTEM",
+    items: [
+      { key: "device-pairing", label: "Device Pairing", icon: QrCode },
+      { key: "api-config", label: "API / AI Config", icon: Sparkles },
+      { key: "post-diagnostics", label: "POST Hardware Check", icon: Terminal },
+      { key: "users", label: "Operators & Users", icon: UserCog },
+      { key: "settings", label: "Tactical Settings", icon: SettingsIcon },
+    ]
+  },
 ];
+
+export const NAV = NAV_SECTIONS.flatMap(s => s.items);
 
 /* ============================== MOCK GENERATORS ============================== */
 const rnd = (seed: number) => { const x = Math.sin(seed * 999) * 10000; return x - Math.floor(x); };
@@ -454,9 +678,74 @@ export const INITIAL_TASKS = Array.from({ length: 20 }, (_, i) => {
 export const EXP_STATUSES = ["Planning","Approved","Preparation","In Transit","Active","Returning","Completed","Cancelled"];
 
 export const INITIAL_EXPEDITIONS = [
-  { id: "EXP-0001", name: "42nd Indian Antarctic Expedition", region: "Antarctica", destination: "Bharati Station", base: "Bharati", start: "2026-01-05", end: "2026-06-20", status: "Active", manager: "PER-0001", objectives: "Glaciological survey, atmospheric monitoring, and station resupply.", description: "Primary summer expedition supporting ongoing scientific research at Bharati Station." },
-  { id: "EXP-0002", name: "13th Indian Arctic Research Expedition", region: "Arctic", destination: "Himadri Station", base: "Himadri", start: "2026-04-01", end: "2026-09-15", status: "Preparation", manager: "PER-0002", objectives: "Fjord ecosystem study and glacier retreat monitoring near Ny-Alesund.", description: "Annual Arctic research mission focused on climate change indicators." },
-  { id: "EXP-0003", name: "43rd Indian Antarctic Expedition - Advance Party", region: "Antarctica", destination: "Maitri Station", base: "Maitri", start: "2026-09-10", end: "2027-02-28", status: "Planning", manager: "PER-0003", objectives: "Pre-positioning of supplies and station handover preparation.", description: "Advance logistics party ahead of the main 43rd expedition." },
+  {
+    id: "EXP-0001",
+    name: "42nd Indian Antarctic Expedition",
+    region: "Antarctica",
+    destination: "Bharati Station",
+    base: "Bharati",
+    start: "2026-01-05",
+    end: "2026-06-20",
+    status: "Active",
+    manager: "PER-0001",
+    objectives: "Glaciological survey, atmospheric monitoring, and station resupply.",
+    description: "Primary summer expedition supporting ongoing scientific research at Bharati Station.",
+    currentLat: -70.15,
+    currentLng: 77.20,
+    waypoints: [
+      { id: 'wp-exp1-1', name: 'Bharati Station Gate', lat: -69.41, lng: 76.19, elevationM: 35, passed: true, distanceFromPrevKm: 0 },
+      { id: 'wp-exp1-2', name: 'Fisher Island Sea-Ice Crossing', lat: -69.58, lng: 76.45, elevationM: 15, passed: true, distanceFromPrevKm: 24 },
+      { id: 'wp-exp1-3', name: 'Stornes Peninsula Staging', lat: -69.75, lng: 76.80, elevationM: 110, passed: true, distanceFromPrevKm: 28 },
+      { id: 'wp-exp1-4', name: 'Quilty Nunataks Blue-Ice Strip', lat: -70.15, lng: 77.20, elevationM: 480, passed: false, distanceFromPrevKm: 52, hazardNote: 'Sub-surface crevasses on eastern ridge' },
+      { id: 'wp-exp1-5', name: 'Polar Plateau Gateway', lat: -70.80, lng: 77.65, elevationM: 1450, passed: false, distanceFromPrevKm: 76, hazardNote: 'Katabatic wind shear pass' },
+      { id: 'wp-exp1-6', name: 'Deep Inland Traverse Depot', lat: -71.40, lng: 78.10, elevationM: 2350, passed: false, distanceFromPrevKm: 72 }
+    ]
+  },
+  {
+    id: "EXP-0002",
+    name: "13th Indian Arctic Research Expedition",
+    region: "Arctic",
+    destination: "Himadri Station",
+    base: "Himadri",
+    start: "2026-04-01",
+    end: "2026-09-15",
+    status: "Preparation",
+    manager: "PER-0002",
+    objectives: "Fjord ecosystem study and glacier retreat monitoring near Ny-Alesund.",
+    description: "Annual Arctic research mission focused on climate change indicators.",
+    currentLat: 79.12,
+    currentLng: 12.35,
+    waypoints: [
+      { id: 'wp-exp2-1', name: 'Ny-Alesund Station Gate', lat: 78.923, lng: 11.928, elevationM: 12, passed: true, distanceFromPrevKm: 0 },
+      { id: 'wp-exp2-2', name: 'Kongsfjorden Glacier Front', lat: 79.050, lng: 12.200, elevationM: 45, passed: true, distanceFromPrevKm: 18 },
+      { id: 'wp-exp2-3', name: 'Blomstrandhalvøya Island Pass', lat: 79.120, lng: 12.350, elevationM: 110, passed: false, distanceFromPrevKm: 12, hazardNote: 'Tidal ice fracture zone' },
+      { id: 'wp-exp2-4', name: 'Kronebreen Calving Terminus', lat: 79.180, lng: 12.550, elevationM: 280, passed: false, distanceFromPrevKm: 15 },
+      { id: 'wp-exp2-5', name: 'Holtedahlfonna Icefield Camp', lat: 79.250, lng: 12.800, elevationM: 650, passed: false, distanceFromPrevKm: 18 }
+    ]
+  },
+  {
+    id: "EXP-0003",
+    name: "43rd Indian Antarctic Expedition - Advance Party",
+    region: "Antarctica",
+    destination: "Maitri Station",
+    base: "Maitri",
+    start: "2026-09-10",
+    end: "2027-02-28",
+    status: "Planning",
+    manager: "PER-0003",
+    objectives: "Pre-positioning of supplies and station handover preparation.",
+    description: "Advance logistics party ahead of the main 43rd expedition.",
+    currentLat: -71.36,
+    currentLng: 12.15,
+    waypoints: [
+      { id: 'wp-exp3-1', name: 'Maitri Depot Gate', lat: -70.76, lng: 11.73, elevationM: 260, passed: true, distanceFromPrevKm: 0 },
+      { id: 'wp-exp3-2', name: 'Intermediate Staging Gate', lat: -71.08, lng: 12.02, elevationM: 740, passed: true, distanceFromPrevKm: 38 },
+      { id: 'wp-exp3-3', name: 'Blue-Ice Ridge Bypass', lat: -71.36, lng: 12.15, elevationM: 1200, passed: false, distanceFromPrevKm: 32, hazardNote: 'Active shear crevasse field' },
+      { id: 'wp-exp3-4', name: 'Firn Dome Staging', lat: -71.60, lng: 12.32, elevationM: 1820, passed: false, distanceFromPrevKm: 30 },
+      { id: 'wp-exp3-5', name: 'East Sastrugi Approach', lat: -71.78, lng: 12.58, elevationM: 2240, passed: false, distanceFromPrevKm: 25, hazardNote: 'Deep snow sastrugi drifts' },
+      { id: 'wp-exp3-6', name: 'South Pole Inland Depot', lat: -71.95, lng: 12.90, elevationM: 2680, passed: false, distanceFromPrevKm: 24 }
+    ]
+  },
   { id: "EXP-0004", name: "Southern Ocean Krill Survey", region: "Antarctica", destination: "Bharati Station", base: "Bharati", start: "2025-11-01", end: "2026-02-10", status: "Completed", manager: "PER-0004", objectives: "Krill population assessment for fisheries research.", description: "Completed marine biology survey mission in the Southern Ocean." },
   { id: "EXP-0005", name: "Arctic Glaciology Winter Study", region: "Arctic", destination: "Himadri Station", base: "Himadri", start: "2026-02-01", end: "2026-05-30", status: "In Transit", manager: "PER-0005", objectives: "Winter ice-core sampling and permafrost temperature logging.", description: "Specialized winter research team en route to Himadri Station." },
 ];
@@ -471,10 +760,48 @@ export const INITIAL_EXPENSES = INITIAL_EXPEDITIONS.map((e, i) => ({
   other: 80000 + i * 15000,
 }));
 
-export const INITIAL_USERS = ROLES.flatMap((role, ri) => [1, 2].map((n) => ({
-  id: `USR-${ri}${n}`, name: `${pick(FIRST, ri * 3 + n)} ${pick(LAST, ri * 5 + n)}`, role,
-  email: `user${ri}${n}@polar.gov.in`, active: true,
-})));
+export const INITIAL_USERS = [
+  {
+    id: "RSC-0142",
+    name: "Dr. Elena Rostova",
+    role: "Scientist / Team Member",
+    email: "elena.rostova@polar.gov.in",
+    password: "polar2026",
+    active: true,
+  },
+  {
+    id: "AST-0101",
+    name: "Vikram Nair",
+    role: "Asset Manager",
+    email: "vikram.nair@polar.gov.in",
+    password: "polar2026",
+    active: true,
+  },
+  {
+    id: "TRN-0301",
+    name: "Marcus Vance",
+    role: "Logistics Officer",
+    email: "marcus.vance@polar.gov.in",
+    password: "polar2026",
+    active: true,
+  },
+  {
+    id: "ADM-0001",
+    name: "Station Commander",
+    role: "Super Admin",
+    email: "admin@polar.gov.in",
+    password: "polar2026",
+    active: true,
+  },
+  ...ROLES.flatMap((role, ri) => [1, 2].map((n) => ({
+    id: `USR-${ri}${n}`,
+    name: `${pick(FIRST, ri * 3 + n)} ${pick(LAST, ri * 5 + n)}`,
+    role,
+    email: `user${ri}${n}@polar.gov.in`,
+    password: "polar2026",
+    active: true,
+  }))),
+];
 
 export const INITIAL_AUDIT_LOG = Array.from({ length: 25 }, (_, i) => {
   const seed = i + 1;

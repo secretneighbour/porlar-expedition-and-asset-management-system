@@ -38,8 +38,8 @@ export function ExpeditionForm({ t, onSave, onClose, initial }: { t: any; onSave
         <div className="col-span-2"><Field label="Description" t={t}><textarea value={f.description} onChange={set("description")} style={inputStyle(t)} className={inputClass} rows={2} /></Field></div>
       </div>
       <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onClose} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-        <button onClick={() => onSave(f)} disabled={!f.name} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Save Expedition</button>
+        <button onClick={onClose} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+        <button onClick={() => onSave(f)} disabled={!f.name} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50">Save Expedition</button>
       </div>
     </Modal>
   );

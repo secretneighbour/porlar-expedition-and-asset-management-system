@@ -435,12 +435,12 @@ export function DynamicWeatherInventory({
             <button
               onClick={handleRequestSupplyShip}
               disabled={requestingShip}
-              style={{ background: t.accent, color: '#04222A' }}
-              className="px-4 py-2 rounded-lg text-xs font-bold cursor-pointer hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md shadow-sky-950 font-sans"
+              style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: '#FFFFFF', boxShadow: '0 8px 20px rgba(124, 58, 237, 0.35)' }}
+              className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer hover:opacity-95 transition-all flex items-center gap-1.5 font-sans"
             >
               {requestingShip ? (
                 <>
-                  <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                   <span>Transmitting Early Request...</span>
                 </>
               ) : (

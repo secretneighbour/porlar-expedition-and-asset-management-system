@@ -112,21 +112,40 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
   };
 
   return (
-    <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+    <div
+      style={{
+        background: 'rgba(255, 255, 255, 0.06)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.14)',
+        borderRadius: '20px',
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.35)',
+      }}
+      className="p-5"
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Sparkles size={16} color={t.accent} className="animate-pulse" />
-          <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Polar AI Tactical Assistant</span>
-          <span style={{ color: t.textFaint, background: t.bgAlt }} className="text-[10px] px-2 py-0.5 rounded border border-slate-700/50">
+          <Sparkles size={16} className="text-[#C4B5FD] animate-pulse" />
+          <span style={{ color: '#F5F3FF', fontFamily: FONT_HEAD }} className="text-sm font-bold">
+            Polar AI Tactical Assistant
+          </span>
+          <span
+            style={{
+              color: '#C4B5FD',
+              background: 'rgba(124, 58, 237, 0.25)',
+              border: '1px solid rgba(196, 181, 253, 0.3)',
+            }}
+            className="text-[10px] font-mono px-2.5 py-0.5 rounded-full"
+          >
             {geminiApiKey ? 'GEMINI 3.8 FLASH OPTIMIZED' : 'HYBRID AI LAYER'}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+        <div className="flex items-center gap-1.5 text-[10px] text-[#5EEAB0] font-mono font-semibold">
           <Zap size={12} className="animate-pulse" />
           <span>85% Key Quota Saved</span>
         </div>
       </div>
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2.5 mb-3">
         <input 
           value={q} 
           onChange={e => setQ(e.target.value)} 
@@ -138,12 +157,16 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
         <button 
           onClick={() => run(q)} 
           disabled={loading || !q.trim()}
-          style={{ background: t.accent, color: "#04222A" }} 
-          className="px-4 rounded-lg text-sm font-bold shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+          style={{
+            background: 'linear-gradient(135deg, #7C3AED, #60A5FA)',
+            boxShadow: '0 10px 25px rgba(124, 58, 237, 0.38)',
+            color: '#fff',
+          }} 
+          className="px-5 rounded-xl text-sm font-bold shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-2 hover:opacity-95 transition-opacity"
         >
           {loading ? (
             <>
-              <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
               <span>Evaluating...</span>
             </>
           ) : (
@@ -152,18 +175,30 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
         </button>
       </div>
       {answer && (
-        <div style={{ background: t.bgAlt, border: `1px solid ${t.border}` }} className="rounded-lg p-3.5 animate-in fade-in">
+        <div
+          style={{
+            background: 'rgba(21, 11, 46, 0.65)',
+            border: '1px solid rgba(196, 181, 253, 0.22)',
+            borderRadius: '16px',
+          }}
+          className="p-4 animate-in fade-in"
+        >
           <div className="flex items-start justify-between gap-2 mb-2">
-            <p style={{ color: t.text, fontFamily: FONT_BODY }} className="text-sm font-medium">{answer.text}</p>
+            <p style={{ color: '#F5F3FF', fontFamily: FONT_BODY }} className="text-sm font-semibold">{answer.text}</p>
             {answer.meta && (
-              <span className="shrink-0 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/80 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+              <span className="shrink-0 text-[10px] font-mono px-2.5 py-1 rounded-lg bg-black/40 border border-[#5EEAB0]/40 text-[#5EEAB0] flex items-center gap-1 font-semibold">
                 <Zap size={10} />
                 <span>{answer.meta.cached ? `Cached (${answer.meta.latencyMs}ms)` : `Live (${answer.meta.latencyMs}ms)`}</span>
               </span>
             )}
           </div>
           <ul className="space-y-1.5">
-            {answer.list.map((l, i) => <li key={i} style={{ color: t.textDim }} className="text-xs flex items-start gap-1.5"><span className="text-sky-400">&bull;</span><span>{l}</span></li>)}
+            {answer.list.map((l, i) => (
+              <li key={i} style={{ color: '#C9C1E8' }} className="text-xs flex items-start gap-2">
+                <span className="text-[#A78BFA] font-bold">&bull;</span>
+                <span>{l}</span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -202,7 +237,7 @@ export function DashboardView({
   const conditionDist = ["Excellent","Good","Fair","Poor"].map(c => ({ name: c, value: db.assets.filter((a: any) => a.condition === c).length }));
   const monthlyExpenditure = ["Apr","May","Jun","Jul","Aug","Sep"].map((m, i) => ({ month: m, cost: 900000 + i * 130000 + (i % 2) * 60000 }));
   const consumption = db.inventory.slice(0, 7).map((i: any) => ({ name: i.name.split(" ").slice(0, 2).join(" "), qty: i.quantity, min: i.minStock }));
-  const PIE_COLORS = [t.accent, t.blue, t.amber, t.green, t.red, t.textFaint];
+  const PIE_COLORS = ['#7C3AED', '#60A5FA', '#C4B5FD', '#5EEAB0', '#FBBF24', '#F43F5E'];
 
   // Quick maintain handler right from Dashboard
   const handleQuickMaintainToday = async () => {
@@ -270,24 +305,26 @@ export function DashboardView({
       <div
         style={{
           background: maintainedToday
-            ? `linear-gradient(135deg, ${t.panel} 0%, rgba(16, 185, 129, 0.08) 100%)`
-            : `linear-gradient(135deg, ${t.panel} 0%, rgba(239, 68, 68, 0.08) 100%)`,
-          border: maintainedToday ? `1px solid ${t.green}` : `1px solid ${t.red}`,
-          boxShadow: maintainedToday ? '0 4px 20px rgba(16, 185, 129, 0.1)' : '0 4px 20px rgba(239, 68, 68, 0.12)'
+            ? `linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(16, 185, 129, 0.16) 100%)`
+            : `linear-gradient(135deg, rgba(30, 18, 64, 0.78) 0%, rgba(239, 68, 68, 0.14) 100%)`,
+          border: maintainedToday ? `1px solid rgba(16, 185, 129, 0.5)` : `1px solid rgba(239, 68, 68, 0.45)`,
+          boxShadow: maintainedToday ? '0 10px 30px rgba(16, 185, 129, 0.16)' : '0 10px 30px rgba(124, 58, 237, 0.25)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)'
         }}
-        className="mt-4 rounded-xl p-4.5 transition-all duration-300 relative overflow-hidden"
+        className="mt-4 rounded-2xl p-5 transition-all duration-300 relative overflow-hidden"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-2 max-w-3xl">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-red-500/15 text-red-400 border border-red-500/30 flex items-center gap-1">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-red-500/15 text-red-300 border border-red-500/30 flex items-center gap-1.5">
                 <Cpu size={12} />
                 <span>AI Predictive Maintenance Alert</span>
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
                 HIGHEST SCORING FEATURE
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/20">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-mono text-cyan-300 bg-cyan-500/15 border border-cyan-500/25">
                 -50°C Cold-Soak Stress
               </span>
             </div>
@@ -321,7 +358,7 @@ export function DashboardView({
           {/* Quick Actions */}
           <div className="flex flex-row lg:flex-col items-center lg:items-stretch gap-2 shrink-0">
             {maintainedToday ? (
-              <div className="px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5">
+              <div className="px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 shadow-lg">
                 <CheckCircle2 size={16} />
                 <span>Preventive Service Done Today!</span>
               </div>
@@ -329,12 +366,12 @@ export function DashboardView({
               <button
                 onClick={handleQuickMaintainToday}
                 disabled={executing}
-                style={{ background: t.green, color: '#04222A' }}
-                className="px-4 py-2.5 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 font-sans"
+                style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#FFFFFF', boxShadow: '0 8px 22px rgba(16, 185, 129, 0.35)' }}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 transition-all flex items-center justify-center gap-1.5 font-sans"
               >
                 {executing ? (
                   <>
-                    <span className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     <span>Servicing...</span>
                   </>
                 ) : (
@@ -349,10 +386,10 @@ export function DashboardView({
             {setActive && (
               <button
                 onClick={() => setActive('maintenance')}
-                style={{ background: t.panelAlt, border: `1px solid ${t.border}`, color: t.text }}
-                className="px-3.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:border-sky-400/50 transition-colors flex items-center justify-center gap-1.5"
+                style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(196, 181, 253, 0.22)', color: t.text }}
+                className="px-3.5 py-2 rounded-xl text-xs font-medium cursor-pointer hover:border-purple-300/50 hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
               >
-                <Cpu size={13} className="text-sky-400" />
+                <Cpu size={13} className="text-purple-300" />
                 <span>Open Predictive Studio</span>
                 <ArrowRight size={12} />
               </button>
@@ -388,57 +425,62 @@ export function DashboardView({
         />
       </div>
 
-      <div className="grid gap-4 mt-5" style={{ gridTemplateColumns: "1.3fr 1fr" }}>
-        <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+      <div className="grid gap-4 mt-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))" }}>
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
           <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Monthly Logistics Expenditure</h3>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={monthlyExpenditure}>
-              <defs><linearGradient id="cost" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={t.accent} stopOpacity={0.5} /><stop offset="95%" stopColor={t.accent} stopOpacity={0} /></linearGradient></defs>
+              <defs>
+                <linearGradient id="cost" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.6} />
+                  <stop offset="95%" stopColor="#60A5FA" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={t.border} vertical={false} />
               <XAxis dataKey="month" tick={{ fill: t.textFaint, fontSize: 12 }} axisLine={{ stroke: t.border }} tickLine={false} />
               <YAxis tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${v/100000}L`} />
-              <Tooltip contentStyle={{ background: t.panel, border: `1px solid ${t.border}`, borderRadius: 8, fontSize: 12 }} formatter={(v: any) => currency(Number(v))} />
-              <Area type="monotone" dataKey="cost" stroke={t.accent} fill="url(#cost)" strokeWidth={2} />
+              <Tooltip contentStyle={{ background: 'rgba(30, 18, 64, 0.92)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF', backdropFilter: 'blur(12px)' }} formatter={(v: any) => currency(Number(v))} />
+              <Area type="monotone" dataKey="cost" stroke="#A78BFA" fill="url(#cost)" strokeWidth={2.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
           <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Expedition Status Distribution</h3>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={statusDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={3}>
-                {statusDist.map((d, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+              <Pie data={statusDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={4}>
+                {statusDist.map((d, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(255,255,255,0.1)" />)}
               </Pie>
-              <Tooltip contentStyle={{ background: t.panel, border: `1px solid ${t.border}`, borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: 'rgba(30, 18, 64, 0.92)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF', backdropFilter: 'blur(12px)' }} />
               <Legend wrapperStyle={{ fontSize: 11, color: t.textDim }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+      <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
           <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Asset Condition Distribution</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={conditionDist}>
               <CartesianGrid strokeDasharray="3 3" stroke={t.border} vertical={false} />
               <XAxis dataKey="name" tick={{ fill: t.textFaint, fontSize: 12 }} axisLine={{ stroke: t.border }} tickLine={false} />
               <YAxis tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: t.panel, border: `1px solid ${t.border}`, borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="value" fill={t.blue} radius={[6,6,0,0]} />
+              <Tooltip contentStyle={{ background: 'rgba(30, 18, 64, 0.92)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF' }} />
+              <Bar dataKey="value" fill="#60A5FA" radius={[6,6,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
           <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Inventory Consumption vs Minimum</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={consumption} layout="vertical" margin={{ left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={t.border} horizontal={false} />
               <XAxis type="number" tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={110} tick={{ fill: t.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: t.panel, border: `1px solid ${t.border}`, borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="qty" fill={t.accent} radius={[0,6,6,0]} name="Current Qty" />
-              <Bar dataKey="min" fill={t.textFaint} radius={[0,6,6,0]} name="Min Stock" opacity={0.5} />
+              <Tooltip contentStyle={{ background: 'rgba(30, 18, 64, 0.92)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF' }} />
+              <Bar dataKey="qty" fill="#7C3AED" radius={[0,6,6,0]} name="Current Qty" />
+              <Bar dataKey="min" fill="#A78BFA" radius={[0,6,6,0]} name="Min Stock" opacity={0.4} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -455,17 +497,17 @@ export function DashboardView({
             const stExp = db.expeditions.filter((e: any) => e.base === s.name && (e.status === "Active" || e.status === "In Transit"));
             const stPersonnel = db.personnel.filter((p: any) => p.location === s.name).length;
             return (
-              <div key={s.id} style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4">
+              <div key={s.id} style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 transition-transform hover:-translate-y-0.5 shadow-lg">
                 <div className="flex items-center justify-between mb-2">
                   <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="font-semibold text-sm">{s.name} Station</span>
-                  <span style={{ color: t.accent, background: t.accentSoft }} className="text-[10px] px-2 py-0.5 rounded-full">{s.region}</span>
+                  <span style={{ color: '#C4B5FD', background: 'rgba(124, 58, 237, 0.25)', border: '1px solid rgba(196, 181, 253, 0.2)' }} className="text-[10px] px-2 py-0.5 rounded-full font-medium">{s.region}</span>
                 </div>
                 <p style={{ color: t.textFaint }} className="text-xs mb-3">{s.loc}</p>
                 <div className="flex justify-between text-xs">
-                  <span style={{ color: t.textDim }}>Personnel on-site</span><span style={{ color: t.text }}>{stPersonnel}</span>
+                  <span style={{ color: t.textDim }}>Personnel on-site</span><span style={{ color: t.text, fontFamily: FONT_HEAD, fontWeight: 600 }}>{stPersonnel}</span>
                 </div>
                 <div className="flex justify-between text-xs mt-1">
-                  <span style={{ color: t.textDim }}>Active missions</span><span style={{ color: t.text }}>{stExp.length}</span>
+                  <span style={{ color: t.textDim }}>Active missions</span><span style={{ color: t.text, fontFamily: FONT_HEAD, fontWeight: 600 }}>{stExp.length}</span>
                 </div>
               </div>
             );

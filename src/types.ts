@@ -51,6 +51,16 @@ export interface ExpeditionCrewMember {
   medicalClearance: 'Class-1 Unrestricted' | 'Class-2 Cold-Adaptive' | 'Restricted';
 }
 
+export type WaypointStatus = 'completed' | 'current' | 'pending';
+
+export interface GpsTrackPoint {
+  lat: number;
+  lng: number;
+  timestamp?: string;
+  elevationM?: number;
+  speedKmh?: number;
+}
+
 export interface Waypoint {
   id: string;
   name: string;
@@ -58,8 +68,91 @@ export interface Waypoint {
   lng: number;
   elevationM: number;
   passed: boolean;
-  distanceFromPrevKm: number;
+  status?: WaypointStatus;
+  sequence?: number;
+  distanceFromPrevKm?: number;
+  distanceFromCurrentKm?: number;
+  eta?: string;
+  arrivalRadiusKm?: number;
   hazardNote?: string;
+  priority?: 'mandatory' | 'high' | 'normal' | 'low';
+  isMandatory?: boolean;
+  destinationType?: 'depot' | 'staging_gate' | 'scientific_site' | 'hazard_bypass' | 'refuge' | 'skiway' | 'waypoint';
+  requiredArrivalTime?: string;
+  importance?: number; // 1 (lowest) to 10 (highest)
+}
+
+export interface WaypointOptimizationRequest {
+  waypoints: Waypoint[];
+  asset?: {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    speedKmh?: number;
+    headingDeg?: number;
+    vehicleType?: string;
+    fuelPercent?: number;
+    condition?: string;
+  };
+  environment?: {
+    tempC?: number;
+    apparentTempC?: number;
+    windSpeedKts?: number;
+    visibilityKm?: number;
+    weatherDescription?: string;
+    weatherHazards?: any[];
+    dangerZones?: {
+      id: string;
+      name: string;
+      lat: number;
+      lng: number;
+      radiusKm: number;
+      severityLevel: string;
+    }[];
+    crevasses?: {
+      id: string;
+      name: string;
+      lat: number;
+      lng: number;
+      dangerLevel?: string;
+    }[];
+  };
+  constraints?: {
+    fuelLimitsKm?: number;
+    maxTravelDistanceKm?: number;
+    mandatoryWaypointIds?: string[];
+    waypointPriorities?: Record<string, string>;
+    emergencyRestrictions?: string[];
+  };
+  isSimulation?: boolean;
+}
+
+export interface WaypointOptimizationResult {
+  recommendedOrder: string[]; // Ordered candidate waypoint IDs
+  orderedWaypoints: Waypoint[]; // Fully resolved Waypoint objects with updated sequence
+  reasoning: string[];
+  estimatedDistanceKm: number;
+  estimatedDurationHours: number;
+  estimatedDistance?: number; // Alias (in km)
+  estimatedDuration?: number; // Alias (in minutes)
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  warnings: string[];
+  confidence: number;
+  mode: 'gemini_ai_live' | 'gemini_ai_cached' | 'cv_heuristic_fallback';
+  engineUsed?: string; // e.g. 'gemini-3.8-flash' or 'deterministic-fallback'
+  cached: boolean;
+  tokensSaved?: number;
+  latencyMs?: number;
+  timestamp: string;
+  isSimulation?: boolean;
+  validationDetails: {
+    allCandidateIdsValid: boolean;
+    mandatoryPreserved: boolean;
+    hazardAvoidanceCount: number;
+    fallbackUsed: boolean;
+    failureReason?: string;
+  };
 }
 
 export interface Expedition {
@@ -79,6 +172,7 @@ export interface Expedition {
   currentLat: number;
   currentLng: number;
   waypoints: Waypoint[];
+  actualTrack?: GpsTrackPoint[];
   fuelBurnPerDayL: number;
   rationsDaysRemaining: number;
   currentWeather: {
@@ -192,6 +286,28 @@ export interface PolarisDb {
   users: any[];
   auditLog: any[];
   completedWorkLogs?: CompletedWorkLogEntry[];
+}
+
+export interface PolarUser {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  password?: string;
+  active: boolean;
+}
+
+export interface AuthLoginResponse {
+  ok: boolean;
+  token?: string;
+  user?: {
+    id: string;
+    name: string;
+    role: string;
+    email: string;
+  };
+  dashboardRoute?: string;
+  error?: string;
 }
 
 export interface PolarSystemState {
@@ -443,4 +559,81 @@ export interface CompletedWorkLogEntry {
   avertedImpactOrSavings?: string;
   status: 'Archived & Verified';
 }
+
+/* ============================== MISSION SIMULATION TYPES ============================== */
+export type SimulationSafetyLevel = 'OBSERVE' | 'ASSIST' | 'AUTONOMOUS';
+
+export interface SimulationTimelineEvent {
+  id: string;
+  second: number; // T+ seconds from start
+  timeFormatted?: string; // e.g. "T+08:00"
+  title: string;
+  description: string;
+  category: 'weather' | 'mechanical' | 'sar' | 'comms' | 'logistics' | 'route' | 'hazard';
+  severity: 'info' | 'advisory' | 'warning' | 'critical' | 'emergency';
+  safetyLevel: SimulationSafetyLevel;
+  targetAssetId?: string;
+  targetStationId?: string;
+  coordinates?: { lat: number; lng: number };
+  executed?: boolean;
+  executedAt?: string;
+  isManual?: boolean;
+  impactSummary?: string;
+}
+
+export interface SimulationScenario {
+  id: string;
+  scenarioNumber: number;
+  name: string;
+  code: string;
+  sector: string;
+  difficulty: 'STANDARD' | 'ELEVATED' | 'SEVERE' | 'BLACKOUT';
+  estimatedDurationSeconds: number; // e.g. 2400 (40 mins scenario time)
+  description: string;
+  primaryObjectives: string[];
+  expectedFailureModes: string[];
+  events: SimulationTimelineEvent[];
+  initialStateOverrides?: {
+    tempC?: number;
+    windKnots?: number;
+    condition?: ConditionLevel;
+    assetHealth?: Record<string, number>;
+  };
+}
+
+export interface SimulationPlaybackState {
+  isRunning: boolean;
+  isPaused: boolean;
+  speed: 1 | 2 | 5 | 10 | 25;
+  elapsedSeconds: number;
+  scenarioTimeFormatted: string;
+  currentPhase: string;
+  activeScenario: SimulationScenario | null;
+}
+
+export interface SimulationReport {
+  scenarioId: string;
+  scenarioName: string;
+  durationFormatted: string;
+  speed: number;
+  completedAt: string;
+  status: 'COMPLETED' | 'TERMINATED_EARLY';
+  totalEventsTriggered: number;
+  manualInjectionsCount: number;
+  alertsGenerated: number;
+  autoResolvedAlerts: number;
+  aiActionsByLevel: {
+    observe: number;
+    assist: number;
+    autonomous: number;
+  };
+  sarSortiesDispatched: number;
+  routeRecalculations: number;
+  downtimeSavedHours: number;
+  costSavedUsd: number;
+  interventionsCount: number;
+  performanceGrade: 'S - OPTIMAL' | 'A - PROFICIENT' | 'B - ACCEPTABLE' | 'C - COMPROMISED';
+  timelineLog: SimulationTimelineEvent[];
+}
+
 

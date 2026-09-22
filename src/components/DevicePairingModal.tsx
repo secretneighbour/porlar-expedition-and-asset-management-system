@@ -76,18 +76,27 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 font-mono text-xs">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150 font-mono text-xs">
+      <div 
+        style={{
+          background: 'rgba(21, 11, 46, 0.94)',
+          border: '1px solid rgba(196, 181, 253, 0.22)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6), 0 0 35px rgba(124, 58, 237, 0.25)'
+        }}
+        className="rounded-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         
         {/* Header */}
-        <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 bg-white/[0.03] border-b border-purple-300/15 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-sky-950 border border-sky-600 text-sky-400">
+            <div className="p-2 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-300">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">
+                <span className="text-[10px] uppercase font-bold text-purple-300 tracking-wider">
                   REAL-TIME MULTI-DEVICE SYNC
                 </span>
                 <span className="px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 text-[9px] font-bold">
@@ -113,17 +122,17 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-slate-300">
           
           {/* Instructions Box */}
-          <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-1.5 text-[11px]">
+          <div className="p-3 bg-purple-950/20 rounded-xl border border-purple-300/15 space-y-1.5 text-[11px]">
             <p className="text-slate-200">
               <strong>Scan the QR code</strong> below with your mobile phone camera, or copy the link to open this console on your phone over mobile data / Wi-Fi.
             </p>
-            <p className="text-slate-400">
+            <p className="text-purple-200/70">
               Once connected, your phone acts as a remote field beacon: any distress signal broadcast from your phone immediately rings the audio alarm and updates the map on this laptop console in real time!
             </p>
           </div>
 
           {/* QR Code & Direct Link Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-white/[0.02] p-4 rounded-xl border border-purple-300/15">
             
             {/* QR Code */}
             <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl shadow-inner mx-auto">
@@ -149,7 +158,7 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
                 <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
                   DIRECT CONSOLE URL:
                 </label>
-                <div className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-[11px] text-sky-300 break-all select-all font-mono">
+                <div className="p-2 bg-black/40 border border-purple-300/20 rounded-xl text-[11px] text-purple-300 break-all select-all font-mono">
                   {currentUrl}
                 </div>
               </div>
@@ -157,7 +166,7 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="w-full py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs uppercase flex items-center justify-center gap-2 transition-colors shadow"
+                className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400 text-white font-bold text-xs uppercase flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-950/50 cursor-pointer"
               >
                 {copied ? (
                   <>

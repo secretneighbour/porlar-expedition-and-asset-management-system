@@ -20,10 +20,30 @@ import {
   Flame,
   ThermometerSnowflake,
   ShieldAlert,
-  Building2
+  Building2,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  ArrowRight,
+  ShieldCheck,
+  X
 } from 'lucide-react';
-import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, ActiveDistressAlert, RealtimeWeatherReading, Waypoint } from '../types';
+import {
+  PolarRegion,
+  PolarAsset,
+  Expedition,
+  ResearchStation,
+  HazardZone,
+  ActiveDistressAlert,
+  RealtimeWeatherReading,
+  Waypoint,
+  WaypointOptimizationResult,
+  WaypointOptimizationRequest,
+} from '../types';
 import { getSubZeroDangerZones, SubZeroDangerZone } from '../utils/dangerZones';
+import { evaluateWaypointProgress, formatDistanceKm, DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM } from '../utils/waypointTracing';
+import { emitAiActionBroadcast } from '../data/polarisData';
 
 interface RealMapViewProps {
   region: PolarRegion;
@@ -63,6 +83,10 @@ interface RealMapViewProps {
   onUpdateWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
   showDangerHeatmap?: boolean;
   onToggleDangerHeatmap?: () => void;
+  isSimulation?: boolean;
+  proposedRoute?: WaypointOptimizationResult | null;
+  onApplyProposedRoute?: (result: WaypointOptimizationResult, expeditionId?: string) => void;
+  onClearProposedRoute?: () => void;
 }
 
 /**
@@ -115,6 +139,10 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   onUpdateWaypoint,
   showDangerHeatmap: showDangerHeatmapProp,
   onToggleDangerHeatmap,
+  isSimulation = false,
+  proposedRoute: proposedRouteProp,
+  onApplyProposedRoute,
+  onClearProposedRoute,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
@@ -126,6 +154,18 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   const [mapType, setMapType] = useState<'satellite' | 'dark' | 'terrain' | 'osm' | 'google_hybrid'>('satellite');
   const [localHeatmapActive, setLocalHeatmapActive] = useState<boolean>(true);
   const [dangerFilter, setDangerFilter] = useState<'all' | 'extreme' | 'lethal'>('all');
+  const [followMode, setFollowMode] = useState<boolean>(false);
+  const [showGpsTrack, setShowGpsTrack] = useState<boolean>(true);
+  const [arrivalRadiusKm, setArrivalRadiusKm] = useState<number>(DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM);
+  const [showWaypointLabels, setShowWaypointLabels] = useState<boolean>(true);
+
+  // Gemini AI Waypoint Route Optimization States
+  const [localProposedRoute, setLocalProposedRoute] = useState<WaypointOptimizationResult | null>(null);
+  const [optimizingRoute, setOptimizingRoute] = useState<boolean>(false);
+  const [optimizerError, setOptimizerError] = useState<string | null>(null);
+  const [showProposedPanel, setShowProposedPanel] = useState<boolean>(true);
+
+  const activeProposedRoute = proposedRouteProp !== undefined ? proposedRouteProp : localProposedRoute;
 
   const isHeatmapActive = showDangerHeatmapProp !== undefined ? showDangerHeatmapProp : localHeatmapActive;
 
@@ -177,6 +217,11 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     heatmapLayerGroupRef.current = L.layerGroup().addTo(map);
     layerGroupRef.current = L.layerGroup().addTo(map);
     userGpsMarkerRef.current = L.layerGroup().addTo(map);
+
+    // Auto-disable follow mode when operator manually pans/drags the map
+    map.on('dragstart', () => {
+      setFollowMode(false);
+    });
 
     // Map Click Listener to Set Waypoint / Establish Base
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -384,6 +429,21 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     }
   }, [focusCoords, mapInstance]);
 
+  // 5.5. Auto-Center / Follow Mode Camera Tracking Effect
+  useEffect(() => {
+    if (!followMode || !mapInstance) return;
+
+    // Find active expedition or primary asset
+    const activeExp = expeditions.find(e => e.phase === 'in_progress' || e.phase === 'active' || e.status === 'active') || expeditions[0];
+    if (activeExp && typeof activeExp.currentLat === 'number' && typeof activeExp.currentLng === 'number') {
+      const [safeLat, safeLng] = safeMercatorLatLng(activeExp.currentLat, activeExp.currentLng);
+      mapInstance.panTo([safeLat, safeLng], {
+        animate: true,
+        duration: 0.8,
+      });
+    }
+  }, [followMode, expeditions, mapInstance]);
+
   // 6. Draw All Polar Entities (Stations, Expeditions, Assets, Hazards, Distress Beacon)
   useEffect(() => {
     if (!mapInstance) return;
@@ -490,58 +550,328 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       layerGroup.addLayer(marker);
     });
 
-    // 2. Active Expeditions and Waypoint Tracks
+    // 2. Active Expeditions and Waypoint Tracks with Traveled/Remaining Tracing
     expeditions.forEach((exp) => {
-      const latlngs: [number, number][] = exp.waypoints.map((wp) => safeMercatorLatLng(wp.lat, wp.lng));
-      if (latlngs.length > 1) {
-        const routeLine = L.polyline(latlngs, {
-          color: exp.phase === 'emergency_extraction' ? '#f43f5e' : '#38bdf8',
-          weight: 3.5,
-          dashArray: '6, 6',
-          opacity: 0.85,
-        });
-        layerGroup.addLayer(routeLine);
+      // Evaluate live waypoint progress, sequential ETAs, and split paths
+      const progress = evaluateWaypointProgress(
+        exp.currentLat,
+        exp.currentLng,
+        exp.waypoints || [],
+        arrivalRadiusKm
+      );
+
+      // Auto-trigger waypoint arrival callback if newly reached
+      if (progress.newlyReachedWaypoint && onUpdateWaypoint) {
+        onUpdateWaypoint(progress.newlyReachedWaypoint, exp.id);
       }
 
-      // Render Waypoints along the convoy track
-      exp.waypoints.forEach((wp, wpIdx) => {
+      // 2a. Actual Traveled Track History (GPS Breadcrumbs from telemetry/simulation)
+      if (showGpsTrack && exp.actualTrack && exp.actualTrack.length > 1) {
+        const actualLatLngs: [number, number][] = exp.actualTrack.map((pt) => safeMercatorLatLng(pt.lat, pt.lng));
+        const actualTrackLine = L.polyline(actualLatLngs, {
+          color: '#f59e0b',
+          weight: 2.5,
+          dashArray: '3, 4',
+          opacity: 0.85,
+        });
+        actualTrackLine.bindTooltip(`Actual GPS Breadcrumbs: ${exp.name} (${exp.actualTrack.length} fixes)`, {
+          sticky: true,
+        });
+        layerGroup.addLayer(actualTrackLine);
+      }
+
+      // 2b. Traveled / Completed Route Polyline (Solid Emerald / Cyan with glow)
+      if (progress.traveledPathCoords.length > 1) {
+        const safeTraveled: [number, number][] = progress.traveledPathCoords.map(([lat, lng]) => safeMercatorLatLng(lat, lng));
+        // Glow underlayer
+        const glowLine = L.polyline(safeTraveled, {
+          color: '#059669',
+          weight: 7,
+          opacity: 0.35,
+          lineCap: 'round',
+        });
+        layerGroup.addLayer(glowLine);
+
+        // Core solid line
+        const traveledLine = L.polyline(safeTraveled, {
+          color: '#10b981',
+          weight: 4,
+          opacity: 0.95,
+          lineCap: 'round',
+        });
+        traveledLine.bindTooltip(`Traveled Route: ${exp.name}`, { sticky: true });
+        layerGroup.addLayer(traveledLine);
+      }
+
+      // 2c. Remaining Planned Route Polyline (Dashed Sky / Amber)
+      if (progress.remainingPathCoords.length > 1) {
+        const safeRemaining: [number, number][] = progress.remainingPathCoords.map(([lat, lng]) => safeMercatorLatLng(lat, lng));
+        const remainingLine = L.polyline(safeRemaining, {
+          color: exp.phase === 'emergency_extraction' ? '#f43f5e' : '#38bdf8',
+          weight: 3.5,
+          dashArray: '8, 8',
+          opacity: 0.85,
+        });
+        remainingLine.bindTooltip(`Remaining Path: ${exp.name}`, { sticky: true });
+        layerGroup.addLayer(remainingLine);
+      }
+
+      // 2d. Gemini AI Proposed Route Polyline (Glowing Violet Dashed with comparative badge markers)
+      if (
+        activeProposedRoute &&
+        activeProposedRoute.orderedWaypoints &&
+        activeProposedRoute.orderedWaypoints.length > 1
+      ) {
+        const proposedLatLngs: [number, number][] = activeProposedRoute.orderedWaypoints.map((wp) =>
+          safeMercatorLatLng(wp.lat, wp.lng)
+        );
+
+        // Violet outer glow
+        const proposedGlow = L.polyline(proposedLatLngs, {
+          color: '#a855f7',
+          weight: 8,
+          opacity: 0.4,
+          lineCap: 'round',
+        });
+        layerGroup.addLayer(proposedGlow);
+
+        // Violet core dashed line
+        const proposedLine = L.polyline(proposedLatLngs, {
+          color: '#c084fc',
+          weight: 4.5,
+          dashArray: '6, 6',
+          opacity: 0.95,
+          lineCap: 'round',
+        });
+        proposedLine.bindTooltip(
+          `<b>🤖 PROPOSED AI ROUTE: ${activeProposedRoute.estimatedDistanceKm} km</b><br/>Risk: ${activeProposedRoute.riskLevel} (${activeProposedRoute.mode === 'gemini_ai_live' ? 'Gemini 3.8 Flash' : activeProposedRoute.mode === 'gemini_ai_cached' ? 'AI Cached' : 'Deterministic Heuristic'})<br/><i>Click "Accept & Apply" in panel to make active</i>`,
+          { sticky: true }
+        );
+        layerGroup.addLayer(proposedLine);
+      }
+
+      // Render Numbered Waypoints along the convoy track
+      progress.enrichedWaypoints.forEach((wp, wpIdx) => {
         const [wpLat, wpLng] = safeMercatorLatLng(wp.lat, wp.lng);
-        const wpCircle = L.circleMarker([wpLat, wpLng], {
-          radius: wp.passed ? 4 : 6,
-          color: wp.passed ? '#10b981' : wp.hazardNote ? '#f59e0b' : '#38bdf8',
-          fillColor: wp.passed ? '#059669' : '#0284c7',
-          fillOpacity: 0.85,
-          weight: 2,
+        const isCurrent = wp.status === 'current';
+        const isCompleted = wp.status === 'completed';
+        const seq = wp.sequence ?? (wpIdx + 1);
+        const proposedIdx = activeProposedRoute ? activeProposedRoute.recommendedOrder.indexOf(wp.id) : -1;
+
+        // Active waypoint arrival radius geofence ring
+        if (isCurrent) {
+          const arrivalRing = L.circle([wpLat, wpLng], {
+            radius: (wp.arrivalRadiusKm || arrivalRadiusKm) * 1000,
+            color: '#38bdf8',
+            fillColor: '#0284c7',
+            fillOpacity: 0.08,
+            weight: 1.5,
+            dashArray: '4, 4',
+          });
+          arrivalRing.bindTooltip(`Arrival Radius: ${wp.arrivalRadiusKm || arrivalRadiusKm} km`, { sticky: true });
+          layerGroup.addLayer(arrivalRing);
+        }
+
+        const bgColor = isCompleted ? '#10b981' : isCurrent ? '#0284c7' : '#0f172a';
+        const borderColor = isCompleted ? '#059669' : isCurrent ? '#38bdf8' : wp.hazardNote ? '#f59e0b' : '#64748b';
+
+        const wpPinHtml = `
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+            ${isCurrent ? `
+              <div style="
+                position: absolute;
+                width: 32px;
+                height: 32px;
+                top: -3px;
+                left: 24px;
+                border-radius: 50%;
+                background: rgba(56, 189, 248, 0.3);
+                border: 1.5px solid #38bdf8;
+                box-shadow: 0 0 14px rgba(56, 189, 248, 0.9);
+              "></div>
+            ` : ''}
+
+            <div style="
+              position: relative;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              width: 26px;
+              height: 26px;
+              background: ${bgColor};
+              border: 2px solid ${borderColor};
+              border-radius: 50%;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+              color: #ffffff;
+              font-family: monospace;
+              font-weight: 900;
+              font-size: ${isCompleted ? '13px' : '11px'};
+              z-index: 10;
+            ">
+              ${isCompleted ? '✓' : seq}
+
+              ${proposedIdx !== -1 ? `
+                <div style="
+                  position: absolute;
+                  top: -8px;
+                  right: -10px;
+                  background: #7c3aed;
+                  border: 1.5px solid #e9d5ff;
+                  border-radius: 999px;
+                  padding: 1px 4px;
+                  font-size: 8px;
+                  font-weight: 900;
+                  color: #ffffff;
+                  white-space: nowrap;
+                  box-shadow: 0 0 8px rgba(124, 58, 237, 0.9);
+                  z-index: 25;
+                ">
+                  AI#${proposedIdx + 1}
+                </div>
+              ` : ''}
+            </div>
+
+            ${showWaypointLabels ? `
+              <div style="
+                margin-top: 2px;
+                background: rgba(15, 23, 42, 0.94);
+                border: 1px solid ${isCurrent ? '#38bdf8' : 'rgba(148, 163, 184, 0.3)'};
+                border-radius: 4px;
+                padding: 1px 5px;
+                white-space: nowrap;
+                font-family: monospace;
+                font-size: 9.5px;
+                font-weight: 700;
+                color: ${isCurrent ? '#38bdf8' : isCompleted ? '#4ade80' : '#cbd5e1'};
+                box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+                pointer-events: none;
+              ">
+                ${wp.name || `WP-${seq}`}
+              </div>
+            ` : ''}
+          </div>
+        `;
+
+        const wpIcon = L.divIcon({
+          html: wpPinHtml,
+          className: `custom-tactical-waypoint-marker wp-seq-${seq}`,
+          iconSize: [80, 52],
+          iconAnchor: [40, 13],
         });
 
-        wpCircle.bindPopup(`
-          <div style="font-family: sans-serif; min-width: 190px; color: #0f172a; padding: 2px;">
-            <div style="font-weight: bold; font-size: 12px; color: #0369a1; margin-bottom: 2px;">WP-${wpIdx + 1}: ${wp.name}</div>
-            <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Convoy: ${exp.name} (${exp.code})</div>
-            <div style="font-size: 11px;"><strong>GPS:</strong> ${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}°</div>
-            <div style="font-size: 11px;"><strong>Elevation:</strong> ${wp.elevationM}m</div>
-            <div style="font-size: 11px; margin-bottom: 3px;"><strong>Status:</strong> ${wp.passed ? '✅ CLEARED' : '⏳ PENDING'}</div>
-            ${wp.hazardNote ? `<div style="font-size: 10px; background: #fef3c7; color: #92400e; padding: 3px 5px; border-radius: 4px; margin-bottom: 6px;">⚠️ ${wp.hazardNote}</div>` : ''}
-            <div style="display: flex; gap: 4px; margin-top: 6px;">
-              <button id="toggle-wp-${wp.id}" style="flex: 1; background: ${wp.passed ? '#f59e0b' : '#10b981'}; color: #ffffff; border: none; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
-                ${wp.passed ? 'Mark Pending' : 'Mark Cleared'}
-              </button>
-              <button id="delete-wp-${wp.id}" style="background: #e11d48; color: #ffffff; border: none; padding: 5px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
-                🗑 Delete
-              </button>
+        const wpMarker = L.marker([wpLat, wpLng], { icon: wpIcon });
+
+        wpMarker.bindPopup(`
+          <div style="font-family: ui-monospace, monospace; min-width: 260px; color: #0f172a; padding: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+              <div>
+                <div style="font-weight: 900; font-size: 13px; color: #0284c7;">
+                  WP-${String(seq).padStart(2, '0')}: ${wp.name}
+                </div>
+                <div style="font-size: 10px; color: #64748b;">
+                  CONVOY: ${exp.name} (${exp.code})
+                </div>
+              </div>
+              <span style="
+                font-size: 9px;
+                font-weight: 800;
+                padding: 2px 6px;
+                border-radius: 4px;
+                background: ${isCompleted ? '#dcfce7' : isCurrent ? '#e0f2fe' : '#f1f5f9'};
+                color: ${isCompleted ? '#15803d' : isCurrent ? '#0369a1' : '#475569'};
+                border: 1px solid ${isCompleted ? '#86efac' : isCurrent ? '#7dd3fc' : '#cbd5e1'};
+              ">
+                ${(wp.status || 'pending').toUpperCase()}
+              </span>
+            </div>
+
+            <div style="background: #0f172a; color: #f8fafc; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 11px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                <div>Coords: <strong style="color: #38bdf8;">${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}°</strong></div>
+                <div>Elevation: <strong style="color: #7dd3fc;">${wp.elevationM || 0}m</strong></div>
+                <div>Distance: <strong style="color: #fbbf24;">${wp.distanceFromCurrentKm !== undefined ? formatDistanceKm(wp.distanceFromCurrentKm) : 'N/A'}</strong></div>
+                <div>ETA: <strong style="color: #4ade80;">${wp.eta || 'Calculating...'}</strong></div>
+              </div>
+              <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #334155; font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between;">
+                <span>Sequence: <strong>${seq} / ${progress.enrichedWaypoints.length}</strong></span>
+                <span>Arrival Radius: <strong>${wp.arrivalRadiusKm || arrivalRadiusKm} km</strong></span>
+              </div>
+            </div>
+
+            ${wp.hazardNote ? `
+              <div style="font-size: 10px; background: #fef3c7; color: #92400e; padding: 4px 6px; border-radius: 4px; margin-bottom: 6px; border: 1px solid #fde68a;">
+                ⚠️ <strong>HAZARD NOTE:</strong> ${wp.hazardNote}
+              </div>
+            ` : ''}
+
+            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+              <div style="display: flex; gap: 4px;">
+                <button id="toggle-active-wp-${wp.id}" style="flex: 1; background: ${isCurrent ? '#64748b' : '#0284c7'}; color: #ffffff; border: none; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
+                  ${isCurrent ? '● Active Target' : '🎯 Target This'}
+                </button>
+                <button id="toggle-complete-wp-${wp.id}" style="flex: 1; background: ${isCompleted ? '#d97706' : '#059669'}; color: #ffffff; border: none; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
+                  ${isCompleted ? 'Mark Pending' : '✓ Mark Done'}
+                </button>
+              </div>
+              <div style="display: flex; gap: 4px;">
+                <button id="move-up-wp-${wp.id}" style="flex: 1; background: #334155; color: #ffffff; border: none; padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                  ▲ Move Up
+                </button>
+                <button id="move-down-wp-${wp.id}" style="flex: 1; background: #334155; color: #ffffff; border: none; padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                  ▼ Move Down
+                </button>
+                <button id="delete-wp-${wp.id}" style="background: #e11d48; color: #ffffff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                  🗑 Delete
+                </button>
+              </div>
             </div>
           </div>
         `);
 
-        wpCircle.on('popupopen', () => {
-          const toggleBtn = document.getElementById(`toggle-wp-${wp.id}`);
+        wpMarker.on('popupopen', () => {
+          const activeBtn = document.getElementById(`toggle-active-wp-${wp.id}`);
+          const completeBtn = document.getElementById(`toggle-complete-wp-${wp.id}`);
+          const upBtn = document.getElementById(`move-up-wp-${wp.id}`);
+          const downBtn = document.getElementById(`move-down-wp-${wp.id}`);
           const deleteBtn = document.getElementById(`delete-wp-${wp.id}`);
-          if (toggleBtn && onUpdateWaypoint) {
-            toggleBtn.onclick = () => {
-              onUpdateWaypoint({ ...wp, passed: !wp.passed }, exp.id);
+
+          if (activeBtn && onUpdateWaypoint) {
+            activeBtn.onclick = () => {
+              onUpdateWaypoint({ ...wp, status: 'current', passed: false }, exp.id);
               mapInstance?.closePopup();
             };
           }
+
+          if (completeBtn && onUpdateWaypoint) {
+            completeBtn.onclick = () => {
+              const nextStatus = isCompleted ? 'pending' : 'completed';
+              onUpdateWaypoint({ ...wp, status: nextStatus, passed: !isCompleted }, exp.id);
+              mapInstance?.closePopup();
+            };
+          }
+
+          if (upBtn && onUpdateWaypoint && wpIdx > 0) {
+            upBtn.onclick = () => {
+              const prevWp = progress.enrichedWaypoints[wpIdx - 1];
+              const curSeq = wp.sequence ?? (wpIdx + 1);
+              const prevSeq = prevWp.sequence ?? wpIdx;
+              onUpdateWaypoint({ ...wp, sequence: prevSeq }, exp.id);
+              onUpdateWaypoint({ ...prevWp, sequence: curSeq }, exp.id);
+              mapInstance?.closePopup();
+            };
+          }
+
+          if (downBtn && onUpdateWaypoint && wpIdx < progress.enrichedWaypoints.length - 1) {
+            downBtn.onclick = () => {
+              const nextWp = progress.enrichedWaypoints[wpIdx + 1];
+              const curSeq = wp.sequence ?? (wpIdx + 1);
+              const nextSeq = nextWp.sequence ?? (wpIdx + 2);
+              onUpdateWaypoint({ ...wp, sequence: nextSeq }, exp.id);
+              onUpdateWaypoint({ ...nextWp, sequence: curSeq }, exp.id);
+              mapInstance?.closePopup();
+            };
+          }
+
           if (deleteBtn && onDeleteWaypoint) {
             deleteBtn.onclick = () => {
               onDeleteWaypoint(wp.id, exp.id);
@@ -549,7 +879,8 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             };
           }
         });
-        layerGroup.addLayer(wpCircle);
+
+        layerGroup.addLayer(wpMarker);
       });
 
       const [headLat, headLng] = safeMercatorLatLng(exp.currentLat, exp.currentLng);
@@ -812,7 +1143,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         layerGroup.addLayer(cwpMarker);
       });
     }
-  }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition]);
+  }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition, showGpsTrack, arrivalRadiusKm, showWaypointLabels, onUpdateWaypoint, onDeleteWaypoint, activeProposedRoute]);
 
   // 6.5. Draw Sub-Zero Danger Zones Heatmap Overlay
   useEffect(() => {
@@ -1142,6 +1473,140 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     }
   };
 
+  // Helper for current active expedition route distance
+  const currentExpedition = expeditions[0];
+  const currentExpeditionDistanceKm = useMemo(() => {
+    if (!currentExpedition || !currentExpedition.waypoints || currentExpedition.waypoints.length < 2) return 0;
+    let sum = 0;
+    for (let i = 1; i < currentExpedition.waypoints.length; i++) {
+      const c = currentExpedition.waypoints[i];
+      sum += c.distanceFromPrevKm || 0;
+    }
+    return Math.round(sum * 10) / 10;
+  }, [currentExpedition]);
+
+  // Run Gemini AI Waypoint Route Optimization
+  const handleRunGeminiRouteOptimization = async () => {
+    if (!currentExpedition || !currentExpedition.waypoints || currentExpedition.waypoints.length < 2) {
+      setOptimizerError('At least 2 waypoints are required on active expedition for route optimization.');
+      return;
+    }
+
+    setOptimizingRoute(true);
+    setOptimizerError(null);
+
+    const activeAsset = assets.find((a) => (currentExpedition.assignedAssetIds || []).includes(a.id)) || assets[0];
+
+    const payload: WaypointOptimizationRequest = {
+      waypoints: currentExpedition.waypoints,
+      asset: activeAsset
+        ? {
+            id: activeAsset.id,
+            name: activeAsset.name,
+            lat: activeAsset.currentLocation.lat,
+            lng: activeAsset.currentLocation.lng,
+            speedKmh: activeAsset.telemetry?.speedKmh || 24.5,
+            headingDeg: activeAsset.telemetry?.headingDeg || 0,
+            vehicleType: activeAsset.type,
+            fuelPercent: activeAsset.fuelLevelPercent,
+            condition: activeAsset.condition,
+          }
+        : undefined,
+      environment: {
+        tempC: userLocationWeather?.tempC ?? (stationWeather && (Object.values(stationWeather)[0] as RealtimeWeatherReading | undefined)?.tempC) ?? -32,
+        apparentTempC: userLocationWeather?.apparentTempC ?? -45,
+        windSpeedKts: userLocationWeather?.windSpeedKts ?? 20,
+        visibilityKm: userLocationWeather?.visibilityKm ?? 10,
+        weatherDescription: userLocationWeather?.weatherDescription || 'Polar sub-zero traverse conditions',
+        dangerZones: dangerZones.map((dz) => ({
+          id: dz.id,
+          name: dz.name,
+          lat: dz.lat,
+          lng: dz.lng,
+          radiusKm: dz.radiusKm,
+          severityLevel: dz.severityLevel,
+        })),
+        crevasses: [
+          { id: 'CRV-01', name: 'Shear Crevasse C-104', lat: currentExpedition.currentLat - 0.15, lng: currentExpedition.currentLng + 0.12, dangerLevel: 'Critical' },
+          { id: 'CRV-02', name: 'Stress Fracture F-88', lat: currentExpedition.currentLat - 0.35, lng: currentExpedition.currentLng + 0.28, dangerLevel: 'Severe' },
+        ],
+      },
+      constraints: {
+        mandatoryWaypointIds: currentExpedition.waypoints.filter((w) => w.isMandatory || w.priority === 'mandatory').map((w) => w.id),
+        fuelLimitsKm: 450,
+      },
+      isSimulation,
+    };
+
+    try {
+      emitAiActionBroadcast({
+        category: 'logistics',
+        message: `${isSimulation ? '[SIMULATION] ' : ''}Analyzing ${currentExpedition.waypoints.length} waypoints via Gemini 3.8 Flash AI...`,
+        stationOrAsset: currentExpedition.name,
+        impact: 'Hazard circumnavigation & sequence optimization',
+      });
+
+      const res = await fetch('/api/ai/waypoints/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.status === 'ok' && data.plan) {
+        setLocalProposedRoute(data.plan);
+        setShowProposedPanel(true);
+        emitAiActionBroadcast({
+          category: 'logistics',
+          message: `${isSimulation ? '[SIMULATION] ' : ''}Gemini route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
+          stationOrAsset: currentExpedition.name,
+          impact: `Pending operator approval. Mode: ${data.plan.mode}.`,
+        });
+      } else {
+        setOptimizerError(data.message || 'Optimization request failed.');
+      }
+    } catch (err: any) {
+      setOptimizerError(err.message || 'Network error during route optimization.');
+    } finally {
+      setOptimizingRoute(false);
+    }
+  };
+
+  // Operator Approves & Applies Route
+  const handleAcceptProposedRoute = () => {
+    if (!activeProposedRoute) return;
+    const targetExpId = currentExpedition?.id;
+
+    if (onApplyProposedRoute) {
+      onApplyProposedRoute(activeProposedRoute, targetExpId);
+    } else if (onUpdateWaypoint && currentExpedition) {
+      activeProposedRoute.orderedWaypoints.forEach((wp) => {
+        onUpdateWaypoint(wp, targetExpId);
+      });
+    }
+
+    emitAiActionBroadcast({
+      category: 'logistics',
+      message: `${isSimulation ? '[SIMULATION] ' : ''}OPERATOR APPROVED AI ROUTE: Waypoint sequence updated to ${activeProposedRoute.recommendedOrder.join(' → ')}.`,
+      stationOrAsset: currentExpedition?.name || 'Convoy Traverse',
+      impact: `Active path set to ${activeProposedRoute.estimatedDistanceKm} km (${activeProposedRoute.riskLevel} risk).`,
+    });
+
+    setLocalProposedRoute(null);
+    if (onClearProposedRoute) onClearProposedRoute();
+  };
+
+  // Operator Rejects Proposed Route
+  const handleRejectProposedRoute = () => {
+    emitAiActionBroadcast({
+      category: 'logistics',
+      message: `${isSimulation ? '[SIMULATION] ' : ''}Operator REJECTED proposed AI route. Retained original waypoint sequence.`,
+      stationOrAsset: currentExpedition?.name || 'Convoy Traverse',
+      impact: 'Legacy path retained.',
+    });
+    setLocalProposedRoute(null);
+    if (onClearProposedRoute) onClearProposedRoute();
+  };
+
   return (
     <div className="relative w-full flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
       {/* Top Map Toolbar */}
@@ -1262,6 +1727,120 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
                 LETHAL (&lt; -45°C)
               </button>
             </div>
+          )}
+        </div>
+
+        {/* Waypoint Tracing & Tracking Navigation Controls */}
+        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-mono">
+          {/* Follow Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => setFollowMode(!followMode)}
+            className={`px-2.5 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+              followMode
+                ? 'bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)] border border-emerald-400'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+            title="Auto-Center and Track Active Expedition Asset (Disables on manual pan)"
+          >
+            <LocateFixed className={`w-3.5 h-3.5 ${followMode ? 'animate-spin text-emerald-200' : ''}`} />
+            <span>FOLLOW ASSET: {followMode ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* GPS Track Breadcrumbs Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowGpsTrack(!showGpsTrack)}
+            className={`px-2 py-1 rounded font-bold font-mono text-[10px] flex items-center gap-1 transition-colors ${
+              showGpsTrack
+                ? 'bg-amber-600/90 text-white border border-amber-500'
+                : 'bg-slate-900 text-slate-500 border border-slate-800 hover:text-slate-300'
+            }`}
+            title="Toggle Traveled GPS Breadcrumb History Track"
+          >
+            <Navigation className="w-3 h-3" />
+            <span>GPS TRACK: {showGpsTrack ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Arrival Radius Selector */}
+          <div className="flex items-center gap-1 border-l border-slate-800 pl-1.5 text-[10px]">
+            <span className="text-slate-500 uppercase tracking-wider">RADIUS:</span>
+            {[1, 3, 5, 10].map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setArrivalRadiusKm(r)}
+                className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
+                  arrivalRadiusKm === r
+                    ? 'bg-sky-600 text-white'
+                    : 'text-slate-400 hover:text-white bg-slate-900'
+                }`}
+                title={`Set arrival detection radius to ${r}km`}
+              >
+                {r}km
+              </button>
+            ))}
+          </div>
+
+          {/* Waypoint Label Tags Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowWaypointLabels(!showWaypointLabels)}
+            className={`px-2 py-0.5 rounded font-bold font-mono text-[10px] border border-slate-800 transition-colors ${
+              showWaypointLabels
+                ? 'bg-sky-950 text-sky-300 border-sky-700'
+                : 'bg-slate-900 text-slate-500'
+            }`}
+            title="Toggle Waypoint Labels on Map"
+          >
+            LABELS: {showWaypointLabels ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        {/* Gemini AI Route Optimizer Button & Status */}
+        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-purple-800/80 text-xs font-mono shadow-md">
+          <button
+            type="button"
+            onClick={handleRunGeminiRouteOptimization}
+            disabled={optimizingRoute}
+            className={`px-3 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+              optimizingRoute
+                ? 'bg-purple-900/70 text-purple-200 animate-pulse border border-purple-500'
+                : activeProposedRoute
+                ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-[0_0_14px_rgba(168,85,247,0.6)] border border-purple-400'
+                : 'bg-purple-950/90 text-purple-300 hover:bg-purple-900 hover:text-white border border-purple-800'
+            }`}
+            title="Analyze waypoints using Gemini 3.8 Flash AI and current polar hazard conditions"
+          >
+            {optimizingRoute ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-300" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+            )}
+            <span>
+              {optimizingRoute
+                ? 'GEMINI ANALYZING...'
+                : activeProposedRoute
+                ? 'AI PROPOSAL ACTIVE'
+                : 'AI ROUTE OPTIMIZER'}
+            </span>
+          </button>
+
+          {activeProposedRoute && (
+            <button
+              type="button"
+              onClick={() => setShowProposedPanel(!showProposedPanel)}
+              className="px-2 py-0.5 rounded text-[10px] text-purple-300 hover:text-white bg-purple-950 border border-purple-800 font-bold cursor-pointer"
+              title="Toggle Recommendation Review Panel"
+            >
+              {showProposedPanel ? 'HIDE PANEL' : 'SHOW PANEL'}
+            </button>
+          )}
+
+          {optimizerError && (
+            <span className="text-rose-400 text-[10px] max-w-xs truncate" title={optimizerError}>
+              {optimizerError}
+            </span>
           )}
         </div>
 
@@ -1444,6 +2023,10 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
               <span className="w-3 h-3 rounded-full bg-sky-400 border border-white inline-block"></span>
               <span>Your Live GPS</span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-1.5 bg-purple-500 border border-purple-300 inline-block"></span>
+              <span>Proposed AI Route</span>
+            </div>
           </div>
 
           {isHeatmapActive && (
@@ -1467,6 +2050,202 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             </div>
           )}
         </div>
+
+        {/* Gemini AI Route Recommendation & Operator Approval Panel */}
+        {activeProposedRoute && showProposedPanel && (
+          <div className="absolute bottom-3 sm:bottom-4 right-3 z-[450] bg-slate-950/95 backdrop-blur-md border border-purple-500/80 p-4 rounded-xl shadow-[0_0_30px_rgba(168,85,247,0.35)] text-xs font-mono max-w-md w-full text-slate-200 pointer-events-auto max-h-[85vh] overflow-y-auto">
+            {/* Simulation Warning Banner */}
+            {(isSimulation || activeProposedRoute.isSimulation) && (
+              <div className="mb-2.5 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold text-[10px] flex items-center gap-1.5 uppercase tracking-wider">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>SIMULATION — AI ROUTE RECOMMENDATION (TEST ENV ONLY)</span>
+              </div>
+            )}
+
+            {/* Panel Header */}
+            <div className="flex items-center justify-between border-b border-purple-900/60 pb-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-purple-950 border border-purple-700 text-purple-300">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-purple-200 flex items-center gap-2">
+                    <span>AI ROUTE ANALYSIS</span>
+                    <span className="px-1.5 py-0.2 rounded bg-purple-900/80 text-purple-300 text-[10px] font-mono uppercase tracking-wider">
+                      PROPOSED
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                    <span>Status: Awaiting Operator Review</span>
+                    <span>•</span>
+                    <span
+                      className={
+                        activeProposedRoute.mode === 'gemini_ai_live'
+                          ? 'text-emerald-400 font-bold'
+                          : activeProposedRoute.mode === 'gemini_ai_cached'
+                          ? 'text-sky-400 font-bold'
+                          : 'text-amber-400 font-bold'
+                      }
+                    >
+                      {activeProposedRoute.mode === 'gemini_ai_live'
+                        ? 'GEMINI 3.8 FLASH'
+                        : activeProposedRoute.mode === 'gemini_ai_cached'
+                        ? 'AI CACHED'
+                        : 'OFFLINE HEURISTIC'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProposedPanel(false)}
+                className="text-slate-500 hover:text-white p-1 rounded transition-colors cursor-pointer"
+                title="Minimize panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sequence Comparison Box */}
+            <div className="bg-slate-900/90 rounded-lg p-2.5 border border-slate-800 space-y-2 mb-3">
+              <div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">CURRENT TRAVERSE SEQUENCE:</div>
+                <div className="text-slate-300 text-[11px] font-bold flex flex-wrap items-center gap-1">
+                  {(currentExpedition?.waypoints || []).map((w, i) => (
+                    <React.Fragment key={w.id}>
+                      <span className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">{w.name || w.id}</span>
+                      {i < (currentExpedition?.waypoints?.length || 0) - 1 && <span className="text-slate-500">→</span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Est. Baseline: {currentExpeditionDistanceKm} km
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-2">
+                <div className="text-[10px] text-purple-400 uppercase tracking-wider font-bold mb-0.5 flex items-center justify-between">
+                  <span>AI RECOMMENDED SEQUENCE:</span>
+                  {currentExpeditionDistanceKm > 0 && (
+                    <span
+                      className={
+                        activeProposedRoute.estimatedDistanceKm <= currentExpeditionDistanceKm
+                          ? 'text-emerald-400'
+                          : 'text-amber-400'
+                      }
+                    >
+                      {activeProposedRoute.estimatedDistanceKm <= currentExpeditionDistanceKm
+                        ? `Δ -${(currentExpeditionDistanceKm - activeProposedRoute.estimatedDistanceKm).toFixed(1)} km saved`
+                        : `Δ +${(activeProposedRoute.estimatedDistanceKm - currentExpeditionDistanceKm).toFixed(1)} km detour`}
+                    </span>
+                  )}
+                </div>
+                <div className="text-purple-200 text-[11px] font-bold flex flex-wrap items-center gap-1">
+                  {activeProposedRoute.orderedWaypoints.map((w, i) => (
+                    <React.Fragment key={w.id}>
+                      <span className="bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-700 text-purple-200 font-mono">
+                        {w.name || w.id}
+                      </span>
+                      {i < activeProposedRoute.orderedWaypoints.length - 1 && <span className="text-purple-400">→</span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics Row */}
+            <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+              <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                <div className="text-[9.5px] text-slate-400 uppercase">EST. DISTANCE</div>
+                <div className="text-sm font-bold text-white mt-0.5">{activeProposedRoute.estimatedDistanceKm} km</div>
+              </div>
+              <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                <div className="text-[9.5px] text-slate-400 uppercase">EST. DURATION</div>
+                <div className="text-sm font-bold text-cyan-300 mt-0.5">{activeProposedRoute.estimatedDurationHours} hrs</div>
+              </div>
+              <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                <div className="text-[9.5px] text-slate-400 uppercase">RISK LEVEL</div>
+                <div
+                  className={`text-xs font-black mt-1 px-1.5 py-0.5 rounded inline-block ${
+                    activeProposedRoute.riskLevel === 'LOW'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                      : activeProposedRoute.riskLevel === 'MEDIUM'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-700'
+                      : 'bg-rose-950 text-rose-300 border border-rose-700'
+                  }`}
+                >
+                  {activeProposedRoute.riskLevel}
+                </div>
+              </div>
+            </div>
+
+            {/* AI Reasoning Bullets */}
+            <div className="mb-3">
+              <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
+                ANALYSIS & REASONING:
+              </div>
+              <ul className="space-y-1 text-[11px] text-slate-300">
+                {activeProposedRoute.reasoning.map((r, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="text-purple-400">•</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Warnings if any */}
+            {activeProposedRoute.warnings && activeProposedRoute.warnings.length > 0 && (
+              <div className="mb-3 bg-rose-950/60 border border-rose-800/80 p-2 rounded-lg">
+                <div className="text-[10px] text-rose-300 font-bold uppercase mb-0.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 text-rose-400" />
+                  <span>OPERATIONAL WARNINGS:</span>
+                </div>
+                <ul className="space-y-0.5 text-[10px] text-rose-200">
+                  {activeProposedRoute.warnings.map((w, i) => (
+                    <li key={i}>• {w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Operator Approval Actions */}
+            <div className="pt-2 border-t border-purple-900/60 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleRunGeminiRouteOptimization}
+                disabled={optimizingRoute}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Re-run optimization with latest telemetry"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${optimizingRoute ? 'animate-spin' : ''}`} />
+                <span>Recalculate</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRejectProposedRoute}
+                  className="px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Reject proposed route and keep active path"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Reject</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAcceptProposedRoute}
+                  className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-[11px] shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer"
+                  title="Accept AI proposal and update active operational route"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Accept & Apply</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Geolocation Status / Error Bar */}

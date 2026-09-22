@@ -172,22 +172,29 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-mono">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in font-mono">
       <div 
-        className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[90vh]"
+        style={{
+          background: 'rgba(21, 11, 46, 0.94)',
+          border: '1px solid rgba(196, 181, 253, 0.22)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6), 0 0 35px rgba(124, 58, 237, 0.25)'
+        }}
+        className="relative w-full max-w-2xl rounded-2xl overflow-hidden text-slate-100 flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">
+        <div className="px-6 py-4 bg-white/[0.03] border-b border-purple-300/15 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-sky-950 border border-sky-600 flex items-center justify-center text-sky-400">
+            <div className="w-9 h-9 rounded-xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300">
               <Key className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white font-display uppercase tracking-wider">
+              <h2 className="text-base font-bold text-white uppercase tracking-wider" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                 API KEYS & RESOURCE OPTIMIZATION
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-purple-200/70">
                 Manage external API integrations with maximum token conservation and cache efficiency
               </p>
             </div>
@@ -195,7 +202,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-purple-300 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -492,13 +499,13 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.12] text-purple-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 CANCEL
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-sky-950/50 flex items-center gap-2"
+                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-purple-950/50 flex items-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>SAVE & APPLY KEYS</span>

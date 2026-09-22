@@ -25,6 +25,7 @@ export interface AiActionLogEntry {
   message: string;
   stationOrAsset?: string;
   impact?: string;
+  safetyLevel?: 'OBSERVE' | 'ASSIST' | 'AUTONOMOUS';
   autoResolvedAlertId?: string;
 }
 
@@ -345,8 +346,19 @@ export function AiActionLogsPanel({
                 </span>
               </div>
 
-              {/* Station & Impact Badges */}
+              {/* Station, Safety Level & Impact Badges */}
               <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto text-[10px]">
+                {entry.safetyLevel && (
+                  <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] font-bold border tracking-wider ${
+                    entry.safetyLevel === 'AUTONOMOUS'
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                      : entry.safetyLevel === 'ASSIST'
+                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/50'
+                      : 'bg-sky-950/80 text-sky-300 border-sky-500/50'
+                  }`}>
+                    {entry.safetyLevel}
+                  </span>
+                )}
                 {entry.stationOrAsset && (
                   <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
                     {entry.stationOrAsset}

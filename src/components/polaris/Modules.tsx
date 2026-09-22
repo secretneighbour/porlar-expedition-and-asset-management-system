@@ -47,8 +47,8 @@ export function Personnel({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
             <Field t={t} label="Assign Expedition"><select value={f.expeditionId} onChange={e => setF({ ...f, expeditionId: e.target.value })} style={inputStyle(t)} className={inputClass}><option value="">Unassigned</option>{db.expeditions.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
           </div>
           <div className="flex justify-end gap-2 mt-5">
-            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-            <button onClick={add} disabled={!f.name} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Save</button>
+            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+            <button onClick={add} disabled={!f.name} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50">Save</button>
           </div>
         </Modal>
       )}
@@ -94,8 +94,8 @@ export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: Reac
             <Field t={t} label="Status"><select value={f.status} onChange={e => setF({ ...f, status: e.target.value })} style={inputStyle(t)} className={inputClass}>{ASSET_STATUSES.map(s => <option key={s}>{s}</option>)}</select></Field>
           </div>
           <div className="flex justify-end gap-2 mt-5">
-            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-            <button onClick={add} disabled={!f.name} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Save Asset</button>
+            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+            <button onClick={add} disabled={!f.name} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50">Save Asset</button>
           </div>
         </Modal>
       )}
@@ -173,8 +173,8 @@ export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
             <Field t={t} label="Cost per Unit"><input type="number" value={f.cost} onChange={e => setF({ ...f, cost: Number(e.target.value) })} style={inputStyle(t)} className={inputClass} /></Field>
           </div>
           <div className="flex justify-end gap-2 mt-5">
-            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-            <button onClick={add} disabled={!f.name} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Save Item</button>
+            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+            <button onClick={add} disabled={!f.name} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50">Save Item</button>
           </div>
         </Modal>
       )}
@@ -235,8 +235,8 @@ export function Shipments({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
             <Field t={t} label="Expected Arrival"><input type="date" value={f.expectedArrival} onChange={e => setF({ ...f, expectedArrival: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
           </div>
           <div className="flex justify-end gap-2 mt-5">
-            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-            <button onClick={add} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Create Shipment</button>
+            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+            <button onClick={add} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer">Create Shipment</button>
           </div>
         </Modal>
       )}
@@ -254,7 +254,7 @@ export function Shipments({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
             <div><span style={{ color: t.textDim }} className="text-xs">Departure</span><p style={{ color: t.text }}>{detail.departure}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Expected Arrival</span><p style={{ color: t.text }}>{detail.expectedArrival}</p></div>
           </div>
-          {canEdit && detail.status !== "Delivered" && <button onClick={() => { advance(detail.id); setDetail({ ...detail, status: SHIP_STATUSES[Math.min(SHIP_STATUSES.indexOf(detail.status) + 1, SHIP_STATUSES.length - 2)] }); }} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Advance to Next Status</button>}
+          {canEdit && detail.status !== "Delivered" && <button onClick={() => { advance(detail.id); setDetail({ ...detail, status: SHIP_STATUSES[Math.min(SHIP_STATUSES.indexOf(detail.status) + 1, SHIP_STATUSES.length - 2)] }); }} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer">Advance to Next Status</button>}
         </Modal>
       )}
     </div>
@@ -315,11 +315,11 @@ export function Maintenance({
           <button
             onClick={() => setTab('predictive')}
             style={{
-              background: tab === 'predictive' ? t.accent : 'transparent',
-              color: tab === 'predictive' ? '#04222A' : t.textDim,
+              background: tab === 'predictive' ? 'linear-gradient(135deg, #7C3AED, #60A5FA)' : 'transparent',
+              color: tab === 'predictive' ? '#FFFFFF' : t.textDim,
               border: tab === 'predictive' ? 'none' : '1px solid transparent'
             }}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Cpu size={14} />
             <span>AI Predictive Maintenance (ML Forecast)</span>
@@ -331,10 +331,10 @@ export function Maintenance({
           <button
             onClick={() => setTab('traditional')}
             style={{
-              background: tab === 'traditional' ? t.accent : 'transparent',
-              color: tab === 'traditional' ? '#04222A' : t.textDim,
+              background: tab === 'traditional' ? 'linear-gradient(135deg, #7C3AED, #60A5FA)' : 'transparent',
+              color: tab === 'traditional' ? '#FFFFFF' : t.textDim,
             }}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Wrench size={14} />
             <span>Traditional Tickets ("Needs Repair")</span>
@@ -654,8 +654,8 @@ export function Tasks({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React
           {canEdit && (
             <button 
               onClick={() => setShowForm(true)} 
-              style={{ background: t.accent, color: "#04222A" }} 
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer hover:opacity-90 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} 
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 shadow-sm"
             >
               <span className="text-sm font-bold">+</span> New Task
             </button>
@@ -874,8 +874,8 @@ export function Tasks({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React
             <Field t={t} label="Deadline"><input type="date" value={f.deadline} onChange={e => setF({ ...f, deadline: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
           </div>
           <div className="flex justify-end gap-2 mt-5">
-            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer">Cancel</button>
-            <button onClick={add} disabled={!f.name} style={{ background: t.accent, color: "#04222A" }} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer">Create Task</button>
+            <button onClick={() => setShowForm(false)} style={{ color: t.textDim }} className="px-4 py-2 text-sm cursor-pointer hover:text-white transition-colors">Cancel</button>
+            <button onClick={add} disabled={!f.name} style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} className="px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-50">Create Task</button>
           </div>
         </Modal>
       )}
@@ -945,8 +945,8 @@ export function Tasks({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React
             <div className="flex justify-end pt-2">
               <button 
                 onClick={() => setInspectWorkLog(null)} 
-                style={{ background: t.accent, color: "#04222A" }} 
-                className="px-4 py-2 rounded-lg text-xs font-bold cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }} 
+                className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Close Forensic Record
               </button>
