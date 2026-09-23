@@ -203,6 +203,37 @@ The login workstation has been engineered as a high-fidelity tactical entry cons
 | **Transportation** | `TRN-0301` | `polar2026` | `transportation` (Supply Convoys) |
 | **Super Admin** | `ADM-0001` | `polar2026` | `dashboard` (Full System Access) |
 
+### 🌐 Shared Multi-PC & Network Deployment Architecture
+In polar base operations, multiple laptops, command displays, and ruggedized field mobile devices connect simultaneously to the **same authoritative operations backend**:
+
+```text
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ PC 1 (Commander)│       │ PC 2 (Logistics)│       │ Mobile Field Fix│
+└────────┬────────┘       └────────┬────────┘       └────────┬────────┘
+         │                         │                         │
+         └─────────────────────────┼─────────────────────────┘
+                                   │ HTTP/WebSocket (REST + JSON)
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │    Polar Express Backend      │
+                   │    (Host: 0.0.0.0:3000)       │
+                   └───────────────┬───────────────┘
+                                   │
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │  Shared Polar Database Manager│
+                   │ (./data/polar-database.json)  │
+                   └───────────────────────────────┘
+```
+
+* **No Per-PC Database Fragmentation**: All client workstations authenticate against the shared database (`./data/polar-database.json` by default, or configured via `DATABASE_PATH`). Remote clients never require local database files.
+* **Auto-Initialization & Demo Account Seeding**: On backend startup, the `PolarDatabaseManager` automatically validates the schema, initializes tables, and seeds all demo accounts with nominal permissions.
+* **Cross-Origin Resource Sharing (CORS)**: Robust CORS middleware enables access from local network IPs (`192.168.*`, `10.*`), localhost, and satellite tunnels (ngrok, Cloudflare) with credential support.
+* **Diagnostics & Health Endpoints**:
+  - `GET /api/health`: Provides comprehensive health telemetry including database status (`connected`), active user count, and connected WebSocket terminals.
+  - `GET /api/auth/diagnostics`: Developer & station admin endpoint verifying `backendStatus: "ONLINE"`, `database: "CONNECTED"`, and `authService: "READY"`.
+* **Configurable Frontend Base URL**: Set `VITE_API_BASE_URL` in `.env` if hosting the frontend statically or on a separate port/host, or use the built-in Vite dev proxy configured for `/api` and `/ws`.
+
 ---
 
 ## 🛠️ AI Predictive Maintenance System (-50°C Cold-Soak Modeling)

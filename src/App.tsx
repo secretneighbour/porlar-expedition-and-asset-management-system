@@ -28,6 +28,7 @@ import { ApiKeyModal } from './components/ApiKeyModal';
 import { Footer } from './components/Footer';
 import { PreBootSystemCheck } from './components/polaris/PreBootSystemCheck';
 import { useSimulation } from './hooks/useSimulation';
+import { apiFetch } from './utils/api';
 import { SimulationHud } from './components/polaris/SimulationHud';
 import { SimulationControlCenter } from './components/polaris/SimulationControlCenter';
 import { SimulationReportModal } from './components/polaris/SimulationReportModal';
@@ -169,8 +170,10 @@ export default function App() {
     try {
       localStorage.removeItem('polar_auth_user');
       sessionStorage.removeItem('polar_auth_user');
+      localStorage.removeItem('polar_auth_token');
+      sessionStorage.removeItem('polar_auth_token');
     } catch {}
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   };
 
   // Real-time Geolocation Hook

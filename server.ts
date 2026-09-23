@@ -39,6 +39,7 @@ import {
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
 import os from 'os';
 import { GoogleGenAI } from '@google/genai';
+import { databaseManager } from './src/server/database.js';
 
 // ============================================================================
 // AI API KEY OPTIMIZATION & RESOURCE CONSERVATION ENGINE
@@ -225,10 +226,8 @@ class AiOptimizationEngine {
 
 const aiOptimizer = new AiOptimizationEngine();
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
-const STATE_FILE_PATH = path.join(os.tmpdir(), 'polar-state.json');
-const LOCAL_FALLBACK_STATE = path.join(process.cwd(), 'polar-state.json');
 
 // Real-time active devices registry (deduplicated by deviceId)
 const activeDevices = new Map<string, ConnectedDevice>();
@@ -250,82 +249,11 @@ interface AuthSession {
 
 const authSessions = new Map<string, AuthSession>();
 
-function getInitialPolarisDb(): PolarisDb {
-  return {
-    expeditions: INITIAL_POLARIS_EXPEDITIONS,
-    personnel: INITIAL_PERSONNEL,
-    assets: INITIAL_POLARIS_ASSETS,
-    inventory: INITIAL_INVENTORY,
-    shipments: INITIAL_SHIPMENTS,
-    transportation: INITIAL_TRANSPORTATION,
-    maintenance: INITIAL_MAINTENANCE,
-    tasks: INITIAL_TASKS,
-    alerts: buildAlerts(),
-    expenses: INITIAL_EXPENSES,
-    users: INITIAL_USERS,
-    auditLog: INITIAL_AUDIT_LOG,
-  };
-}
+let systemState: PolarSystemState = databaseManager.getState();
 
-// Initialize system state from disk or defaults
-function loadInitialState(): PolarSystemState {
-  try {
-    const targetPath = fs.existsSync(STATE_FILE_PATH)
-      ? STATE_FILE_PATH
-      : fs.existsSync(LOCAL_FALLBACK_STATE)
-      ? LOCAL_FALLBACK_STATE
-      : null;
-
-    if (targetPath) {
-      const data = fs.readFileSync(targetPath, 'utf-8');
-      const parsed = JSON.parse(data);
-      if (parsed && Array.isArray(parsed.assets) && Array.isArray(parsed.expeditions)) {
-        if (!parsed.stations || !Array.isArray(parsed.stations)) {
-          parsed.stations = INITIAL_STATIONS;
-        }
-        if (!parsed.customWaypoints || !Array.isArray(parsed.customWaypoints)) {
-          parsed.customWaypoints = [];
-        }
-        if (!parsed.polarisDb || typeof parsed.polarisDb !== 'object') {
-          parsed.polarisDb = getInitialPolarisDb();
-        }
-        console.log(`[POLAR-SERVER] Authoritative state loaded from persistent storage (${targetPath}).`);
-        return parsed;
-      }
-    }
-  } catch (err: any) {
-    console.error('[POLAR-SERVER] Error reading polar-state.json, defaulting to master manifest:', err.message);
-  }
-
-  return {
-    region: 'antarctica',
-    conditionLevel: 'COND-2_CAUTION',
-    assets: INITIAL_ASSETS,
-    expeditions: INITIAL_EXPEDITIONS,
-    supplies: INITIAL_SUPPLIES,
-    dispatchLogs: INITIAL_DISPATCH_LOGS,
-    activeDistress: null,
-    stations: INITIAL_STATIONS,
-    customWaypoints: [],
-    polarisDb: getInitialPolarisDb(),
-    lastUpdated: new Date().toISOString(),
-  };
-}
-
-let systemState: PolarSystemState = loadInitialState();
-
-// Save state to disk asynchronously with debounce
-let saveTimeout: NodeJS.Timeout | null = null;
+// Save state to disk using authoritative database manager
 function persistState() {
-  if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    try {
-      systemState.lastUpdated = new Date().toISOString();
-      fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(systemState, null, 2), 'utf-8');
-    } catch (err: any) {
-      console.error('[POLAR-SERVER] Failed to persist state to disk:', err.message);
-    }
-  }, 300);
+  databaseManager.persist();
 }
 
 // ============================================================================
@@ -480,7 +408,42 @@ function executeAutonomousSAR(distress: ActiveDistressAlert): ActiveDistressAler
 }
 
 async function startServer() {
+  // Authoritative shared database initialization
+  await databaseManager.initialize();
+  systemState = databaseManager.getState();
+
   const app = express();
+
+  // Robust Cross-Origin Resource Sharing (CORS) for multi-PC and remote field units
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const allowedEnvOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.APP_URL || '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+
+    const isLocalOrLan =
+      origin &&
+      (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com)(:\d+)?$/.test(origin));
+
+    if (origin && (isLocalOrLan || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else if (!origin) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    next();
+  });
+
   app.use(express.json());
 
   const server = http.createServer(app);
@@ -554,40 +517,16 @@ async function startServer() {
       transport: 'transportation',
     };
 
-    // User lookup against authoritative system database
-    const usersList: any[] = (systemState.polarisDb && Array.isArray(systemState.polarisDb.users) && systemState.polarisDb.users.length > 0)
-      ? systemState.polarisDb.users
-      : INITIAL_USERS;
-
-    const foundUser = usersList.find((u: any) =>
-      (u.id && u.id.toLowerCase() === cleanUserId.toLowerCase()) ||
-      (u.email && u.email.toLowerCase() === cleanUserId.toLowerCase()) ||
-      (u.name && u.name.toLowerCase() === cleanUserId.toLowerCase())
-    );
-
-    if (!foundUser) {
+    // User lookup against authoritative shared database
+    const verifyResult = databaseManager.verifyCredentials(cleanUserId, password);
+    if (!verifyResult.ok || !verifyResult.user) {
       return res.status(401).json({
         ok: false,
-        error: `Invalid credentials. User ID "${cleanUserId}" not found in Polar Personnel Directory.`
+        error: verifyResult.error || `Invalid credentials. User ID "${cleanUserId}" not found in Polar Personnel Directory.`,
       });
     }
 
-    if (foundUser.active === false) {
-      return res.status(403).json({
-        ok: false,
-        error: 'This account has been deactivated or marked unavailable. Contact Polar Station Admin.'
-      });
-    }
-
-    // Password validation (with demo password fallback)
-    const expectedPassword = foundUser.password || 'polar2026';
-    const isValidPassword = password === expectedPassword || password === 'polar2026';
-    if (!isValidPassword) {
-      return res.status(401).json({
-        ok: false,
-        error: 'Invalid password. Check credentials or request recovery via Base Comms.'
-      });
-    }
+    const foundUser = verifyResult.user;
 
     // Role-based authorization validation (Server-side enforced)
     const allowedUserRoles = roleAuthorizationMap[cleanRole] || ['Super Admin'];
@@ -691,7 +630,36 @@ async function startServer() {
 
   app.get('/api/health', (req, res) => {
     const devices = getDeviceList();
-    res.json({ status: 'ok', time: new Date().toISOString(), clients: devices.length, devices });
+    const dbInfo = databaseManager.getHealthInfo();
+    res.json({
+      status: 'ok',
+      time: new Date().toISOString(),
+      uptimeSeconds: Math.round(process.uptime()),
+      clients: devices.length,
+      devices,
+      database: dbInfo,
+      auth: {
+        status: 'ready',
+        activeSessions: authSessions.size,
+        supportedRoles: ['researcher', 'asset', 'transport', 'admin'],
+      },
+      activeDistress: !!systemState.activeDistress,
+    });
+  });
+
+  // Dedicated diagnostics endpoint for dev/admin multi-PC troubleshooting
+  app.get('/api/auth/diagnostics', (req, res) => {
+    const dbInfo = databaseManager.getHealthInfo();
+    res.json({
+      frontendConnectedTo: req.headers.host || `${HOST}:${PORT}`,
+      backendStatus: 'ONLINE',
+      database: dbInfo.status === 'connected' ? 'CONNECTED' : 'DEGRADED',
+      authService: 'READY',
+      registeredPersonnel: dbInfo.usersCount,
+      activeSessions: authSessions.size,
+      storagePath: dbInfo.storagePath,
+      systemTime: new Date().toISOString(),
+    });
   });
 
   // Terminal heartbeat registration (works via HTTP fallback as well)
@@ -953,20 +921,7 @@ async function startServer() {
 
   // Reset entire simulation to master manifest
   app.post('/api/reset', (req, res) => {
-    systemState = {
-      region: 'antarctica',
-      conditionLevel: 'COND-2_CAUTION',
-      assets: INITIAL_ASSETS,
-      expeditions: INITIAL_EXPEDITIONS,
-      supplies: INITIAL_SUPPLIES,
-      dispatchLogs: INITIAL_DISPATCH_LOGS,
-      activeDistress: null,
-      stations: INITIAL_STATIONS,
-      customWaypoints: [],
-      polarisDb: getInitialPolarisDb(),
-      lastUpdated: new Date().toISOString(),
-    };
-    persistState();
+    systemState = databaseManager.resetToDefaults();
 
     broadcast({
       type: 'RESET_STATE',
@@ -2523,6 +2478,7 @@ SCHEMA:
   }
 
   server.listen(PORT, HOST, () => {
+    const dbInfo = databaseManager.getHealthInfo();
     console.log('================================================================');
     console.log('  POLAR EXPEDITION & ASSET MANAGEMENT SYSTEM');
     console.log('  REAL-TIME SYNC SERVER (HTTP + WEBSOCKETS)');
@@ -2530,7 +2486,7 @@ SCHEMA:
     console.log(`  Local Endpoint:  http://localhost:${PORT}`);
     console.log(`  Network/Mobile:  http://${HOST}:${PORT}`);
     console.log(`  WebSocket URL:   ws://${HOST}:${PORT}/ws`);
-    console.log(`  Persistent File: ${STATE_FILE_PATH}`);
+    console.log(`  Database File:   ${dbInfo.storagePath} (${dbInfo.usersCount} users registered)`);
     console.log('================================================================');
   });
 }

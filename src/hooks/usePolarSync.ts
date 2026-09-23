@@ -44,6 +44,7 @@ import {
   playTacticalChirp,
   playSuccessChime,
 } from '../utils/audioAlert';
+import { apiFetch, wsUrl } from '../utils/api';
 
 export type SyncConnectionStatus = 'connected' | 'connecting' | 'offline';
 
@@ -151,7 +152,7 @@ export function usePolarSync() {
 
   // Check backend Autonomous SAR Dispatch status on mount
   useEffect(() => {
-    fetch('/api/ai/sar/status')
+    apiFetch('/api/ai/sar/status')
       .then((res) => res.json())
       .then((data) => {
         if (typeof data.autoSarDispatchEnabled === 'boolean') {
@@ -172,7 +173,7 @@ export function usePolarSync() {
       wsRef.current.send(JSON.stringify(msg));
     } else {
       // Fallback via HTTP REST
-      fetch('/api/action', {
+      apiFetch('/api/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: msg.type, payload: msg.payload }),
@@ -226,7 +227,7 @@ export function usePolarSync() {
   // Fetch initial state via HTTP
   const fetchInitialState = useCallback(async () => {
     try {
-      const res = await fetch('/api/state');
+      const res = await apiFetch('/api/state');
       if (res.ok) {
         const data = await res.json();
         if (data.state) {
@@ -251,14 +252,12 @@ export function usePolarSync() {
       reconnectTimerRef.current = null;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+    const socketUrl = wsUrl('/ws');
 
     setSyncStatus('connecting');
 
     try {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(socketUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -391,7 +390,7 @@ export function usePolarSync() {
         );
       } else {
         // HTTP REST fallback for heartbeat and state sync
-        fetch('/api/heartbeat', {
+        apiFetch('/api/heartbeat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -407,7 +406,7 @@ export function usePolarSync() {
           });
 
         // Sync full operational state over HTTP if WebSocket is closed
-        fetch('/api/state')
+        apiFetch('/api/state')
           .then((r) => r.json())
           .then((data) => {
             if (data.state) {
@@ -472,7 +471,7 @@ export function usePolarSync() {
 
   const toggleAutoSarMode = useCallback(async () => {
     try {
-      const res = await fetch('/api/ai/sar/toggle', { method: 'POST' });
+      const res = await apiFetch('/api/ai/sar/toggle', { method: 'POST' });
       const data = await res.json();
       if (typeof data.autoSarDispatchEnabled === 'boolean') {
         setAutoSarDispatchEnabled(data.autoSarDispatchEnabled);
@@ -486,7 +485,7 @@ export function usePolarSync() {
 
   const triggerCrevasseFallDistress = useCallback(async () => {
     try {
-      const res = await fetch('/api/ai/sar/dispatch-crevasse-fall', { method: 'POST' });
+      const res = await apiFetch('/api/ai/sar/dispatch-crevasse-fall', { method: 'POST' });
       const data = await res.json();
       if (data.alert) {
         setActiveDistress(data.alert);
@@ -842,7 +841,7 @@ export function usePolarSync() {
   );
 
   const resetData = useCallback(() => {
-    fetch('/api/reset', { method: 'POST' })
+    apiFetch('/api/reset', { method: 'POST' })
       .then((res) => res.json())
       .then((data) => {
         if (data.state) applyServerState(data.state);

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AuthLoginResponse, PolarUser } from '../types';
+import { apiFetch, checkBackendConnection, getApiBaseUrl } from '../utils/api';
 
 interface PolarLoginViewProps {
   onLoginSuccess: (user: PolarUser, dashboardRoute: string, remember: boolean) => void;
@@ -14,6 +15,26 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
   const [statusText, setStatusText] = useState('');
   const [statusType, setStatusType] = useState<'info' | 'success' | 'error' | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+
+  // Backend connection & database diagnostics
+  const [backendHealth, setBackendHealth] = useState<{
+    online: boolean;
+    statusText: string;
+    databaseStatus?: string;
+    usersCount?: number;
+    origin: string;
+  } | null>(null);
+
+  const verifyBackend = useCallback(async () => {
+    const health = await checkBackendConnection();
+    setBackendHealth(health);
+  }, []);
+
+  useEffect(() => {
+    verifyBackend();
+    const interval = setInterval(verifyBackend, 10000);
+    return () => clearInterval(interval);
+  }, [verifyBackend]);
 
   // Attribution integrity check preserved from polar-login.html
   const attributionRef = useRef<HTMLDivElement>(null);
@@ -70,13 +91,12 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
     }
 
     setLoading(true);
-    setStatusText('Checking credentials…');
+    setStatusText('Verifying credentials with Polar Operations Server…');
     setStatusType('info');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiFetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role: selectedRole,
           userId: userId.trim(),
@@ -85,11 +105,26 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         }),
       });
 
-      const data: AuthLoginResponse = await response.json();
+      let data: AuthLoginResponse;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        throw new Error('Backend returned an invalid non-JSON response. Check network proxy or server logs.');
+      }
 
       if (response.ok && data.ok && data.user) {
-        setStatusText(`Signed in as ${data.user.role} — routing to console…`);
+        setStatusText(`Authenticated as ${data.user.role} — routing to operations console…`);
         setStatusType('success');
+
+        // Persist session token for authenticated REST & WebSocket communication
+        if (data.token) {
+          try {
+            sessionStorage.setItem('polar_auth_token', data.token);
+            if (remember) {
+              localStorage.setItem('polar_auth_token', data.token);
+            }
+          } catch {}
+        }
 
         setTimeout(() => {
           onLoginSuccess(
@@ -105,36 +140,15 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
           );
         }, 350);
       } else {
-        setStatusText(data.error || 'Sign-in failed. Check your credentials.');
+        setStatusText(data.error || 'Authentication rejected. Verify your credentials.');
         setStatusType('error');
       }
     } catch (err: any) {
-      // Fallback local authentication if server connection is degraded
-      console.warn('[PolarLoginView] Backend auth endpoint unreachable, attempting fallback validation:', err.message);
-
-      const demoAccounts: Record<string, { id: string; name: string; role: string; email: string }> = {
-        'rsc-0142': { id: 'RSC-0142', name: 'Dr. Elena Rostova', role: 'Scientist / Team Member', email: 'elena.rostova@polar.gov.in' },
-        'ast-0101': { id: 'AST-0101', name: 'Vikram Nair', role: 'Asset Manager', email: 'vikram.nair@polar.gov.in' },
-        'trn-0301': { id: 'TRN-0301', name: 'Marcus Vance', role: 'Logistics Officer', email: 'marcus.vance@polar.gov.in' },
-      };
-
-      const accountKey = userId.trim().toLowerCase();
-      const demoUser = demoAccounts[accountKey];
-
-      if (demoUser && (password === 'polar2026' || password.length >= 4)) {
-        setStatusText(`Signed in as ${demoUser.role} (offline fallback)`);
-        setStatusType('success');
-        setTimeout(() => {
-          onLoginSuccess(
-            { ...demoUser, active: true },
-            selectedRole === 'asset' ? 'assets' : selectedRole === 'transport' ? 'transportation' : 'dashboard',
-            remember
-          );
-        }, 350);
-      } else {
-        setStatusText('Sign-in failed. Please check your network connection or credentials.');
-        setStatusType('error');
-      }
+      console.error('[PolarLoginView] Backend authentication failure:', err.message);
+      const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
+      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify server is running on port 3000 and shared database is reachable.`);
+      setStatusType('error');
+      verifyBackend();
     } finally {
       setLoading(false);
     }
@@ -227,11 +241,59 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
           style={{
             fontSize: '13.5px',
             color: '#C9C1E8',
-            marginBottom: '24px',
+            marginBottom: '16px',
             lineHeight: 1.4,
           }}
         >
           Select your role and enter your credentials to continue.
+        </div>
+
+        {/* Backend & Shared Database Diagnostics Status Banner */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '7px 12px',
+            borderRadius: '10px',
+            marginBottom: '20px',
+            fontSize: '11.5px',
+            backgroundColor: backendHealth?.online ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.14)',
+            border: `1px solid ${backendHealth?.online ? 'rgba(16, 185, 129, 0.28)' : 'rgba(239, 68, 68, 0.32)'}`,
+            color: backendHealth?.online ? '#A7F3D0' : '#FECACA',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: backendHealth?.online ? '#10B981' : '#EF4444',
+                boxShadow: backendHealth?.online ? '0 0 8px #10B981' : '0 0 8px #EF4444',
+              }}
+            />
+            <span>
+              {backendHealth?.online
+                ? `Shared Server: ONLINE • DB: CONNECTED (${backendHealth.usersCount || 0} users)`
+                : `Shared Server: ${backendHealth?.statusText || 'CONNECTING…'}`}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={verifyBackend}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: backendHealth?.online ? '#6EE7B7' : '#FCA5A5',
+              cursor: 'pointer',
+              fontSize: '11px',
+              textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            Check
+          </button>
         </div>
 
         {/* Login Form */}
