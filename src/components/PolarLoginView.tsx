@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuthLoginResponse, PolarUser } from '../types';
 import { apiFetch, checkBackendConnection, getApiBaseUrl } from '../utils/api';
 import { formatError, safeDisplayValue } from '../utils/safeFormat';
@@ -38,29 +38,6 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
     return () => clearInterval(interval);
   }, [verifyBackend]);
 
-  // Attribution integrity check preserved from polar-login.html
-  const attributionRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const footerLink = document.querySelector('#attribution-line a[href*="wondermayank.in"]');
-    const creditIntact =
-      !!footerLink &&
-      /wondermayank\.in/i.test(footerLink.getAttribute('href') || '') &&
-      /wondermayank\.in/i.test(footerLink.textContent || '');
-
-    if (!creditIntact) {
-      const overlay = document.createElement('div');
-      overlay.id = 'attribution-integrity-overlay';
-      overlay.style.cssText =
-        'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(20,10,40,0.6);backdrop-filter:blur(4px);font-family:Inter,sans-serif;';
-      overlay.innerHTML =
-        '<div style="background:#fff;border-radius:20px;padding:28px 30px;max-width:380px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.4);border:1px solid #C4B5FD;">' +
-        '<h4 style="font-family:\'Space Grotesk\',sans-serif;color:#372F5C;margin-bottom:10px;font-size:18px;">Attribution removed</h4>' +
-        '<p style="color:#6B6485;font-size:14px;margin-bottom:16px;">This login screen was built by wondermayank.in and is free to use only with the credit left in the footer.</p>' +
-        '<a href="https://wondermayank.in" target="_blank" rel="noopener" style="display:inline-block;padding:10px 20px;border-radius:12px;color:#fff;text-decoration:none;font-weight:600;font-size:14px;background:linear-gradient(135deg,#7C3AED,#60A5FA);">Restore credit / get a license</a>' +
-        '</div>';
-      document.body.appendChild(overlay);
-    }
-  }, []);
 
   // Update default demo ID when switching roles if default demo credentials are still present
   const handleRoleChange = (role: 'researcher' | 'asset' | 'transport') => {
@@ -859,7 +836,6 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         {/* Footer with Preserved Attribution */}
         <footer style={{ marginTop: '26px', textAlign: 'center' }}>
           <div
-            ref={attributionRef}
             className="footer-line"
             id="attribution-line"
             style={{
@@ -873,18 +849,15 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
             }}
           >
             Powered by{' '}
-            <a
-              href="https://wondermayank.in"
-              target="_blank"
-              rel="noopener noreferrer"
+            <span
               style={{
                 color: '#C4B5FD',
                 fontWeight: 600,
                 textDecoration: 'none',
               }}
             >
-              wondermayank.in
-            </a>
+              Zero To One
+            </span>
           </div>
         </footer>
       </div>
