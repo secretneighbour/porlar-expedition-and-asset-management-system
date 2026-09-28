@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronDown, Bell, Sun, Moon, LogOut, Terminal,
   Radio, Key, QrCode, ShieldAlert, Volume2, VolumeX, Monitor,
-  Cpu, Wifi, WifiOff, ThermometerSnowflake, Wind, Gauge, Sparkles, Target
+  Cpu, Wifi, WifiOff, ThermometerSnowflake, Wind, Gauge, Sparkles, Target, HardDrive,
+  Menu, X
 } from 'lucide-react';
 import { FONT_HEAD, FONT_BODY, NAV_SECTIONS, STATIONS } from '../../data/polarisData';
 
@@ -16,6 +17,8 @@ export function Sidebar({
   setCollapsed,
   unreadAlerts = 0,
   hasActiveDistress = false,
+  mobileOpen = false,
+  onCloseMobile,
 }: {
   t: any;
   theme: string;
@@ -26,6 +29,8 @@ export function Sidebar({
   setCollapsed: (c: boolean) => void;
   unreadAlerts?: number;
   hasActiveDistress?: boolean;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }) {
   // Collapsible section state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -34,17 +39,34 @@ export function Sidebar({
     setCollapsedSections(prev => ({ ...prev, [title]: !prev[title] }));
   };
 
+  const handleSelectNav = (key: string) => {
+    setActive(key);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
   return (
-    <aside
-      style={{
-        background: t.sidebar || 'rgba(6, 12, 27, 0.95)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        width: collapsed ? 72 : 256,
-        borderRight: `1px solid ${t.border}`,
-      }}
-      className="shrink-0 h-screen sticky top-0 flex flex-col transition-all duration-200 overflow-hidden z-20 select-none shadow-2xl font-mono"
-    >
+    <>
+      {/* Mobile Drawer Backdrop Overlay */}
+      {mobileOpen && (
+        <div
+          onClick={onCloseMobile}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 lg:hidden animate-in fade-in duration-200"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        style={{
+          background: t.sidebar || 'rgba(6, 12, 27, 0.95)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          width: collapsed ? 72 : 256,
+          borderRight: `1px solid ${t.border}`,
+        }}
+        className={`app-sidebar shrink-0 h-screen sticky top-0 flex flex-col transition-all duration-300 overflow-hidden z-20 select-none shadow-2xl font-mono ${mobileOpen ? 'mobile-open' : ''}`}
+      >
       {/* Brand Header */}
       <div 
         style={{ borderBottom: `1px solid ${t.border}` }}
@@ -73,7 +95,7 @@ export function Sidebar({
           <circle cx="12" cy="12" r="3.2" fill="url(#sidebarLogoGrad)" />
         </svg>
         {!collapsed && (
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span
               style={{ color: t.text, fontFamily: FONT_HEAD }}
               className="font-bold text-sm tracking-tight leading-tight uppercase truncate"
@@ -84,6 +106,17 @@ export function Sidebar({
               Command Console
             </span>
           </div>
+        )}
+        {onCloseMobile && (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors ml-auto cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close Navigation Menu"
+            title="Close Drawer"
+          >
+            <X size={18} />
+          </button>
         )}
       </div>
 
@@ -124,7 +157,7 @@ export function Sidebar({
                     return (
                       <button
                         key={item.key}
-                        onClick={() => setActive(item.key)}
+                        onClick={() => handleSelectNav(item.key)}
                         style={{
                           background: isActive
                             ? (t.accentSoft || 'rgba(0, 242, 254, 0.15)')
@@ -139,7 +172,7 @@ export function Sidebar({
                           color: isActive ? (t.text || '#FFFFFF') : t.textDim,
                           boxShadow: isActive ? (t.btnShadow || '0 0 15px rgba(0, 242, 254, 0.2)') : 'none',
                         }}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all duration-150 cursor-pointer hover:bg-white/5 hover:text-white group ${isMayday ? 'animate-pulse' : ''}`}
+                        className={`w-full flex items-center justify-between px-2.5 py-2.5 lg:py-1.5 rounded-lg text-xs transition-all duration-150 cursor-pointer hover:bg-white/5 hover:text-white group min-h-[44px] lg:min-h-0 ${isMayday ? 'animate-pulse' : ''}`}
                         title={item.label}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -188,11 +221,11 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Collapse Toggle */}
+      {/* Collapse Toggle - Desktop Only */}
       <button
         onClick={() => setCollapsed(!collapsed)}
         style={{ color: t.textDim, borderTop: `1px solid ${t.border}`, background: 'rgba(0,0,0,0.2)' }}
-        className="px-3.5 py-3 text-xs flex items-center justify-between cursor-pointer hover:text-white hover:bg-white/5 transition-colors"
+        className="hidden lg:flex px-3.5 py-3 text-xs items-center justify-between cursor-pointer hover:text-white hover:bg-white/5 transition-colors"
       >
         <span className="flex items-center gap-2">
           <ChevronRight size={14} className={`transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
@@ -200,6 +233,7 @@ export function Sidebar({
         </span>
       </button>
     </aside>
+    </>
   );
 }
 
@@ -227,6 +261,8 @@ export function Topbar({
   hasActiveDistress = false,
   isSimulationActive = false,
   onOpenSimulation,
+  onOpenOfflineCache,
+  onToggleMobileMenu,
 }: {
   t: any;
   theme: string;
@@ -251,6 +287,8 @@ export function Topbar({
   hasActiveDistress?: boolean;
   isSimulationActive?: boolean;
   onOpenSimulation?: () => void;
+  onOpenOfflineCache?: () => void;
+  onToggleMobileMenu?: () => void;
 }) {
   const [timeStr, setTimeStr] = useState<string>('');
   const [utcStr, setUtcStr] = useState<string>('');
@@ -282,10 +320,22 @@ export function Topbar({
         WebkitBackdropFilter: 'blur(20px)',
         borderBottom: `1px solid ${t.border}`,
       }}
-      className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-2.5 gap-3 font-mono text-xs select-none"
+      className="app-topbar sticky top-0 z-30 flex items-center justify-between px-3 sm:px-6 py-2 gap-2 sm:gap-3 font-mono text-xs select-none"
     >
-      {/* Left: Station Context & Telemetry Badges */}
-      <div className="flex items-center gap-3 flex-wrap min-w-0">
+      {/* Left: Hamburger menu (mobile), Station Context & Telemetry Badges */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+        {onToggleMobileMenu && (
+          <button
+            type="button"
+            onClick={onToggleMobileMenu}
+            className="lg:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center border border-white/10 shrink-0"
+            aria-label="Open Navigation Drawer"
+            title="Open Operations Menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
+
         {/* Station Selector */}
         <div className="flex items-center gap-1.5">
           <span style={{ color: t.textFaint }} className="text-[10px] uppercase hidden sm:inline">Station:</span>
@@ -332,12 +382,22 @@ export function Topbar({
         <span style={{ color: t.border }} className="hidden lg:inline">|</span>
 
         {/* SATCOM & WebSocket Health */}
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpenOfflineCache}
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer text-left"
+          title="Inspect Offline Cache & Configure Operations Gateway"
+        >
           <div className="flex items-center gap-1.5 font-bold">
             {syncStatus === 'synced' ? (
               <span className="flex items-center gap-1 text-emerald-400">
                 <Wifi size={12} />
                 <span className="text-[10px]">SATCOM SYNC</span>
+              </span>
+            ) : syncStatus === 'connecting' ? (
+              <span className="flex items-center gap-1 text-amber-400 animate-pulse">
+                <Wifi size={12} />
+                <span className="text-[10px]">RECONNECTING</span>
               </span>
             ) : (
               <span className="flex items-center gap-1 text-amber-400 animate-pulse">
@@ -349,7 +409,7 @@ export function Topbar({
           <span className="text-[10px] text-slate-400 hidden sm:inline" title="Connected Field Terminals">
             ({connectedClients} {connectedClients === 1 ? 'Node' : 'Nodes'})
           </span>
-        </div>
+        </button>
 
         <span style={{ color: t.border }} className="hidden xl:inline">|</span>
 
@@ -405,10 +465,10 @@ export function Topbar({
           type="button"
           onClick={onOpenPreBoot}
           style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px] min-h-[38px]"
           title="Hardware & Cryo-Sensor Pre-Boot Diagnostics"
         >
-          <Terminal size={13} style={{ color: t.accent }} />
+          <Terminal size={14} style={{ color: t.accent }} />
           <span className="hidden sm:inline">POST</span>
         </button>
 
@@ -418,10 +478,23 @@ export function Topbar({
             type="button"
             onClick={onOpenApiKey}
             style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
-            title="Configure Gemini & Google Maps Keys"
+            className="p-2 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            title="Configure Gemini AI & Polar Cartography"
           >
-            <Key size={13} style={{ color: t.accent }} />
+            <Key size={14} style={{ color: t.accent }} />
+          </button>
+        )}
+
+        {/* Quick Action: Offline Cache & Gateway Config */}
+        {onOpenOfflineCache && (
+          <button
+            type="button"
+            onClick={onOpenOfflineCache}
+            style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
+            className="p-2 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            title="Inspect Offline Cache & Operations Gateway URL"
+          >
+            <HardDrive size={14} style={{ color: t.accent }} />
           </button>
         )}
 
@@ -434,7 +507,7 @@ export function Topbar({
             background: t.accentSoft || 'rgba(0, 242, 254, 0.15)',
             color: t.accent || '#00F2FE'
           }}
-          className="px-2 py-1 rounded-lg font-mono font-bold text-[10px] cursor-pointer hover:brightness-125 transition-all"
+          className="px-2.5 py-1.5 rounded-lg font-mono font-bold text-[10px] cursor-pointer hover:brightness-125 transition-all min-h-[38px] flex items-center justify-center"
           title={`Theme: ${themeDisplay}. Click to switch theme.`}
         >
           {themeDisplay}
@@ -450,10 +523,10 @@ export function Topbar({
               background: crtEnabled ? 'rgba(0, 242, 254, 0.2)' : t.bgAlt,
               color: crtEnabled ? '#00F2FE' : t.textFaint
             }}
-            className="p-1.5 rounded-lg cursor-pointer hover:text-white transition-colors hidden sm:block"
+            className="p-2 rounded-lg cursor-pointer hover:text-white transition-colors hidden sm:flex items-center justify-center min-h-[38px] min-w-[38px]"
             title={crtEnabled ? "CRT Scanlines: ACTIVE" : "CRT Scanlines: OFF"}
           >
-            <Monitor size={13} />
+            <Monitor size={14} />
           </button>
         )}
 
@@ -463,10 +536,10 @@ export function Topbar({
             type="button"
             onClick={onToggleSound}
             style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer hidden sm:block"
+            className="p-2 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer hidden sm:flex items-center justify-center min-h-[38px] min-w-[38px]"
             title={soundEnabled ? "Tactical Audio: ON" : "Tactical Audio: MUTED"}
           >
-            {soundEnabled ? <Volume2 size={13} style={{ color: t.accent }} /> : <VolumeX size={13} />}
+            {soundEnabled ? <Volume2 size={14} style={{ color: t.accent }} /> : <VolumeX size={14} />}
           </button>
         )}
 
@@ -475,10 +548,10 @@ export function Topbar({
           type="button"
           onClick={() => setActive('alerts')}
           style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-          className="relative p-1.5 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors"
+          className="relative p-2 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors min-h-[38px] min-w-[38px] flex items-center justify-center"
           title="Tactical Alerts"
         >
-          <Bell size={14} />
+          <Bell size={15} />
           {unread > 0 && (
             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
               {unread}
@@ -491,14 +564,14 @@ export function Topbar({
           <button
             type="button"
             onClick={onTriggerMayday}
-            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg ${
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg min-h-[38px] ${
               hasActiveDistress
                 ? 'bg-rose-600 hover:bg-rose-500 ring-2 ring-rose-400 animate-bounce'
                 : 'bg-rose-700 hover:bg-rose-600 shadow-rose-950/80'
             }`}
             title="Trigger Emergency MAYDAY Broadcast"
           >
-            <ShieldAlert size={14} />
+            <ShieldAlert size={15} />
             <span className="hidden sm:inline">MAYDAY</span>
           </button>
         )}
@@ -526,4 +599,3 @@ export function Topbar({
     </header>
   );
 }
-

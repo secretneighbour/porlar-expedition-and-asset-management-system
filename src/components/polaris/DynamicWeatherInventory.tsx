@@ -29,6 +29,7 @@ import {
   ReferenceLine
 } from 'recharts';
 import { FONT_HEAD, FONT_BODY, currency } from '../../data/polarisData';
+import { apiFetch } from '../../utils/api';
 
 interface DynamicWeatherInventoryProps {
   t: any;
@@ -111,7 +112,7 @@ export function DynamicWeatherInventory({
   const handleEvaluateAI = async () => {
     setLoadingEval(true);
     try {
-      const res = await fetch('/api/ai/weather-inventory/evaluate', {
+      const res = await apiFetch('/api/ai/weather-inventory/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,7 +142,7 @@ export function DynamicWeatherInventory({
   const handleRequestSupplyShip = async () => {
     setRequestingShip(true);
     try {
-      const res = await fetch('/api/ai/weather-inventory/request-ship', {
+      const res = await apiFetch('/api/ai/weather-inventory/request-ship', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -254,14 +255,7 @@ export function DynamicWeatherInventory({
           <span>Dynamic Weather-Based Inventory Consumption</span>
         </h2>
         <p style={{ color: t.textDim }} className="text-xs mt-1 leading-relaxed max-w-4xl">
-          <strong className="text-slate-200">What it is now:</strong> The dashboard shows that{' '}
-          <span className="text-amber-400 font-mono font-bold">15,000L of Fuel is remaining</span> with a static{' '}
-          <span className="line-through text-slate-400">4,000L minimum stock alert</span>. &bull;{' '}
-          <strong className="text-sky-400">What AI Automation does:</strong> AI reads the weather forecast. Detecting a severe{' '}
-          <span className="text-cyan-300 font-semibold">-52°C blizzard for the next 3 days</span> (55kt winds, -68°C wind chill), the AI understands that heaters will run at 290% load and fuel will be consumed faster (1,450L/day vs 500L/day). AI{' '}
-          <span className="text-emerald-400 font-semibold">automatically adjusts the minimum stock alert</span> to{' '}
-          <span className="text-emerald-300 font-bold font-mono">8,500L</span> and{' '}
-          <span className="text-emerald-400 font-semibold">sends an early request to the supply ship</span> before sea ice locks out the bay.
+          <strong className="text-slate-200">Operational Directive:</strong> Meteorological sensors and AWOS forecasts project a severe <span className="text-cyan-300 font-semibold">-52°C blizzard over the next 3 days</span> (55kt winds, -68°C wind chill). Base habitat heaters run at 290% continuous duty, accelerating consumption from 500L/day to <span className="text-amber-400 font-bold font-mono">1,450L/day</span>. The AI engine dynamically elevates the depot minimum safety reserve to <span className="text-emerald-300 font-bold font-mono">8,500L</span> and schedules early maritime tanker resupply to avoid ice-lockout.
         </p>
       </div>
 

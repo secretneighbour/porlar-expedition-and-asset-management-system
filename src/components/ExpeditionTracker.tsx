@@ -405,10 +405,10 @@ export const ExpeditionTracker: React.FC<ExpeditionTrackerProps> = ({
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                       <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
-                        WAYPOINT TRANSIT CHECKLIST ({exp.waypoints.filter(w => w.passed).length} / {exp.waypoints.length} CLEARED)
+                        WAYPOINT TRANSIT CHECKLIST ({(Array.isArray(exp.waypoints) ? exp.waypoints.filter(w => w.passed).length : 0)} / {(Array.isArray(exp.waypoints) ? exp.waypoints.length : 0)} CLEARED)
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
-                        {exp.waypoints.length > 0 && (
+                        {Array.isArray(exp.waypoints) && exp.waypoints.length > 0 && (
                           <button
                             type="button"
                             onClick={() => exportWaypointsGpx(exp.name, exp.waypoints)}
@@ -434,7 +434,7 @@ export const ExpeditionTracker: React.FC<ExpeditionTrackerProps> = ({
                         <button
                           type="button"
                           onClick={() => onAdvanceWaypoint(exp.id)}
-                          disabled={exp.waypoints.every((w) => w.passed)}
+                          disabled={!Array.isArray(exp.waypoints) || exp.waypoints.length === 0 || exp.waypoints.every((w) => w.passed)}
                           className="px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-mono font-bold tracking-wide transition-colors shadow-md"
                         >
                           CONFIRM NEXT WAYPOINT REACHED
@@ -443,7 +443,7 @@ export const ExpeditionTracker: React.FC<ExpeditionTrackerProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
-                      {exp.waypoints.map((wp, idx) => (
+                      {(Array.isArray(exp.waypoints) ? exp.waypoints : []).map((wp, idx) => (
                         <div
                           key={wp.id}
                           className={`p-2.5 rounded-lg border flex items-start justify-between gap-2 transition-all ${

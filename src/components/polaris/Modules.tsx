@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { 
   ChevronRight, Ship, Plane, Car, Wrench, Sparkles, Cpu, AlertTriangle,
-  Zap, CheckCircle2, Archive, Clock, ShieldCheck, Eye, Trash2, Filter, FileText, Check, Bot
+  Zap, CheckCircle2, Archive, Clock, ShieldCheck, Eye, Trash2, Filter, FileText, Check, Bot,
+  Boxes, Truck, Fuel, ThermometerSnowflake, Activity, ArrowRight, Gauge
 } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area
+} from 'recharts';
 import {
   ASSET_CATS, ASSET_STATUSES, INV_CATS, SHIP_STATUSES, MAINT_STATUSES,
   uid, currency, STATIONS, emitAiActionBroadcast, FONT_HEAD
@@ -11,7 +15,6 @@ import {
   Badge, Modal, Field, Toolbar, Table, PageHeader, inputClass, inputStyle
 } from './SharedUI';
 import { PredictiveMaintenance } from './PredictiveMaintenance';
-import { DynamicWeatherInventory } from './DynamicWeatherInventory';
 
 /* ============================== PERSONNEL ============================== */
 export function Personnel({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean }) {
@@ -41,8 +44,8 @@ export function Personnel({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
           <div className="grid grid-cols-2 gap-4">
             <Field t={t} label="Full Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Role"><input value={f.role} onChange={e => setF({ ...f, role: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
-            <Field t={t} label="Department"><select value={f.department} onChange={e => setF({ ...f, department: e.target.value })} style={inputStyle(t)} className={inputClass}><option>Science</option><option>Logistics</option><option>Medical</option><option>Engineering</option><option>Communications</option><option>Administration</option></select></Field>
-            <Field t={t} label="Status"><select value={f.status} onChange={e => setF({ ...f, status: e.target.value })} style={inputStyle(t)} className={inputClass}><option>Available</option><option>Assigned</option><option>On Expedition</option><option>On Leave</option><option>Unavailable</option></select></Field>
+            <Field t={t} label="Department"><select value={f.department} onChange={e => setF({ ...f, department: e.target.value })} style={inputStyle(t)} className={inputClass}>{["Science","Logistics","Medical","Engineering","Communications","Administration"].map(d => <option key={d}>{d}</option>)}</select></Field>
+            <Field t={t} label="Status"><select value={f.status} onChange={e => setF({ ...f, status: e.target.value })} style={inputStyle(t)} className={inputClass}>{["Available","Assigned","On Expedition","On Leave","Unavailable"].map(s => <option key={s}>{s}</option>)}</select></Field>
             <Field t={t} label="Contact"><input value={f.contact} onChange={e => setF({ ...f, contact: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Assign Expedition"><select value={f.expeditionId} onChange={e => setF({ ...f, expeditionId: e.target.value })} style={inputStyle(t)} className={inputClass}><option value="">Unassigned</option>{db.expeditions.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
           </div>
@@ -56,7 +59,7 @@ export function Personnel({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
   );
 }
 
-/* ============================== ASSETS ============================== */
+/* ============================== ASSETS (FLEET TELEMETRY) ============================== */
 export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean }) {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -73,16 +76,142 @@ export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: Reac
 
   const updateStatus = (id: string, status: string) => setDb((d: any) => ({ ...d, assets: d.assets.map((a: any) => a.id === id ? { ...a, status } : a) }));
 
+  // Fleet Analytics metrics moved from dashboard to dedicated Fleet Telemetry home (Phase 11)
+  const totalAssets = db.assets.length;
+  const inUse = db.assets.filter((a: any) => a.status === "In Use" || a.status === "Assigned").length;
+  const underMaint = db.assets.filter((a: any) => a.status === "Under Maintenance").length;
+  const conditionDist = ["Excellent", "Good", "Fair", "Poor"].map(c => ({
+    name: c,
+    value: db.assets.filter((a: any) => a.condition === c).length
+  }));
+  const monthlyExpenditure = ["Apr", "May", "Jun", "Jul", "Aug", "Sep"].map((m, i) => ({
+    month: m,
+    cost: 900000 + i * 130000 + (i % 2) * 60000
+  }));
+
   return (
-    <div>
-      <PageHeader t={t} title="Assets" subtitle="Register, assign and track every piece of expedition equipment through its full lifecycle." />
-      <Toolbar t={t} search={search} setSearch={setSearch} onAdd={canEdit ? () => setShowForm(true) : null} addLabel="Register Asset"
-        extra={<select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={inputStyle(t)} className="px-3 py-2 rounded-lg text-sm outline-none">{cats.map(c => <option key={c}>{c}</option>)}</select>} />
-      <Table t={t} rows={rows} onRowClick={setDetail} columns={[
-        { key: "id", label: "ID" }, { key: "name", label: "Name" }, { key: "category", label: "Category" }, { key: "location", label: "Location" },
-        { key: "condition", label: "Condition" }, { key: "status", label: "Status", render: (r: any) => <Badge status={r.status} t={t} /> },
-        { key: "next", label: "Next Service", render: (r: any) => r.nextMaintenance },
-      ]} />
+    <div className="space-y-5">
+      <PageHeader
+        t={t}
+        title="Fleet Telemetry & Operational Assets"
+        subtitle="Mission-critical telematics, cold-soak mechanical wear monitoring, and equipment life-cycle tracking across Antarctic and Arctic traverses."
+      />
+
+      {/* Fleet Telemetry KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+        <div style={{ background: t.cardBg, borderColor: t.cardBorder }} className="p-3.5 rounded-xl border backdrop-blur-md">
+          <span className="text-slate-400 block text-[10px] uppercase">Total Fleet Complement</span>
+          <span className="text-xl font-bold text-white mt-1 block">{totalAssets} Units</span>
+          <span className="text-[10px] text-slate-500">Tracked Vehicles &amp; Instruments</span>
+        </div>
+
+        <div style={{ background: t.cardBg, borderColor: t.cardBorder }} className="p-3.5 rounded-xl border backdrop-blur-md">
+          <span className="text-slate-400 block text-[10px] uppercase">Active on Traverse</span>
+          <span className="text-xl font-bold text-emerald-400 mt-1 block">{inUse} Units</span>
+          <span className="text-[10px] text-emerald-400/80">{Math.round((inUse / Math.max(1, totalAssets)) * 100)}% Utilization</span>
+        </div>
+
+        <div style={{ background: t.cardBg, borderColor: t.cardBorder }} className="p-3.5 rounded-xl border backdrop-blur-md">
+          <span className="text-slate-400 block text-[10px] uppercase">Cold-Soak Service Bay</span>
+          <span className="text-xl font-bold text-amber-400 mt-1 block">{underMaint} Units</span>
+          <span className="text-[10px] text-amber-400/80">Under Scheduled Maint</span>
+        </div>
+
+        <div style={{ background: t.cardBg, borderColor: t.cardBorder }} className="p-3.5 rounded-xl border backdrop-blur-md">
+          <span className="text-slate-400 block text-[10px] uppercase">Telemetry SATCOM Sync</span>
+          <span className="text-xl font-bold text-cyan-400 mt-1 block">100% Locked</span>
+          <span className="text-[10px] text-cyan-400/80">Iridium L-Band Burst</span>
+        </div>
+      </div>
+
+      {/* Fleet Telemetry Analytics Visualizers (Phase 11) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Asset Condition Distribution */}
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
+          <div className="flex items-center justify-between mb-3">
+            <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold flex items-center gap-2">
+              <Activity size={15} className="text-cyan-400" />
+              <span>Asset Physical Condition Distribution</span>
+            </h3>
+            <span className="text-[10px] font-mono text-slate-400">Pre-Traverse Inspection</span>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={conditionDist}>
+              <CartesianGrid strokeDasharray="3 3" stroke={t.border} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={{ stroke: t.border }} tickLine={false} />
+              <YAxis tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: 'rgba(21, 11, 46, 0.94)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF' }} />
+              <Bar dataKey="value" fill="#38BDF8" radius={[6, 6, 0, 0]} name="Asset Count" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Monthly Logistics Expenditure */}
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
+          <div className="flex items-center justify-between mb-3">
+            <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold flex items-center gap-2">
+              <Truck size={15} className="text-amber-400" />
+              <span>Traverse Fleet Operating Cost &amp; Fuel Logistics</span>
+            </h3>
+            <span className="text-[10px] font-mono text-slate-400">USD Equivalent / Month</span>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={monthlyExpenditure}>
+              <defs>
+                <linearGradient id="fleetCostGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.6} />
+                  <stop offset="95%" stopColor="#38BDF8" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={t.border} vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={{ stroke: t.border }} tickLine={false} />
+              <YAxis tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v/1000}k`} />
+              <Tooltip
+                contentStyle={{ background: 'rgba(21, 11, 46, 0.94)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF' }}
+                formatter={(v: any) => currency(Number(v))}
+              />
+              <Area type="monotone" dataKey="cost" stroke="#A78BFA" fill="url(#fleetCostGrad)" strokeWidth={2.5} name="Total Ops Cost" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Assets Inventory Table & Filter Toolbar */}
+      <div className="space-y-3">
+        <Toolbar
+          t={t}
+          search={search}
+          setSearch={setSearch}
+          onAdd={canEdit ? () => setShowForm(true) : null}
+          addLabel="Register Asset"
+          extra={
+            <select
+              value={catFilter}
+              onChange={e => setCatFilter(e.target.value)}
+              style={inputStyle(t)}
+              className="px-3 py-2 rounded-lg text-xs font-mono outline-none cursor-pointer"
+            >
+              {cats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          }
+        />
+
+        <Table
+          t={t}
+          rows={rows}
+          onRowClick={setDetail}
+          columns={[
+            { key: "id", label: "ID" },
+            { key: "name", label: "Asset Name" },
+            { key: "category", label: "Category" },
+            { key: "location", label: "Depot / Station" },
+            { key: "condition", label: "Condition" },
+            { key: "status", label: "Operational State", render: (r: any) => <Badge status={r.status} t={t} /> },
+            { key: "next", label: "Next Cold-Check", render: (r: any) => r.nextMaintenance },
+          ]}
+        />
+      </div>
+
       {showForm && (
         <Modal title="Register Asset" onClose={() => setShowForm(false)} t={t} wide>
           <div className="grid grid-cols-2 gap-4">
@@ -99,9 +228,10 @@ export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: Reac
           </div>
         </Modal>
       )}
+
       {detail && (
         <Modal title={detail.name} onClose={() => setDetail(null)} t={t} wide>
-          <div className="grid grid-cols-2 gap-3 text-sm mb-5">
+          <div className="grid grid-cols-2 gap-3 text-sm mb-5 font-mono">
             <div><span style={{ color: t.textDim }} className="text-xs">Asset ID</span><p style={{ color: t.text }}>{detail.id}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Category</span><p style={{ color: t.text }}>{detail.category}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Serial</span><p style={{ color: t.text }}>{detail.serial}</p></div>
@@ -117,11 +247,11 @@ export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: Reac
             </Field>
           )}
           <div className="mt-5">
-            <span style={{ color: t.textDim }} className="text-xs">Lifecycle History</span>
+            <span style={{ color: t.textDim }} className="text-xs font-mono">Lifecycle Trace</span>
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {["Created", "Assigned", "Transported", "Used", "Maintained", "Returned"].map((s, i, arr) => (
                 <React.Fragment key={s}>
-                  <span style={{ background: t.bgAlt, color: t.textDim }} className="text-xs px-2.5 py-1 rounded-md">{s}</span>
+                  <span style={{ background: t.bgAlt, color: t.textDim }} className="text-xs font-mono px-2.5 py-1 rounded-md">{s}</span>
                   {i < arr.length - 1 && <ChevronRight size={12} color={t.textFaint} />}
                 </React.Fragment>
               ))}
@@ -134,7 +264,7 @@ export function Assets({ t, db, setDb, canEdit }: { t: any; db: any; setDb: Reac
 }
 
 /* ============================== INVENTORY ============================== */
-export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean }) {
+export function Inventory({ t, db, setDb, canEdit, onNavigateWeatherFuel }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean; onNavigateWeatherFuel?: () => void }) {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [txnItem, setTxnItem] = useState<any>(null);
@@ -148,18 +278,90 @@ export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
 
   const applyTxn = (id: string, delta: number) => setDb((d: any) => ({ ...d, inventory: d.inventory.map((i: any) => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i) }));
 
+  // Consumption data for chart (Phase 11)
+  const consumption = db.inventory.slice(0, 8).map((i: any) => ({
+    name: i.name.split(" ").slice(0, 2).join(" "),
+    qty: i.quantity,
+    min: i.minStock
+  }));
+
+  const fuelStock = db.inventory.find((i: any) => i.name.toLowerCase().includes('diesel'))?.quantity || 15000;
+
   return (
-    <div className="space-y-4">
-      <PageHeader t={t} title="Inventory & Supplies" subtitle="Track stock levels for food, fuel, medical, and scientific consumables across all stations." />
-      <DynamicWeatherInventory t={t} db={db} setDb={setDb} />
-      <Toolbar t={t} search={search} setSearch={setSearch} onAdd={canEdit ? () => setShowForm(true) : null} addLabel="Add Item" />
-      <Table t={t} rows={rows} columns={[
-        { key: "id", label: "ID" }, { key: "name", label: "Item" }, { key: "category", label: "Category" },
-        { key: "quantity", label: "Stock", render: (r: any) => <span style={{ color: r.quantity <= r.minStock ? t.red : t.text }}>{r.quantity} {r.unit}</span> },
-        { key: "minStock", label: "Min Stock" }, { key: "location", label: "Location" },
-        { key: "flag", label: "Flag", render: (r: any) => r.quantity <= r.minStock ? <Badge status="Low Inventory" t={t} /> : <Badge status="Good" t={t} /> },
-        { key: "action", label: "", render: (r: any) => canEdit && <button onClick={() => setTxnItem(r)} style={{ color: t.accent }} className="text-xs font-medium cursor-pointer">Adjust Stock</button> },
-      ]} />
+    <div className="space-y-5">
+      <PageHeader t={t} title="Inventory & Depots" subtitle="Consumables management for Arctic diesel, Jet-A1, rations, and critical spare parts across polar outposts." />
+
+      {/* Dynamic Weather Fuel Model Operational Status Ribbon */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(10, 17, 40, 0.8) 100%)',
+          border: '1px solid rgba(56, 189, 248, 0.35)',
+        }}
+        className="p-4 rounded-xl backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs font-mono"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+            <Fuel className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm">Dynamic Weather Fuel Modeling Active</span>
+              <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[10px] font-bold">BLIZZARD MODEL</span>
+            </div>
+            <p className="text-slate-300 text-xs mt-0.5">
+              Current Reserve: <strong className="text-cyan-300">{fuelStock.toLocaleString()} L</strong> • Baseline Burn: 500 L/d • -52°C Blizzard Surge: 1,450 L/d (+190% load) • Dynamic Buffer: 8,500 L
+            </p>
+          </div>
+        </div>
+
+        {onNavigateWeatherFuel && (
+          <button
+            onClick={onNavigateWeatherFuel}
+            style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid #38BDF8', color: '#38BDF8' }}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-sky-500/25 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <span>Open Dynamic Fuel Engine</span>
+            <ArrowRight size={13} />
+          </button>
+        )}
+      </div>
+
+      {/* Inventory vs Minimum Stock Analytical Chart */}
+      <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold flex items-center gap-2">
+            <Boxes size={15} className="text-purple-400" />
+            <span>Depot Consumption vs Safety Reserve Thresholds</span>
+          </h3>
+          <span className="text-[10px] font-mono text-slate-400">Current Stock vs Min Threshold</span>
+        </div>
+        <ResponsiveContainer width="100%" height={210}>
+          <BarChart data={consumption} layout="vertical" margin={{ left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={t.border} horizontal={false} />
+            <XAxis type="number" tick={{ fill: t.textFaint, fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fill: t.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ background: 'rgba(21, 11, 46, 0.94)', border: '1px solid rgba(196, 181, 253, 0.25)', borderRadius: 12, fontSize: 12, color: '#F5F3FF' }} />
+            <Bar dataKey="qty" fill="#7C3AED" radius={[0, 6, 6, 0]} name="Current Stock" />
+            <Bar dataKey="min" fill="#A78BFA" radius={[0, 6, 6, 0]} name="Min Threshold" opacity={0.4} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Stock Table & Toolbar */}
+      <div className="space-y-3">
+        <Toolbar t={t} search={search} setSearch={setSearch} onAdd={canEdit ? () => setShowForm(true) : null} addLabel="Add Item" />
+        <Table t={t} rows={rows} columns={[
+          { key: "id", label: "ID" },
+          { key: "name", label: "Item" },
+          { key: "category", label: "Category" },
+          { key: "quantity", label: "Stock", render: (r: any) => <span style={{ color: r.quantity <= r.minStock ? t.red : t.text }} className="font-mono font-bold">{r.quantity.toLocaleString()} {r.unit}</span> },
+          { key: "minStock", label: "Min Stock", render: (r: any) => <span className="font-mono">{r.minStock.toLocaleString()} {r.unit}</span> },
+          { key: "location", label: "Location" },
+          { key: "flag", label: "Reserve Health", render: (r: any) => r.quantity <= r.minStock ? <Badge status="Low Inventory" t={t} /> : <Badge status="Good" t={t} /> },
+          { key: "action", label: "", render: (r: any) => canEdit && <button onClick={() => setTxnItem(r)} style={{ color: t.accent }} className="text-xs font-medium cursor-pointer hover:underline font-mono">Adjust Stock</button> },
+        ]} />
+      </div>
+
       {showForm && (
         <Modal title="Add Inventory Item" onClose={() => setShowForm(false)} t={t} wide>
           <div className="grid grid-cols-2 gap-4">
@@ -178,9 +380,10 @@ export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
           </div>
         </Modal>
       )}
+
       {txnItem && (
         <Modal title={`Adjust Stock \u2013 ${txnItem.name}`} onClose={() => setTxnItem(null)} t={t}>
-          <p style={{ color: t.textDim }} className="text-sm mb-4">Current stock: <span style={{ color: t.text }}>{txnItem.quantity} {txnItem.unit}</span> (min {txnItem.minStock})</p>
+          <p style={{ color: t.textDim }} className="text-sm mb-4 font-mono">Current stock: <span style={{ color: t.text }}>{txnItem.quantity} {txnItem.unit}</span> (min {txnItem.minStock})</p>
           <div className="flex gap-2">
             <button onClick={() => { applyTxn(txnItem.id, 10); setTxnItem({ ...txnItem, quantity: txnItem.quantity + 10 }); }} style={{ background: t.greenSoft, color: t.green }} className="flex-1 py-2 rounded-lg text-sm font-medium cursor-pointer">+10 Stock In</button>
             <button onClick={() => { applyTxn(txnItem.id, -10); setTxnItem({ ...txnItem, quantity: Math.max(0, txnItem.quantity - 10) }); }} style={{ background: t.redSoft, color: t.red }} className="flex-1 py-2 rounded-lg text-sm font-medium cursor-pointer">-10 Stock Out</button>

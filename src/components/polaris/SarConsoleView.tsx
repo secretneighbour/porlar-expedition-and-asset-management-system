@@ -10,6 +10,7 @@ import { INITIAL_ASSETS } from '../../data/polarData';
 import { ActiveDistressAlert } from '../../types';
 import { PageHeader, Badge, Modal } from './SharedUI';
 import { startEmergencyAlarm, stopEmergencyAlarm, playTacticalChirp, playSuccessChime } from '../../utils/audioAlert';
+import { apiFetch } from '../../utils/api';
 
 interface SarConsoleViewProps {
   t: any;
@@ -44,7 +45,7 @@ export function SarConsoleView({
   const fetchSarStatus = async () => {
     setLoadingStatus(true);
     try {
-      const res = await fetch('/api/ai/sar/status');
+      const res = await apiFetch('/api/ai/sar/status');
       if (res.ok) {
         const data = await res.json();
         setSarStatusDetails(data);

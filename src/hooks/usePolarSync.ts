@@ -15,6 +15,7 @@ import {
   ResearchStation,
   Waypoint,
   PolarisDb,
+  normalizeExpeditions,
 } from '../types';
 import {
   INITIAL_ASSETS,
@@ -45,6 +46,7 @@ import {
   playSuccessChime,
 } from '../utils/audioAlert';
 import { apiFetch, wsUrl } from '../utils/api';
+import { saveLocalData, loadLocalData } from '../platform';
 
 export type SyncConnectionStatus = 'connected' | 'connecting' | 'offline';
 
@@ -66,7 +68,7 @@ export function usePolarSync() {
   const [region, setRegion] = useState<PolarRegion>('antarctica');
   const [conditionLevel, setConditionLevel] = useState<ConditionLevel>('COND-2_CAUTION');
   const [assets, setAssets] = useState<PolarAsset[]>(INITIAL_ASSETS);
-  const [expeditions, setExpeditions] = useState<Expedition[]>(INITIAL_EXPEDITIONS);
+  const [expeditions, setExpeditions] = useState<Expedition[]>(() => normalizeExpeditions(INITIAL_EXPEDITIONS));
   const [supplies, setSupplies] = useState<SupplyItem[]>(INITIAL_SUPPLIES);
   const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>(INITIAL_DISPATCH_LOGS);
   const [activeDistress, setActiveDistress] = useState<ActiveDistressAlert | null>(null);
@@ -75,7 +77,7 @@ export function usePolarSync() {
 
   // POLARIS Main Database Realtime State
   const [polarisDb, setPolarisDbState] = useState<PolarisDb>(() => ({
-    expeditions: INITIAL_POLARIS_EXPEDITIONS,
+    expeditions: normalizeExpeditions(INITIAL_POLARIS_EXPEDITIONS),
     personnel: INITIAL_PERSONNEL,
     assets: INITIAL_POLARIS_ASSETS,
     inventory: INITIAL_INVENTORY,
@@ -187,13 +189,17 @@ export function usePolarSync() {
     if (state.region) setRegion(state.region);
     if (state.conditionLevel) setConditionLevel(state.conditionLevel);
     if (Array.isArray(state.assets)) setAssets(state.assets);
-    if (Array.isArray(state.expeditions)) setExpeditions(state.expeditions);
+    if (Array.isArray(state.expeditions)) setExpeditions(normalizeExpeditions(state.expeditions));
     if (Array.isArray(state.supplies)) setSupplies(state.supplies);
     if (Array.isArray(state.dispatchLogs)) setDispatchLogs(state.dispatchLogs);
     if (Array.isArray(state.stations)) setStations(state.stations);
     if (Array.isArray(state.customWaypoints)) setCustomWaypoints(state.customWaypoints);
     if (state.polarisDb && typeof state.polarisDb === 'object') {
-      setPolarisDbState(state.polarisDb);
+      const normalizedPolarisDb: PolarisDb = {
+        ...state.polarisDb,
+        expeditions: normalizeExpeditions(state.polarisDb.expeditions || []),
+      };
+      setPolarisDbState(normalizedPolarisDb);
     }
 
     // Distress state management
@@ -208,17 +214,33 @@ export function usePolarSync() {
       setActiveDistress(null);
       stopEmergencyAlarm();
     }
+
+    // Persist operational state to offline storage for remote expedition field resilience
+    saveLocalData('operational_state', state).catch(() => {});
   }, []);
+
+  // Hydrate from local cache immediately on startup
+  useEffect(() => {
+    loadLocalData<PolarSystemState>('operational_state').then((cached) => {
+      if (cached) {
+        applyServerState(cached);
+      }
+    });
+  }, [applyServerState]);
 
   const syncPolDb = useCallback(
     (updater: PolarisDb | ((prev: PolarisDb) => PolarisDb)) => {
       setPolarisDbState((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
+        const normalizedNext: PolarisDb = {
+          ...next,
+          expeditions: normalizeExpeditions(next.expeditions || []),
+        };
         sendSyncMessage({
           type: 'UPDATE_POLARIS_DB',
-          payload: next,
+          payload: normalizedNext,
         });
-        return next;
+        return normalizedNext;
       });
     },
     [sendSyncMessage]
@@ -611,14 +633,15 @@ export function usePolarSync() {
     (expeditionId: string) => {
       const exp = expeditions.find((e) => e.id === expeditionId);
       if (!exp) return;
-      const nextWpIndex = exp.waypoints.findIndex((w) => !w.passed);
+      const waypoints = Array.isArray(exp.waypoints) ? exp.waypoints : [];
+      const nextWpIndex = waypoints.findIndex((w) => !w.passed);
       if (nextWpIndex === -1) return;
 
-      const updatedWaypoints = exp.waypoints.map((w, i) =>
+      const updatedWaypoints = waypoints.map((w, i) =>
         i === nextWpIndex ? { ...w, passed: true } : w
       );
 
-      const advancedWp = exp.waypoints[nextWpIndex];
+      const advancedWp = waypoints[nextWpIndex];
       const newDistance = Math.min(
         exp.totalDistanceKm,
         exp.distanceCoveredKm + (advancedWp.distanceFromPrevKm || 150)
@@ -721,7 +744,8 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = [...e.waypoints, newWaypoint];
+            const currentWps = Array.isArray(e.waypoints) ? e.waypoints : [];
+            const updatedWaypoints = [...currentWps, newWaypoint];
             const distAdd = Number(newWaypoint.distanceFromPrevKm) || 45;
             return {
               ...e,
@@ -772,7 +796,8 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = e.waypoints.filter((w) => w.id !== waypointId);
+            const currentWps = Array.isArray(e.waypoints) ? e.waypoints : [];
+            const updatedWaypoints = currentWps.filter((w) => w.id !== waypointId);
             return {
               ...e,
               waypoints: updatedWaypoints,
@@ -788,7 +813,7 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => ({
             ...e,
-            waypoints: e.waypoints.filter((w) => w.id !== waypointId),
+            waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).filter((w) => w.id !== waypointId),
           }))
         );
         sendSyncMessage({
@@ -807,7 +832,8 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = e.waypoints.map((w) =>
+            const currentWps = Array.isArray(e.waypoints) ? e.waypoints : [];
+            const updatedWaypoints = currentWps.map((w) =>
               w.id === updatedWaypoint.id ? updatedWaypoint : w
             );
             return {
@@ -827,7 +853,7 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => ({
             ...e,
-            waypoints: e.waypoints.map((w) => (w.id === updatedWaypoint.id ? updatedWaypoint : w)),
+            waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).map((w) => (w.id === updatedWaypoint.id ? updatedWaypoint : w)),
           }))
         );
         sendSyncMessage({

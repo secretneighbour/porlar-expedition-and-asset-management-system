@@ -652,7 +652,7 @@ export function useSimulation({
               currentLat: Number(interpolatedLat.toFixed(4)),
               currentLng: Number(interpolatedLng.toFixed(4)),
               actualTrack: updatedTrack,
-              waypoints: updatedWps.length > 0 ? updatedWps : exp.waypoints,
+              waypoints: updatedWps.length > 0 ? updatedWps : (Array.isArray(exp.waypoints) ? exp.waypoints : []),
             };
           }
           return exp;

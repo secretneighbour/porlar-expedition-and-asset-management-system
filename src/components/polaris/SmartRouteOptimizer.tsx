@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { FONT_HEAD, FONT_BODY, emitAiActionBroadcast } from '../../data/polarisData';
 import { useGeolocation } from '../../hooks/useGeolocation';
+import { apiFetch } from '../../utils/api';
 import { useRealtimeWeather } from '../../hooks/useRealtimeWeather';
 import { evaluateLocationWeatherHazards, WeatherHazardEvaluation } from '../../utils/weatherHazards';
 import { INITIAL_STATIONS, INITIAL_EXPEDITIONS } from '../../data/polarData';
@@ -170,12 +171,13 @@ export function SmartRouteOptimizer({
 
   // Available candidate waypoints based on active expedition or selected corridor
   const candidateWaypoints: Waypoint[] = useMemo(() => {
-    if (db?.expeditions?.[0]?.waypoints && db.expeditions[0].waypoints.length >= 2) {
-      return db.expeditions[0].waypoints.map((w: any, idx: number) => ({
+    const activeWps = Array.isArray(db?.expeditions?.[0]?.waypoints) ? db.expeditions[0].waypoints : [];
+    if (activeWps.length >= 2) {
+      return activeWps.map((w: any, idx: number) => ({
         ...w,
         sequence: w.sequence || idx + 1,
-        priority: w.priority || (idx === 0 || idx === db.expeditions[0].waypoints.length - 1 ? 'mandatory' : 'normal'),
-        isMandatory: w.isMandatory !== undefined ? w.isMandatory : (idx === 0 || idx === db.expeditions[0].waypoints.length - 1),
+        priority: w.priority || (idx === 0 || idx === activeWps.length - 1 ? 'mandatory' : 'normal'),
+        isMandatory: w.isMandatory !== undefined ? w.isMandatory : (idx === 0 || idx === activeWps.length - 1),
       }));
     }
 
@@ -269,7 +271,7 @@ export function SmartRouteOptimizer({
         stationOrAsset: activeAsset.name,
       });
 
-      const res = await fetch('/api/ai/waypoints/optimize', {
+      const res = await apiFetch('/api/ai/waypoints/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -355,7 +357,7 @@ export function SmartRouteOptimizer({
   const handleRunDailySatelliteScan = async () => {
     setScanning(true);
     try {
-      const res = await fetch('/api/ai/smart-route/optimize', {
+      const res = await apiFetch('/api/ai/smart-route/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -386,7 +388,7 @@ export function SmartRouteOptimizer({
   const handlePushRouteToTrucks = async () => {
     setPushing(true);
     try {
-      const res = await fetch('/api/ai/smart-route/push-to-trucks', {
+      const res = await apiFetch('/api/ai/smart-route/push-to-trucks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

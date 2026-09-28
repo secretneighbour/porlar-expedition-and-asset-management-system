@@ -163,8 +163,9 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
         setLngInput(Number(initialLng).toFixed(4));
       } else {
         const targetExp = expeditions.find((e) => e.id === (activeExpeditionProp || expeditions[0]?.id));
-        if (targetExp && targetExp.waypoints.length > 0) {
-          const lastWp = targetExp.waypoints[targetExp.waypoints.length - 1];
+        const targetWps = Array.isArray(targetExp?.waypoints) ? targetExp.waypoints : [];
+        if (targetWps.length > 0) {
+          const lastWp = targetWps[targetWps.length - 1];
           setLatInput(lastWp.lat.toFixed(4));
           setLngInput(lastWp.lng.toFixed(4));
           setElevationInput(lastWp.elevationM.toString());
@@ -193,8 +194,9 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
 
     // If an expedition is selected, adjust coordinates
     const selectedExp = expeditions.find((e) => e.id === targetExpeditionId);
-    if (selectedExp && selectedExp.waypoints.length > 0) {
-      const lastWp = selectedExp.waypoints[selectedExp.waypoints.length - 1];
+    const selectedWps = Array.isArray(selectedExp?.waypoints) ? selectedExp.waypoints : [];
+    if (selectedWps.length > 0) {
+      const lastWp = selectedWps[selectedWps.length - 1];
       const nextLat = (lastWp.lat - (Math.random() * 0.3 + 0.1)).toFixed(4);
       const nextLng = (lastWp.lng + (Math.random() * 0.5 + 0.1)).toFixed(4);
       setLatInput(nextLat);
@@ -401,7 +403,7 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
                 </label>
                 {selectedExpedition && (
                   <span className="text-[10px] text-sky-400 font-bold">
-                    Currently has {selectedExpedition.waypoints.length} waypoints
+                    Currently has {Array.isArray(selectedExpedition?.waypoints) ? selectedExpedition.waypoints.length : 0} waypoints
                   </span>
                 )}
               </div>
@@ -414,7 +416,7 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
                 >
                   {expeditions.map((exp) => (
                     <option key={exp.id} value={exp.id}>
-                      [{exp.code}] {exp.name} — {exp.leader} ({exp.waypoints.length} WPs, {exp.distanceCoveredKm}/{exp.totalDistanceKm}km)
+                      [{exp.code}] {exp.name} — {exp.leader} ({Array.isArray(exp.waypoints) ? exp.waypoints.length : 0} WPs, {exp.distanceCoveredKm}/{exp.totalDistanceKm}km)
                     </option>
                   ))}
                 </select>

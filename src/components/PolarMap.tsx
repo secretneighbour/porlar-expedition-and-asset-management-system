@@ -746,8 +746,9 @@ export const PolarMap: React.FC<PolarMapProps> = ({
           {showTraverses && (
             <g id="traverse-routes">
               {regionalExpeditions.map((exp) => {
-                if (!exp.waypoints || exp.waypoints.length === 0) return null;
-                const points = exp.waypoints.map((wp) => projectCoordinates(wp.lat, wp.lng));
+                const waypoints = Array.isArray(exp.waypoints) ? exp.waypoints : [];
+                if (waypoints.length === 0) return null;
+                const points = waypoints.map((wp) => projectCoordinates(wp.lat, wp.lng));
                 const pathD = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`, '');
                 const isSelected = selectedExpeditionId === exp.id;
 
@@ -768,7 +769,7 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                     />
 
                     {/* Waypoint Nodes */}
-                    {exp.waypoints.map((wp, idx) => {
+                    {waypoints.map((wp, idx) => {
                       const pt = points[idx];
                       return (
                         <g

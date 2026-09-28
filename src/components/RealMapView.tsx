@@ -27,7 +27,12 @@ import {
   RefreshCw,
   ArrowRight,
   ShieldCheck,
-  X
+  X,
+  ChevronDown,
+  SlidersHorizontal,
+  Settings2,
+  Check,
+  Map as MapIcon
 } from 'lucide-react';
 import {
   PolarRegion,
@@ -44,6 +49,22 @@ import {
 import { getSubZeroDangerZones, SubZeroDangerZone } from '../utils/dangerZones';
 import { evaluateWaypointProgress, formatDistanceKm, DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM } from '../utils/waypointTracing';
 import { emitAiActionBroadcast } from '../data/polarisData';
+import {
+  calculateBearing,
+  clusterTacticalWaypoints,
+  SmoothMarkerTracker,
+  WaypointCluster,
+} from '../utils/tacticalMapTracking';
+import {
+  loadAddVectorLayers,
+  getCoastlineStyle,
+  getGroundingLineStyle,
+  createStationDiamondIcon,
+  getAddLayerCacheStatus,
+  AddCacheStatus,
+} from '../utils/addFeatureService';
+import { PolarAttributionFooter } from './PolarAttributionFooter';
+import { apiFetch } from '../utils/api';
 
 interface RealMapViewProps {
   region: PolarRegion;
@@ -150,8 +171,10 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   const heatmapLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const userGpsMarkerRef = useRef<L.LayerGroup | null>(null);
   const currentTileLayerRef = useRef<L.TileLayer | null>(null);
+  const assetTrackersRef = useRef<Map<string, { marker: L.Marker; tracker: SmoothMarkerTracker }>>(new Map());
+  const convoyTrackersRef = useRef<Map<string, { marker: L.Marker; tracker: SmoothMarkerTracker }>>(new Map());
 
-  const [mapType, setMapType] = useState<'satellite' | 'dark' | 'terrain' | 'osm' | 'google_hybrid'>('satellite');
+  const [mapType, setMapType] = useState<'dark' | 'satellite' | 'terrain' | 'tactical_canvas' | 'osm'>('dark');
   const [localHeatmapActive, setLocalHeatmapActive] = useState<boolean>(true);
   const [dangerFilter, setDangerFilter] = useState<'all' | 'extreme' | 'lethal'>('all');
   const [followMode, setFollowMode] = useState<boolean>(false);
@@ -159,11 +182,24 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   const [arrivalRadiusKm, setArrivalRadiusKm] = useState<number>(DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM);
   const [showWaypointLabels, setShowWaypointLabels] = useState<boolean>(true);
 
+  // ADD Vector Overlay States
+  const addLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const [showAddLayers, setShowAddLayers] = useState<boolean>(true);
+  const [addLoading, setAddLoading] = useState<boolean>(false);
+  const [addCacheStatus, setAddCacheStatus] = useState<AddCacheStatus>(getAddLayerCacheStatus());
+  const [isGnssWarningDismissed, setIsGnssWarningDismissed] = useState<boolean>(false);
+
+  // Tactical HUD Map Refinement States: Progressive disclosure, Clustering, Zoom awareness
+  const [currentZoom, setCurrentZoom] = useState<number>(4);
+  const [showTelemetryOverlay, setShowTelemetryOverlay] = useState<boolean>(false);
+  const [enableClustering, setEnableClustering] = useState<boolean>(true);
+
   // Gemini AI Waypoint Route Optimization States
   const [localProposedRoute, setLocalProposedRoute] = useState<WaypointOptimizationResult | null>(null);
   const [optimizingRoute, setOptimizingRoute] = useState<boolean>(false);
   const [optimizerError, setOptimizerError] = useState<string | null>(null);
   const [showProposedPanel, setShowProposedPanel] = useState<boolean>(true);
+  const [activeMenu, setActiveMenu] = useState<'none' | 'style' | 'overlays' | 'jump' | 'tools'>('none');
 
   const activeProposedRoute = proposedRouteProp !== undefined ? proposedRouteProp : localProposedRoute;
 
@@ -205,22 +241,29 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Initial tile layer (ESRI World Imagery by default)
-    const initialTile = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    // Initial tile layer (Esri World Dark Gray Canvas by default - watermark-free and polar appropriate)
+    const initialTile = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noreferrer">Esri World Imagery</a> | Earthstar, USGS, NASA Polar Data',
+      maxNativeZoom: 16,
+      attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noreferrer">Esri</a> | &copy; OpenStreetMap contributors',
       noWrap: false,
     }).addTo(map);
     currentTileLayerRef.current = initialTile;
 
-    // Create data layers (Heatmap sits beneath markers)
+    // Create data layers (Heatmap sits beneath vector overlays, markers sit above)
     heatmapLayerGroupRef.current = L.layerGroup().addTo(map);
+    addLayerGroupRef.current = L.layerGroup().addTo(map);
     layerGroupRef.current = L.layerGroup().addTo(map);
     userGpsMarkerRef.current = L.layerGroup().addTo(map);
 
     // Auto-disable follow mode when operator manually pans/drags the map
     map.on('dragstart', () => {
       setFollowMode(false);
+    });
+
+    // Zoom listener for dynamic zoom-aware styling and clustering
+    map.on('zoomend', () => {
+      setCurrentZoom(map.getZoom());
     });
 
     // Map Click Listener to Set Waypoint / Establish Base
@@ -338,6 +381,10 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
+      assetTrackersRef.current.forEach((entry) => entry.tracker.destroy());
+      assetTrackersRef.current.clear();
+      convoyTrackersRef.current.forEach((entry) => entry.tracker.destroy());
+      convoyTrackersRef.current.clear();
       try {
         map.remove();
       } catch (e) {}
@@ -377,34 +424,42 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       currentTileLayerRef.current = null;
     }
 
+    if (mapType === 'tactical_canvas') {
+      if (mapContainerRef.current) {
+        mapContainerRef.current.style.backgroundColor = '#060B18';
+      }
+      triggerInvalidateSize();
+      return;
+    }
+
     let tileUrl = '';
     let attribution = '';
     let maxZoom = 19;
+    let maxNativeZoom = 18;
     let subdomains: string[] | string = 'abc';
 
-    if (mapType === 'satellite') {
+    if (mapType === 'dark') {
+      tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+      attribution = '&copy; <a href="https://www.esri.com" target="_blank" rel="noreferrer">Esri Dark Gray Canvas</a> | &copy; OpenStreetMap contributors';
+      maxNativeZoom = 16;
+    } else if (mapType === 'satellite') {
       tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
       attribution = '&copy; <a href="https://www.esri.com" target="_blank" rel="noreferrer">Esri World Imagery</a> | Earthstar, USGS, NASA Polar Data';
-    } else if (mapType === 'dark') {
-      tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-      attribution = '&copy; <a href="https://carto.com/attributions">CARTO</a> | &copy; OpenStreetMap contributors';
-      subdomains = 'abcd';
+      maxNativeZoom = 18;
     } else if (mapType === 'terrain') {
       tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
       attribution = '&copy; <a href="https://www.esri.com">Esri Topo</a>, DeLorme, USGS, NPS';
-    } else if (mapType === 'google_hybrid' && googleMapsApiKey) {
-      tileUrl = `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${encodeURIComponent(googleMapsApiKey)}`;
-      attribution = '&copy; <a href="https://maps.google.com">Google Maps Platform</a> Imagery';
-      maxZoom = 20;
+      maxNativeZoom = 18;
     } else {
-      tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-      attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-      subdomains = 'abcd';
+      tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+      maxNativeZoom = 19;
     }
 
     try {
       const newLayer = L.tileLayer(tileUrl, {
         maxZoom,
+        maxNativeZoom,
         attribution,
         subdomains,
         noWrap: false,
@@ -415,7 +470,68 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     } catch (err) {
       console.warn('Failed to attach tile layer:', err);
     }
-  }, [mapInstance, mapType, googleMapsApiKey, triggerInvalidateSize]);
+  }, [mapInstance, mapType, triggerInvalidateSize]);
+
+  // ADD Vector Overlay Renderer (Coastlines, Grounding Lines & Scientific Research Bases)
+  const renderAddLayers = useCallback(async () => {
+    if (!mapInstance || !addLayerGroupRef.current) return;
+    const group = addLayerGroupRef.current;
+    group.clearLayers();
+
+    if (!showAddLayers) return;
+    if (mapInstance.getZoom() < 2) return;
+
+    setAddLoading(true);
+    try {
+      const { coastline, groundingLine, stations: addStations, status } = await loadAddVectorLayers();
+      setAddCacheStatus(status);
+
+      // 1. Coastlines: thin cyan/neon line (color: '#00ffff', weight: 1.5, opacity: 0.8)
+      if (coastline && coastline.features.length > 0) {
+        group.addLayer(L.geoJSON(coastline as any, { style: getCoastlineStyle() }));
+      }
+
+      // 2. Ice-Shelf Grounding Lines: distinct dashed amber line (color: '#ffaa00', dashArray: '5, 5')
+      if (groundingLine && groundingLine.features.length > 0) {
+        group.addLayer(L.geoJSON(groundingLine as any, { style: getGroundingLineStyle() }));
+      }
+
+      // 3. Research Stations: clean diamond tactical markers
+      if (addStations && addStations.features.length > 0) {
+        addStations.features.forEach((feature) => {
+          const [lng, lat] = feature.geometry.coordinates;
+          const [safeLat, safeLng] = safeMercatorLatLng(lat, lng);
+          const p = feature.properties;
+          const marker = L.marker([safeLat, safeLng], {
+            icon: createStationDiamondIcon(p.name || 'Station', p.country || 'International'),
+          });
+          const popup = `
+            <div style="font-family: ui-monospace, monospace; padding: 4px; min-width: 220px; color: #f1f5f9;">
+              <div style="font-weight: 800; font-size: 12px; color: #00ffff; margin-bottom: 4px; border-bottom: 1px solid rgba(0,255,255,0.3); padding-bottom: 2px;">
+                ◆ ${p.name || 'RESEARCH BASE'}
+              </div>
+              <div style="font-size: 11px; line-height: 1.5; color: #cbd5e1;">
+                <div>SOVEREIGNTY: <strong>${p.country || 'SCAR Treaty'}</strong></div>
+                <div>CALLSIGN: <span style="color: #00ffff;">${p.code || 'POLARIS-STN'}</span></div>
+                <div>ELEVATION: <span style="color: #ffaa00;">${p.elevationM || '15'}m MSL</span></div>
+                <div>POPULATION: Winter ${p.winterPop || 0} / Summer ${p.summerPop || 0}</div>
+              </div>
+            </div>
+          `;
+          marker.bindPopup(popup, { className: 'tactical-hud-popup glassmorphism-popup', maxWidth: 280 });
+          group.addLayer(marker);
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load ADD layers in RealMapView:', e);
+    } finally {
+      setAddLoading(false);
+    }
+  }, [mapInstance, showAddLayers]);
+
+  useEffect(() => {
+    renderAddLayers();
+  }, [renderAddLayers]);
 
   // 5. Sync Focus Coordinates
   useEffect(() => {
@@ -473,7 +589,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             background: ${weather?.isKatabaticStorm ? '#b91c1c' : '#0284c7'};
             border: 2px solid #ffffff;
             border-radius: 50%;
-            box-shadow: 0 0 12px ${weather?.isKatabaticStorm ? 'rgba(185,28,28,0.9)' : 'rgba(2,132,199,0.9)'};
+            box-shadow: 0 0 14px ${weather?.isKatabaticStorm ? 'rgba(185,28,28,0.9)' : 'rgba(2,132,199,0.9)'};
             color: #ffffff;
             font-weight: bold;
             font-size: 10px;
@@ -481,7 +597,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           ">
             ${st.code.slice(0, 3)}
           </div>
-          ${weather ? `
+          ${weather && showTelemetryOverlay ? `
             <div style="
               background: ${weather.isKatabaticStorm ? '#7f1d1d' : 'rgba(15, 23, 42, 0.92)'};
               color: #e0f2fe;
@@ -508,40 +624,68 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       });
 
       const marker = L.marker([safeLat, safeLng], { icon });
+
+      // Tactical Tooltip on hover
+      marker.bindTooltip(
+        `<b>${st.name} [${st.code}]</b><br/>${weather ? `AWOS: ${weather.tempC}°C • Wind: ${weather.windSpeedKts}kt (${weather.windDirectionCardinal})` : `Runway: ${st.runwayType}`}`,
+        { className: 'tactical-hud-tooltip', sticky: true }
+      );
+
+      // Glassmorphic Tactical Popup
       marker.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 240px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 800; font-size: 13px; color: #0369a1; margin-bottom: 2px;">${st.name}</div>
-          <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">[${st.code}] • ${st.country}</div>
-          
+        <div style="font-family: ui-monospace, monospace; min-width: 260px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">
+            <div>
+              <div style="font-weight: 900; font-size: 13px; color: #38bdf8;">🏢 ${st.name}</div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 1px;">[${st.code}] • ${st.country}</div>
+            </div>
+            <span style="font-size: 8.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(2, 132, 199, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4);">
+              PWR: ${st.powerStatus.toUpperCase()}
+            </span>
+          </div>
+
           ${weather ? `
-            <div style="margin-bottom: 8px; padding: 6px; background: #0f172a; color: #f8fafc; border-radius: 6px; border: 1px solid #0284c7;">
-              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10.5px; margin-bottom: 4px;">
+            <div style="margin-bottom: 8px; padding: 6px 8px; background: rgba(15, 23, 42, 0.85); color: #f8fafc; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.3);">
+              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10px; margin-bottom: 4px;">
                 <span style="color: #38bdf8;">LIVE AWOS SENSOR</span>
-                <span style="color: #4ade80;">REAL-TIME</span>
+                <span style="color: #4ade80;">TELEMETRY ACTIVE</span>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 11px; font-family: monospace;">
-                <div>Air Temp: <strong style="color: #7dd3fc;">${weather.tempC}°C</strong></div>
-                <div>Windchill: <strong style="color: #38bdf8;">${weather.apparentTempC}°C</strong></div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 10.5px;">
+                <div>Air: <strong style="color: #7dd3fc;">${weather.tempC}°C</strong></div>
+                <div>Chill: <strong style="color: #38bdf8;">${weather.apparentTempC}°C</strong></div>
                 <div>Wind: <strong style="color: #fbbf24;">${weather.windSpeedKts} kts</strong></div>
                 <div>Dir: <strong style="color: #f1f5f9;">${weather.windDirectionCardinal}</strong></div>
                 <div>Baro: <strong>${weather.pressureHpa} hPa</strong></div>
-                <div>Visibility: <strong>${weather.visibilityKm} km</strong></div>
+                <div>Vis: <strong>${weather.visibilityKm} km</strong></div>
               </div>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
-                ${weather.weatherDescription} • Freeze risk: <strong style="color: ${weather.frostbiteRiskLevel === 'Extreme' ? '#f87171' : '#fde047'}">${weather.frostbiteRiskTime}</strong>
+              <div style="font-size: 9.5px; color: #94a3b8; margin-top: 4px;">
+                ${weather.weatherDescription} • Freeze: <strong style="color: ${weather.frostbiteRiskLevel === 'Extreme' ? '#f87171' : '#fde047'};">${weather.frostbiteRiskTime}</strong>
               </div>
             </div>
           ` : ''}
 
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Position:</strong> ${st.lat.toFixed(4)}°, ${st.lng.toFixed(4)}° (${st.elevationM}m AMSL)</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Personnel:</strong> ${st.winterPopulation} Winter / ${st.summerPopulation} Summer</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Runway:</strong> ${st.runwayType}</div>
-          <div style="font-size: 11px; margin-bottom: 6px;"><strong>Fuel Reserve:</strong> ${(st.fuelReserveL / 1000).toFixed(0)}k Liters</div>
-          <div style="font-size: 10px; background: #f1f5f9; padding: 4px 6px; border-radius: 4px; color: #0369a1; font-weight: bold;">
-            STATUS: POWER ${st.powerStatus.toUpperCase()}
+          <div style="font-size: 10.5px; color: #cbd5e1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;">
+            <div><span style="color: #64748b;">ELEV:</span> <strong>${st.elevationM}m</strong></div>
+            <div><span style="color: #64748b;">RUNWAY:</span> <strong>${st.runwayType}</strong></div>
+            <div><span style="color: #64748b;">CREW:</span> <strong>${st.winterPopulation}W/${st.summerPopulation}S</strong></div>
+            <div><span style="color: #64748b;">FUEL:</span> <strong>${(st.fuelReserveL / 1000).toFixed(0)}k L</strong></div>
           </div>
+
+          <button id="select-station-btn-${st.id}" style="width: 100%; background: #0284c7; color: #ffffff; border: none; padding: 6px; border-radius: 4px; font-size: 10px; font-weight: 800; cursor: pointer;">
+            SELECT BASE STATION
+          </button>
         </div>
-      `);
+      `, { className: 'tactical-hud-popup' });
+
+      marker.on('popupopen', () => {
+        const btn = document.getElementById(`select-station-btn-${st.id}`);
+        if (btn && onSelectStation) {
+          btn.onclick = () => {
+            onSelectStation(st);
+            mapInstance.closePopup();
+          };
+        }
+      });
 
       marker.on('click', () => {
         if (onSelectStation) onSelectStation(st);
@@ -550,9 +694,24 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       layerGroup.addLayer(marker);
     });
 
+    // Collect all tactical waypoints from active expeditions and custom waypoints
+    interface TacticalWaypointItem extends Waypoint {
+      expId?: string;
+      expName?: string;
+      expCode?: string;
+      seq: number;
+      totalWaypoints: number;
+      isCurrent: boolean;
+      isCompleted: boolean;
+      proposedIdx: number;
+      arrivalRadiusKm: number;
+      isCustom?: boolean;
+    }
+
+    const allTacticalWaypoints: TacticalWaypointItem[] = [];
+
     // 2. Active Expeditions and Waypoint Tracks with Traveled/Remaining Tracing
     expeditions.forEach((exp) => {
-      // Evaluate live waypoint progress, sequential ETAs, and split paths
       const progress = evaluateWaypointProgress(
         exp.currentLat,
         exp.currentLng,
@@ -560,12 +719,11 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         arrivalRadiusKm
       );
 
-      // Auto-trigger waypoint arrival callback if newly reached
       if (progress.newlyReachedWaypoint && onUpdateWaypoint) {
         onUpdateWaypoint(progress.newlyReachedWaypoint, exp.id);
       }
 
-      // 2a. Actual Traveled Track History (GPS Breadcrumbs from telemetry/simulation)
+      // 2a. Actual Traveled Track History
       if (showGpsTrack && exp.actualTrack && exp.actualTrack.length > 1) {
         const actualLatLngs: [number, number][] = exp.actualTrack.map((pt) => safeMercatorLatLng(pt.lat, pt.lng));
         const actualTrackLine = L.polyline(actualLatLngs, {
@@ -575,15 +733,15 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           opacity: 0.85,
         });
         actualTrackLine.bindTooltip(`Actual GPS Breadcrumbs: ${exp.name} (${exp.actualTrack.length} fixes)`, {
+          className: 'tactical-hud-tooltip',
           sticky: true,
         });
         layerGroup.addLayer(actualTrackLine);
       }
 
-      // 2b. Traveled / Completed Route Polyline (Solid Emerald / Cyan with glow)
+      // 2b. Traveled / Completed Route Polyline
       if (progress.traveledPathCoords.length > 1) {
         const safeTraveled: [number, number][] = progress.traveledPathCoords.map(([lat, lng]) => safeMercatorLatLng(lat, lng));
-        // Glow underlayer
         const glowLine = L.polyline(safeTraveled, {
           color: '#059669',
           weight: 7,
@@ -592,18 +750,17 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         });
         layerGroup.addLayer(glowLine);
 
-        // Core solid line
         const traveledLine = L.polyline(safeTraveled, {
           color: '#10b981',
           weight: 4,
           opacity: 0.95,
           lineCap: 'round',
         });
-        traveledLine.bindTooltip(`Traveled Route: ${exp.name}`, { sticky: true });
+        traveledLine.bindTooltip(`Traveled Route: ${exp.name}`, { className: 'tactical-hud-tooltip', sticky: true });
         layerGroup.addLayer(traveledLine);
       }
 
-      // 2c. Remaining Planned Route Polyline (Dashed Sky / Amber)
+      // 2c. Remaining Planned Route Polyline
       if (progress.remainingPathCoords.length > 1) {
         const safeRemaining: [number, number][] = progress.remainingPathCoords.map(([lat, lng]) => safeMercatorLatLng(lat, lng));
         const remainingLine = L.polyline(safeRemaining, {
@@ -612,11 +769,11 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           dashArray: '8, 8',
           opacity: 0.85,
         });
-        remainingLine.bindTooltip(`Remaining Path: ${exp.name}`, { sticky: true });
+        remainingLine.bindTooltip(`Remaining Path: ${exp.name}`, { className: 'tactical-hud-tooltip', sticky: true });
         layerGroup.addLayer(remainingLine);
       }
 
-      // 2d. Gemini AI Proposed Route Polyline (Glowing Violet Dashed with comparative badge markers)
+      // 2d. Gemini AI Proposed Route Polyline
       if (
         activeProposedRoute &&
         activeProposedRoute.orderedWaypoints &&
@@ -626,31 +783,31 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           safeMercatorLatLng(wp.lat, wp.lng)
         );
 
-        // Violet outer glow
         const proposedGlow = L.polyline(proposedLatLngs, {
-          color: '#a855f7',
-          weight: 8,
-          opacity: 0.4,
+          color: '#00f2fe',
+          weight: 9,
+          opacity: 0.5,
           lineCap: 'round',
+          className: 'tactical-route-glow',
         });
         layerGroup.addLayer(proposedGlow);
 
-        // Violet core dashed line
         const proposedLine = L.polyline(proposedLatLngs, {
-          color: '#c084fc',
-          weight: 4.5,
-          dashArray: '6, 6',
+          color: '#10b981',
+          weight: 4,
+          dashArray: '8, 6',
           opacity: 0.95,
           lineCap: 'round',
+          className: 'tactical-route-core',
         });
         proposedLine.bindTooltip(
-          `<b>🤖 PROPOSED AI ROUTE: ${activeProposedRoute.estimatedDistanceKm} km</b><br/>Risk: ${activeProposedRoute.riskLevel} (${activeProposedRoute.mode === 'gemini_ai_live' ? 'Gemini 3.8 Flash' : activeProposedRoute.mode === 'gemini_ai_cached' ? 'AI Cached' : 'Deterministic Heuristic'})<br/><i>Click "Accept & Apply" in panel to make active</i>`,
-          { sticky: true }
+          `<b>🧭 A* OPTIMIZED POLAR ROUTE: ${activeProposedRoute.estimatedDistanceKm} km</b><br/>Risk: ${activeProposedRoute.riskLevel} (${activeProposedRoute.mode === 'gemini_ai_live' ? 'Gemini 3.8 Flash' : 'A* Cost Matrix'})<br/><i>Click "Accept & Apply" in panel to make active</i>`,
+          { className: 'tactical-hud-tooltip', sticky: true }
         );
         layerGroup.addLayer(proposedLine);
       }
 
-      // Render Numbered Waypoints along the convoy track
+      // Collect expedition waypoints and render arrival geofence ring
       progress.enrichedWaypoints.forEach((wp, wpIdx) => {
         const [wpLat, wpLng] = safeMercatorLatLng(wp.lat, wp.lng);
         const isCurrent = wp.status === 'current';
@@ -658,7 +815,6 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         const seq = wp.sequence ?? (wpIdx + 1);
         const proposedIdx = activeProposedRoute ? activeProposedRoute.recommendedOrder.indexOf(wp.id) : -1;
 
-        // Active waypoint arrival radius geofence ring
         if (isCurrent) {
           const arrivalRing = L.circle([wpLat, wpLng], {
             radius: (wp.arrivalRadiusKm || arrivalRadiusKm) * 1000,
@@ -668,167 +824,415 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             weight: 1.5,
             dashArray: '4, 4',
           });
-          arrivalRing.bindTooltip(`Arrival Radius: ${wp.arrivalRadiusKm || arrivalRadiusKm} km`, { sticky: true });
+          arrivalRing.bindTooltip(`Arrival Radius: ${wp.arrivalRadiusKm || arrivalRadiusKm} km`, { className: 'tactical-hud-tooltip', sticky: true });
           layerGroup.addLayer(arrivalRing);
         }
 
-        const bgColor = isCompleted ? '#10b981' : isCurrent ? '#0284c7' : '#0f172a';
-        const borderColor = isCompleted ? '#059669' : isCurrent ? '#38bdf8' : wp.hazardNote ? '#f59e0b' : '#64748b';
+        allTacticalWaypoints.push({
+          ...wp,
+          expId: exp.id,
+          expName: exp.name,
+          expCode: exp.code,
+          seq,
+          totalWaypoints: progress.enrichedWaypoints.length,
+          isCurrent,
+          isCompleted,
+          proposedIdx,
+          arrivalRadiusKm: wp.arrivalRadiusKm || arrivalRadiusKm,
+          isCustom: false,
+        });
+      });
 
-        const wpPinHtml = `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-            ${isCurrent ? `
-              <div style="
-                position: absolute;
-                width: 32px;
-                height: 32px;
-                top: -3px;
-                left: 24px;
-                border-radius: 50%;
-                background: rgba(56, 189, 248, 0.3);
-                border: 1.5px solid #38bdf8;
-                box-shadow: 0 0 14px rgba(56, 189, 248, 0.9);
-              "></div>
-            ` : ''}
+      // 2e. Expedition Convoy Crawler with Smooth Position Interpolation & Heading Vector Arrow
+      const [headLat, headLng] = safeMercatorLatLng(exp.currentLat, exp.currentLng);
+      const isEmergency = exp.phase === 'emergency_extraction';
+      const accent = isEmergency ? '#f43f5e' : '#d97706';
+      const bg = isEmergency ? '#9f1239' : '#b45309';
 
+      const currentWp = (exp.waypoints || []).find((w) => w.status === 'current') || (exp.waypoints || [])[0];
+      const initialHeading = currentWp ? calculateBearing(exp.currentLat, exp.currentLng, currentWp.lat, currentWp.lng) : 0;
+
+      let convoyEntry = convoyTrackersRef.current.get(exp.id);
+      if (convoyEntry) {
+        convoyEntry.tracker.updateTarget(headLat, headLng, 800);
+        layerGroup.addLayer(convoyEntry.marker);
+      } else {
+        const convoyHtml = `
+          <div class="tactical-tracker-transition" id="convoy-pin-${exp.id}" style="position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
+            <!-- Rotating Directional Vector Arrow -->
+            <div class="convoy-heading-arrow" style="position: absolute; width: 36px; height: 36px; transform: rotate(${Math.round(initialHeading)}deg); pointer-events: none; transition: transform 0.4s ease-out;">
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                <polygon points="18,1 23,12 18,9 13,12" fill="${accent}" style="filter: drop-shadow(0 0 5px ${accent});" />
+              </svg>
+            </div>
+            <!-- Core Convoy Crawler Badge -->
             <div style="
               position: relative;
               display: flex;
               align-items: center;
               justify-content: center;
-              width: 26px;
-              height: 26px;
-              background: ${bgColor};
-              border: 2px solid ${borderColor};
-              border-radius: 50%;
-              box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+              width: 24px;
+              height: 24px;
+              background: ${bg};
+              border: 2px solid #ffffff;
+              border-radius: 6px;
+              box-shadow: 0 0 14px ${isEmergency ? 'rgba(225,29,72,0.9)' : 'rgba(217,119,6,0.9)'};
               color: #ffffff;
-              font-family: monospace;
-              font-weight: 900;
-              font-size: ${isCompleted ? '13px' : '11px'};
-              z-index: 10;
+              font-weight: 800;
+              font-size: 9px;
+              font-family: ui-monospace, monospace;
+              z-index: 5;
             ">
-              ${isCompleted ? '✓' : seq}
-
-              ${proposedIdx !== -1 ? `
-                <div style="
-                  position: absolute;
-                  top: -8px;
-                  right: -10px;
-                  background: #7c3aed;
-                  border: 1.5px solid #e9d5ff;
-                  border-radius: 999px;
-                  padding: 1px 4px;
-                  font-size: 8px;
-                  font-weight: 900;
-                  color: #ffffff;
-                  white-space: nowrap;
-                  box-shadow: 0 0 8px rgba(124, 58, 237, 0.9);
-                  z-index: 25;
-                ">
-                  AI#${proposedIdx + 1}
-                </div>
-              ` : ''}
+              ${exp.code.slice(0, 4)}
             </div>
-
-            ${showWaypointLabels ? `
-              <div style="
-                margin-top: 2px;
-                background: rgba(15, 23, 42, 0.94);
-                border: 1px solid ${isCurrent ? '#38bdf8' : 'rgba(148, 163, 184, 0.3)'};
-                border-radius: 4px;
-                padding: 1px 5px;
-                white-space: nowrap;
-                font-family: monospace;
-                font-size: 9.5px;
-                font-weight: 700;
-                color: ${isCurrent ? '#38bdf8' : isCompleted ? '#4ade80' : '#cbd5e1'};
-                box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-                pointer-events: none;
-              ">
-                ${wp.name || `WP-${seq}`}
-              </div>
-            ` : ''}
           </div>
         `;
 
-        const wpIcon = L.divIcon({
-          html: wpPinHtml,
-          className: `custom-tactical-waypoint-marker wp-seq-${seq}`,
-          iconSize: [80, 52],
-          iconAnchor: [40, 13],
+        const convoyIcon = L.divIcon({
+          html: convoyHtml,
+          className: 'custom-convoy-pin',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
         });
 
-        const wpMarker = L.marker([wpLat, wpLng], { icon: wpIcon });
+        const convoyMarker = L.marker([headLat, headLng], { icon: convoyIcon });
+        const tracker = new SmoothMarkerTracker(convoyMarker, headLat, headLng, initialHeading, (_lat, _lng, curHeading) => {
+          const el = document.querySelector(`#convoy-pin-${exp.id} .convoy-heading-arrow`) as HTMLElement | null;
+          if (el) {
+            el.style.transform = `rotate(${Math.round(curHeading)}deg)`;
+          }
+        });
 
-        wpMarker.bindPopup(`
-          <div style="font-family: ui-monospace, monospace; min-width: 260px; color: #0f172a; padding: 4px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+        convoyMarker.bindTooltip(`<b>${exp.name}</b> [${exp.code}] • Phase: ${exp.phase.toUpperCase()}`, {
+          className: 'tactical-hud-tooltip',
+          sticky: true,
+        });
+
+        const wLive = expeditionWeather?.[exp.id];
+
+        convoyMarker.bindPopup(`
+          <div style="font-family: ui-monospace, monospace; min-width: 260px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">
               <div>
-                <div style="font-weight: 900; font-size: 13px; color: #0284c7;">
-                  WP-${String(seq).padStart(2, '0')}: ${wp.name}
+                <div style="font-weight: 900; font-size: 13px; color: ${accent}; display: flex; align-items: center; gap: 4px;">
+                  <span>🚜 ${exp.name}</span>
                 </div>
-                <div style="font-size: 10px; color: #64748b;">
-                  CONVOY: ${exp.name} (${exp.code})
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 1px;">
+                  [${exp.code}] • Leader: ${exp.leader}
                 </div>
               </div>
-              <span style="
-                font-size: 9px;
-                font-weight: 800;
-                padding: 2px 6px;
-                border-radius: 4px;
-                background: ${isCompleted ? '#dcfce7' : isCurrent ? '#e0f2fe' : '#f1f5f9'};
-                color: ${isCompleted ? '#15803d' : isCurrent ? '#0369a1' : '#475569'};
-                border: 1px solid ${isCompleted ? '#86efac' : isCurrent ? '#7dd3fc' : '#cbd5e1'};
-              ">
-                ${(wp.status || 'pending').toUpperCase()}
+              <span style="font-size: 8.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${accent}25; color: ${accent}; border: 1px solid ${accent}60;">
+                ${exp.phase.toUpperCase().replace('_', ' ')}
               </span>
             </div>
 
-            <div style="background: #0f172a; color: #f8fafc; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 11px;">
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 10.5px;">
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                <div>Coords: <strong style="color: #38bdf8;">${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}°</strong></div>
-                <div>Elevation: <strong style="color: #7dd3fc;">${wp.elevationM || 0}m</strong></div>
-                <div>Distance: <strong style="color: #fbbf24;">${wp.distanceFromCurrentKm !== undefined ? formatDistanceKm(wp.distanceFromCurrentKm) : 'N/A'}</strong></div>
-                <div>ETA: <strong style="color: #4ade80;">${wp.eta || 'Calculating...'}</strong></div>
-              </div>
-              <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #334155; font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between;">
-                <span>Sequence: <strong>${seq} / ${progress.enrichedWaypoints.length}</strong></span>
-                <span>Arrival Radius: <strong>${wp.arrivalRadiusKm || arrivalRadiusKm} km</strong></span>
+                <div><span style="color: #64748b;">GPS:</span> <strong style="color: #38bdf8;">${exp.currentLat.toFixed(4)}°, ${exp.currentLng.toFixed(4)}°</strong></div>
+                <div><span style="color: #64748b;">PROGRESS:</span> <strong style="color: #4ade80;">${exp.distanceCoveredKm}/${exp.totalDistanceKm}km</strong></div>
+                <div><span style="color: #64748b;">RATIONS:</span> <strong style="color: #7dd3fc;">${exp.rationsDaysRemaining} Days</strong></div>
+                <div><span style="color: #64748b;">BEARING:</span> <strong style="color: #fbbf24;">${Math.round(tracker.getHeading())}°</strong></div>
               </div>
             </div>
 
-            ${wp.hazardNote ? `
-              <div style="font-size: 10px; background: #fef3c7; color: #92400e; padding: 4px 6px; border-radius: 4px; margin-bottom: 6px; border: 1px solid #fde68a;">
-                ⚠️ <strong>HAZARD NOTE:</strong> ${wp.hazardNote}
+            ${wLive ? `
+              <div style="margin-bottom: 8px; padding: 5px 8px; background: rgba(8, 47, 73, 0.6); border: 1px solid rgba(2, 132, 199, 0.4); border-radius: 6px; font-size: 10px;">
+                <span style="color: #38bdf8; font-weight: bold;">FIELD AWOS:</span> <strong>${wLive.tempC}°C</strong> (Windchill: <strong>${wLive.apparentTempC}°C</strong>, Wind: <strong>${wLive.windSpeedKts}kt</strong>)
+              </div>
+            ` : `
+              <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">
+                Weather: ${exp.currentWeather.tempC}°C (Wind: ${exp.currentWeather.windKnots} kts)
+              </div>
+            `}
+
+            <button id="select-convoy-btn-${exp.id}" style="width: 100%; background: ${accent}; color: #ffffff; border: none; padding: 6px; border-radius: 4px; font-size: 10px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <span>📡</span> MONITOR EXPEDITION TELEMETRY
+            </button>
+          </div>
+        `, { className: 'tactical-hud-popup' });
+
+        convoyMarker.on('popupopen', () => {
+          const btn = document.getElementById(`select-convoy-btn-${exp.id}`);
+          if (btn && onSelectExpedition) {
+            btn.onclick = () => {
+              onSelectExpedition(exp);
+              mapInstance.closePopup();
+            };
+          }
+        });
+
+        convoyMarker.on('click', () => {
+          if (onSelectExpedition) onSelectExpedition(exp);
+        });
+
+        convoyTrackersRef.current.set(exp.id, { marker: convoyMarker, tracker });
+        layerGroup.addLayer(convoyMarker);
+      }
+    });
+
+    // 2f. Add Custom Tactical Waypoints to collection
+    if (customWaypoints && customWaypoints.length > 0) {
+      customWaypoints.forEach((cwp, cIdx) => {
+        allTacticalWaypoints.push({
+          ...cwp,
+          seq: cIdx + 1,
+          totalWaypoints: customWaypoints.length,
+          isCurrent: false,
+          isCompleted: false,
+          proposedIdx: -1,
+          arrivalRadiusKm: DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM,
+          isCustom: true,
+        });
+      });
+    }
+
+    // 2g. Spatial Clustering & Waypoint Rendering
+    const shouldCluster = enableClustering && currentZoom <= 7;
+    const { clusters, singles } = shouldCluster
+      ? clusterTacticalWaypoints(mapInstance, allTacticalWaypoints, 46)
+      : { clusters: [], singles: allTacticalWaypoints };
+
+    // Render Tactical Waypoint Clusters
+    clusters.forEach((cluster) => {
+      const clusterColor = cluster.hasLethal ? '#f43f5e' : cluster.hasActive ? '#38bdf8' : '#0284c7';
+      const clusterHtml = `
+        <div class="tactical-cluster-icon ${cluster.hasLethal ? 'tactical-pulse-lethal' : 'tactical-cluster-glow'}" style="
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          background: ${cluster.hasLethal ? 'rgba(30, 10, 15, 0.95)' : 'rgba(8, 14, 28, 0.95)'};
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1.5px solid ${clusterColor};
+          border-radius: 999px;
+          padding: 3px 8px;
+          color: #ffffff;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 11px;
+          font-weight: 800;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 0 10px ${clusterColor}60;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: transform 0.15s ease;
+        ">
+          <span style="font-size: 10px;">${cluster.hasLethal ? '⚠️' : '⬡'}</span>
+          <span>${cluster.count} WPs</span>
+        </div>
+      `;
+
+      const clusterIcon = L.divIcon({
+        html: clusterHtml,
+        className: 'custom-waypoint-cluster-marker',
+        iconSize: [68, 26],
+        iconAnchor: [34, 13],
+      });
+
+      const clusterMarker = L.marker([cluster.lat, cluster.lng], { icon: clusterIcon });
+      clusterMarker.bindTooltip(
+        `<b>${cluster.count} Waypoints in Sector</b><br/>Click to expand bounds${cluster.hasLethal ? '<br/><span style="color:#f43f5e;">⚠️ Hazard Warning Detected</span>' : ''}`,
+        { className: 'tactical-hud-tooltip', sticky: true }
+      );
+
+      clusterMarker.on('click', () => {
+        mapInstance.flyToBounds(cluster.bounds, { padding: [60, 60], maxZoom: 8 });
+      });
+
+      layerGroup.addLayer(clusterMarker);
+    });
+
+    // Render Singles (Minimal Sleek Tactical Waypoint Pips with Progressive Disclosure)
+    singles.forEach((wp) => {
+      const [wpLat, wpLng] = safeMercatorLatLng(wp.lat, wp.lng);
+      const isLethal = (wp.hazardNote && wp.hazardNote.toLowerCase().includes('lethal')) ||
+        (wp.hazardNote && wp.hazardNote.toLowerCase().includes('crevasse'));
+      const isCurrent = wp.isCurrent;
+      const isCompleted = wp.isCompleted;
+      const seq = wp.seq;
+
+      const pipSize = currentZoom < 6 ? 18 : 22;
+      const bgColor = isCompleted ? '#059669' : isCurrent ? '#0284c7' : isLethal ? '#9f1239' : '#0f172a';
+      const borderColor = isCompleted ? '#10b981' : isCurrent ? '#38bdf8' : isLethal ? '#f43f5e' : wp.hazardNote ? '#f59e0b' : '#64748b';
+
+      const pulseClass = isLethal ? 'tactical-pulse-lethal' : isCurrent ? 'tactical-pulse-active' : '';
+
+      const wpPinHtml = `
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+          <div class="${pulseClass}" style="
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: ${pipSize}px;
+            height: ${pipSize}px;
+            background: ${bgColor};
+            border: 1.5px solid ${borderColor};
+            border-radius: 50%;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.7);
+            color: #ffffff;
+            font-family: ui-monospace, monospace;
+            font-weight: 900;
+            font-size: ${isCompleted ? '11px' : currentZoom < 6 ? '9px' : '10px'};
+            z-index: 10;
+          ">
+            ${isCompleted ? '✓' : seq}
+
+            ${wp.proposedIdx !== undefined && wp.proposedIdx !== -1 ? `
+              <div style="
+                position: absolute;
+                top: -7px;
+                right: -8px;
+                background: #7c3aed;
+                border: 1px solid #e9d5ff;
+                border-radius: 999px;
+                padding: 0 3px;
+                font-size: 7.5px;
+                font-weight: 900;
+                color: #ffffff;
+                white-space: nowrap;
+                box-shadow: 0 0 6px rgba(124, 58, 237, 0.9);
+                z-index: 25;
+              ">
+                AI#${wp.proposedIdx + 1}
               </div>
             ` : ''}
+          </div>
 
-            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+          ${(showWaypointLabels && currentZoom >= 7) ? `
+            <div style="
+              margin-top: 2px;
+              background: rgba(15, 23, 42, 0.92);
+              backdrop-filter: blur(4px);
+              border: 1px solid ${isCurrent ? '#38bdf8' : 'rgba(148, 163, 184, 0.25)'};
+              border-radius: 3px;
+              padding: 1px 4px;
+              white-space: nowrap;
+              font-family: ui-monospace, monospace;
+              font-size: 9px;
+              font-weight: 700;
+              color: ${isCurrent ? '#38bdf8' : isCompleted ? '#4ade80' : isLethal ? '#fca5a5' : '#cbd5e1'};
+              box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+              pointer-events: none;
+            ">
+              ${wp.name || `WP-${seq}`}
+            </div>
+          ` : ''}
+
+          ${showTelemetryOverlay ? `
+            <div style="
+              margin-top: 1px;
+              background: rgba(2, 132, 199, 0.2);
+              border: 1px solid rgba(56, 189, 248, 0.3);
+              border-radius: 2px;
+              padding: 0 3px;
+              font-family: ui-monospace, monospace;
+              font-size: 8px;
+              color: #7dd3fc;
+              white-space: nowrap;
+              pointer-events: none;
+            ">
+              ${wp.elevationM || 0}m
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      const wpIcon = L.divIcon({
+        html: wpPinHtml,
+        className: `custom-tactical-waypoint-marker wp-seq-${seq}`,
+        iconSize: [60, 40],
+        iconAnchor: [30, Math.floor(pipSize / 2)],
+      });
+
+      const wpMarker = L.marker([wpLat, wpLng], { icon: wpIcon });
+
+      // Tactical Tooltip on hover
+      wpMarker.bindTooltip(
+        `<b>WP-${String(seq).padStart(2, '0')}: ${wp.name}</b><br/>${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}° • Elev: ${wp.elevationM || 0}m${wp.distanceFromCurrentKm !== undefined ? `<br/>Dist: ${formatDistanceKm(wp.distanceFromCurrentKm)} • ETA: ${wp.eta || 'N/A'}` : ''}${wp.hazardNote ? `<br/><span style="color:#f43f5e;">⚠️ ${wp.hazardNote}</span>` : ''}`,
+        { className: 'tactical-hud-tooltip', sticky: true }
+      );
+
+      // Glassmorphic Tactical Popup
+      const statusBg = isCompleted ? 'rgba(16, 185, 129, 0.2)' : isCurrent ? 'rgba(56, 189, 248, 0.2)' : isLethal ? 'rgba(239, 68, 68, 0.2)' : 'rgba(148, 163, 184, 0.15)';
+      const statusColor = isCompleted ? '#34d399' : isCurrent ? '#38bdf8' : isLethal ? '#f87171' : '#94a3b8';
+      const statusBorder = isCompleted ? '#10b981' : isCurrent ? '#38bdf8' : isLethal ? '#ef4444' : '#64748b';
+
+      wpMarker.bindPopup(`
+        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 270px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">
+            <div>
+              <div style="font-weight: 900; font-size: 13px; color: #38bdf8; display: flex; align-items: center; gap: 4px;">
+                <span>🎯 WP-${String(seq).padStart(2, '0')}:</span>
+                <span>${wp.name}</span>
+              </div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 1px;">
+                ${wp.isCustom ? 'STANDALONE TACTICAL FIX' : `CONVOY: ${wp.expName || 'Traverse'}`}
+              </div>
+            </div>
+            <span style="font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusBorder};">
+              ${(wp.status || 'pending').toUpperCase()}
+            </span>
+          </div>
+
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 10.5px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+              <div><span style="color: #64748b;">LAT/LNG:</span> <strong style="color: #38bdf8;">${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}°</strong></div>
+              <div><span style="color: #64748b;">ELEV:</span> <strong style="color: #7dd3fc;">${wp.elevationM || 0}m</strong></div>
+              <div><span style="color: #64748b;">DIST:</span> <strong style="color: #fbbf24;">${wp.distanceFromCurrentKm !== undefined ? formatDistanceKm(wp.distanceFromCurrentKm) : 'N/A'}</strong></div>
+              <div><span style="color: #64748b;">ETA:</span> <strong style="color: #4ade80;">${wp.eta || 'Estimating...'}</strong></div>
+            </div>
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 9.5px; color: #94a3b8; display: flex; justify-content: space-between;">
+              <span>Sequence: <strong style="color: #f1f5f9;">${seq} / ${wp.totalWaypoints}</strong></span>
+              <span>Arrival Radius: <strong style="color: #38bdf8;">${wp.arrivalRadiusKm} km</strong></span>
+            </div>
+          </div>
+
+          ${wp.hazardNote ? `
+            <div style="font-size: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 4px 6px; border-radius: 4px; margin-bottom: 8px;">
+              ⚠️ <strong>HAZARD NOTE:</strong> ${wp.hazardNote}
+            </div>
+          ` : ''}
+
+          ${wp.isCustom ? `
+            <button id="delete-cwp-${wp.id}" style="width: 100%; background: rgba(225, 29, 72, 0.25); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.5); padding: 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
+              🗑 DELETE WAYPOINT
+            </button>
+          ` : `
+            <div style="display: flex; flex-direction: column; gap: 4px;">
               <div style="display: flex; gap: 4px;">
-                <button id="toggle-active-wp-${wp.id}" style="flex: 1; background: ${isCurrent ? '#64748b' : '#0284c7'}; color: #ffffff; border: none; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
+                <button id="toggle-active-wp-${wp.id}" style="flex: 1; background: ${isCurrent ? 'rgba(56, 189, 248, 0.2)' : '#0284c7'}; color: #ffffff; border: 1px solid ${isCurrent ? '#38bdf8' : '#0284c7'}; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
                   ${isCurrent ? '● Active Target' : '🎯 Target This'}
                 </button>
-                <button id="toggle-complete-wp-${wp.id}" style="flex: 1; background: ${isCompleted ? '#d97706' : '#059669'}; color: #ffffff; border: none; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
-                  ${isCompleted ? 'Mark Pending' : '✓ Mark Done'}
+                <button id="toggle-complete-wp-${wp.id}" style="flex: 1; background: ${isCompleted ? 'rgba(217, 119, 6, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isCompleted ? '#fbbf24' : '#34d399'}; border: 1px solid ${isCompleted ? '#d97706' : '#10b981'}; padding: 5px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer;">
+                  ${isCompleted ? '↺ Mark Pending' : '✓ Mark Done'}
                 </button>
               </div>
               <div style="display: flex; gap: 4px;">
-                <button id="move-up-wp-${wp.id}" style="flex: 1; background: #334155; color: #ffffff; border: none; padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                <button id="move-up-wp-${wp.id}" style="flex: 1; background: rgba(30, 41, 59, 0.8); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.2); padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
                   ▲ Move Up
                 </button>
-                <button id="move-down-wp-${wp.id}" style="flex: 1; background: #334155; color: #ffffff; border: none; padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                <button id="move-down-wp-${wp.id}" style="flex: 1; background: rgba(30, 41, 59, 0.8); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.2); padding: 4px 6px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
                   ▼ Move Down
                 </button>
-                <button id="delete-wp-${wp.id}" style="background: #e11d48; color: #ffffff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
+                <button id="delete-wp-${wp.id}" style="background: rgba(225, 29, 72, 0.2); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.5); padding: 4px 8px; border-radius: 4px; font-size: 9.5px; font-weight: bold; cursor: pointer;">
                   🗑 Delete
                 </button>
               </div>
             </div>
-          </div>
-        `);
+          `}
+        </div>
+      `, { className: 'tactical-hud-popup' });
 
-        wpMarker.on('popupopen', () => {
+      wpMarker.on('popupopen', () => {
+        if (wp.isCustom) {
+          const deleteBtn = document.getElementById(`delete-cwp-${wp.id}`);
+          if (deleteBtn && onDeleteWaypoint) {
+            deleteBtn.onclick = () => {
+              onDeleteWaypoint(wp.id);
+              mapInstance.closePopup();
+            };
+          }
+        } else {
           const activeBtn = document.getElementById(`toggle-active-wp-${wp.id}`);
           const completeBtn = document.getElementById(`toggle-complete-wp-${wp.id}`);
           const upBtn = document.getElementById(`move-up-wp-${wp.id}`);
@@ -837,192 +1241,223 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
           if (activeBtn && onUpdateWaypoint) {
             activeBtn.onclick = () => {
-              onUpdateWaypoint({ ...wp, status: 'current', passed: false }, exp.id);
-              mapInstance?.closePopup();
+              onUpdateWaypoint({ ...wp, status: 'current', passed: false }, wp.expId);
+              mapInstance.closePopup();
             };
           }
 
           if (completeBtn && onUpdateWaypoint) {
             completeBtn.onclick = () => {
               const nextStatus = isCompleted ? 'pending' : 'completed';
-              onUpdateWaypoint({ ...wp, status: nextStatus, passed: !isCompleted }, exp.id);
-              mapInstance?.closePopup();
+              onUpdateWaypoint({ ...wp, status: nextStatus, passed: !isCompleted }, wp.expId);
+              mapInstance.closePopup();
             };
           }
 
-          if (upBtn && onUpdateWaypoint && wpIdx > 0) {
+          if (upBtn && onUpdateWaypoint && (wp.seq - 1) > 0) {
             upBtn.onclick = () => {
-              const prevWp = progress.enrichedWaypoints[wpIdx - 1];
-              const curSeq = wp.sequence ?? (wpIdx + 1);
-              const prevSeq = prevWp.sequence ?? wpIdx;
-              onUpdateWaypoint({ ...wp, sequence: prevSeq }, exp.id);
-              onUpdateWaypoint({ ...prevWp, sequence: curSeq }, exp.id);
-              mapInstance?.closePopup();
+              const currentExp = expeditions.find((e) => e.id === wp.expId);
+              if (currentExp && currentExp.waypoints) {
+                const prevWp = currentExp.waypoints[wp.seq - 2];
+                if (prevWp) {
+                  onUpdateWaypoint({ ...wp, sequence: prevWp.sequence ?? (wp.seq - 1) }, wp.expId);
+                  onUpdateWaypoint({ ...prevWp, sequence: wp.seq }, wp.expId);
+                  mapInstance.closePopup();
+                }
+              }
             };
           }
 
-          if (downBtn && onUpdateWaypoint && wpIdx < progress.enrichedWaypoints.length - 1) {
+          if (downBtn && onUpdateWaypoint && wp.seq < wp.totalWaypoints) {
             downBtn.onclick = () => {
-              const nextWp = progress.enrichedWaypoints[wpIdx + 1];
-              const curSeq = wp.sequence ?? (wpIdx + 1);
-              const nextSeq = nextWp.sequence ?? (wpIdx + 2);
-              onUpdateWaypoint({ ...wp, sequence: nextSeq }, exp.id);
-              onUpdateWaypoint({ ...nextWp, sequence: curSeq }, exp.id);
-              mapInstance?.closePopup();
+              const currentExp = expeditions.find((e) => e.id === wp.expId);
+              if (currentExp && currentExp.waypoints) {
+                const nextWp = currentExp.waypoints[wp.seq];
+                if (nextWp) {
+                  onUpdateWaypoint({ ...wp, sequence: nextWp.sequence ?? (wp.seq + 1) }, wp.expId);
+                  onUpdateWaypoint({ ...nextWp, sequence: wp.seq }, wp.expId);
+                  mapInstance.closePopup();
+                }
+              }
             };
           }
 
           if (deleteBtn && onDeleteWaypoint) {
             deleteBtn.onclick = () => {
-              onDeleteWaypoint(wp.id, exp.id);
-              mapInstance?.closePopup();
+              onDeleteWaypoint(wp.id, wp.expId);
+              mapInstance.closePopup();
             };
           }
-        });
-
-        layerGroup.addLayer(wpMarker);
+        }
       });
 
-      const [headLat, headLng] = safeMercatorLatLng(exp.currentLat, exp.currentLng);
-      const isEmergency = exp.phase === 'emergency_extraction';
-      const wLive = expeditionWeather?.[exp.id];
-
-      const convoyHtml = `
-        <div style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 32px;
-          height: 32px;
-          background: ${isEmergency ? '#e11d48' : '#d97706'};
-          border: 2px solid #ffffff;
-          border-radius: 6px;
-          box-shadow: 0 0 14px ${isEmergency ? 'rgba(225,29,72,0.9)' : 'rgba(217,119,6,0.9)'};
-          color: #ffffff;
-          font-weight: 800;
-          font-size: 10px;
-          font-family: monospace;
-          cursor: pointer;
-        ">
-          ${exp.code.slice(0, 4)}
-        </div>
-      `;
-
-      const convoyIcon = L.divIcon({
-        html: convoyHtml,
-        className: 'custom-convoy-pin',
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      });
-
-      const convoyMarker = L.marker([headLat, headLng], { icon: convoyIcon });
-      convoyMarker.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 240px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 800; font-size: 13px; color: #b45309; margin-bottom: 2px;">${exp.name}</div>
-          <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">[${exp.code}] • Leader: ${exp.leader}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Current GPS:</strong> ${exp.currentLat.toFixed(4)}°, ${exp.currentLng.toFixed(4)}°</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Progress:</strong> ${exp.distanceCoveredKm} / ${exp.totalDistanceKm} km (${Math.round((exp.distanceCoveredKm / Math.max(exp.totalDistanceKm, 1)) * 100)}%)</div>
-          
-          ${wLive ? `
-            <div style="margin-bottom: 6px; padding: 4px 6px; background: #0f172a; color: #f8fafc; border-radius: 4px; font-size: 11px; font-family: monospace;">
-              <span style="color: #fbbf24;">FIELD AWOS:</span> <strong>${wLive.tempC}°C</strong> (Windchill: <strong>${wLive.apparentTempC}°C</strong>, Wind: <strong>${wLive.windSpeedKts} kts</strong>)
-            </div>
-          ` : `
-            <div style="font-size: 11px; margin-bottom: 3px;"><strong>Weather:</strong> ${exp.currentWeather.tempC}°C (Wind: ${exp.currentWeather.windKnots} kts)</div>
-          `}
-          
-          <div style="font-size: 11px; margin-bottom: 6px;"><strong>Rations Remaining:</strong> ${exp.rationsDaysRemaining} Days</div>
-          <div style="font-size: 10px; background: #fef3c7; color: #92400e; padding: 4px 6px; border-radius: 4px; font-weight: bold;">
-            PHASE: ${exp.phase.toUpperCase().replace('_', ' ')}
-          </div>
-        </div>
-      `);
-
-      convoyMarker.on('click', () => {
-        if (onSelectExpedition) onSelectExpedition(exp);
-      });
-
-      layerGroup.addLayer(convoyMarker);
+      layerGroup.addLayer(wpMarker);
     });
 
-    // 3. Polar Assets (Snowcats, Twin Otters, LC-130s, Rigs)
+    // 3. Polar Assets with Real-Time Smooth Interpolation & Dynamic Heading Vector Arrow
     assets.forEach((asset) => {
       const [safeLat, safeLng] = safeMercatorLatLng(asset.currentLocation.lat, asset.currentLocation.lng);
       const isAir = asset.category === 'aviation';
       const isEmergency = asset.category === 'emergency_sar';
+      const accentColor = isEmergency ? '#f43f5e' : isAir ? '#10b981' : '#38bdf8';
+      const bg = isEmergency ? '#9f1239' : isAir ? '#065f46' : '#0f172a';
 
-      const assetHtml = `
-        <div style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          background: ${isEmergency ? '#e11d48' : isAir ? '#059669' : '#475569'};
-          border: 1.5px solid #ffffff;
-          border-radius: ${isAir ? '50%' : '4px'};
-          box-shadow: 0 0 8px rgba(0,0,0,0.6);
-          color: #ffffff;
-          font-weight: bold;
-          font-size: 9px;
-          font-family: monospace;
-          cursor: pointer;
-        ">
-          ${asset.code.slice(0, 3)}
-        </div>
-      `;
+      const reportedHeading = asset.telemetry?.headingDeg ?? 0;
 
-      const assetIcon = L.divIcon({
-        html: assetHtml,
-        className: 'custom-asset-pin',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
-
-      const assetMarker = L.marker([safeLat, safeLng], { icon: assetIcon });
-      assetMarker.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 220px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 800; font-size: 13px; color: #0f172a; margin-bottom: 2px;">${asset.name}</div>
-          <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">[${asset.code}] • ${asset.model}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Location:</strong> ${asset.currentLocation.name}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Coordinates:</strong> ${asset.currentLocation.lat.toFixed(4)}°, ${asset.currentLocation.lng.toFixed(4)}°</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Energy / Fuel:</strong> ${asset.fuelOrBatteryPercent}% (${asset.fuelType})</div>
-          <div style="font-size: 11px; margin-bottom: 6px;"><strong>Cold Rating:</strong> ${asset.coldRatingC}°C</div>
-          <div style="font-size: 10px; background: #ecfdf5; color: #065f46; padding: 4px 6px; border-radius: 4px; font-weight: bold;">
-            STATUS: ${asset.status.toUpperCase()}
+      let trackerEntry = assetTrackersRef.current.get(asset.id);
+      if (trackerEntry) {
+        trackerEntry.tracker.updateTarget(safeLat, safeLng, 800);
+        layerGroup.addLayer(trackerEntry.marker);
+      } else {
+        const heading = reportedHeading;
+        const assetHtml = `
+          <div class="tactical-tracker-transition" id="asset-pin-${asset.id}" style="position: relative; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; cursor: pointer;">
+            <!-- Rotating Directional Vector Arrow -->
+            <div class="asset-heading-arrow" style="position: absolute; width: 34px; height: 34px; transform: rotate(${heading}deg); pointer-events: none; transition: transform 0.4s ease-out;">
+              <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+                <polygon points="17,1 21,11 17,8 13,11" fill="${accentColor}" style="filter: drop-shadow(0 0 5px ${accentColor});" />
+              </svg>
+            </div>
+            <!-- Core Vehicle Pip -->
+            <div style="
+              position: relative;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              width: 24px;
+              height: 24px;
+              background: ${bg};
+              border: 1.5px solid ${accentColor};
+              border-radius: ${isAir ? '50%' : '5px'};
+              box-shadow: 0 0 12px ${accentColor}80, 0 4px 8px rgba(0,0,0,0.8);
+              color: #ffffff;
+              font-weight: 800;
+              font-size: 8.5px;
+              font-family: ui-monospace, monospace;
+              z-index: 5;
+            ">
+              ${asset.code.slice(0, 3)}
+            </div>
           </div>
-        </div>
-      `);
+        `;
 
-      assetMarker.on('click', () => {
-        if (onSelectAsset) onSelectAsset(asset);
-      });
+        const assetIcon = L.divIcon({
+          html: assetHtml,
+          className: 'custom-tactical-asset-pin',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        });
 
-      layerGroup.addLayer(assetMarker);
+        const assetMarker = L.marker([safeLat, safeLng], { icon: assetIcon });
+        const tracker = new SmoothMarkerTracker(assetMarker, safeLat, safeLng, heading, (_lat, _lng, curHeading) => {
+          const el = document.querySelector(`#asset-pin-${asset.id} .asset-heading-arrow`) as HTMLElement | null;
+          if (el) {
+            el.style.transform = `rotate(${Math.round(curHeading)}deg)`;
+          }
+        });
+
+        assetMarker.bindTooltip(`<b>${asset.name}</b> [${asset.code}] • ${asset.category.toUpperCase()}`, {
+          className: 'tactical-hud-tooltip',
+          sticky: true,
+        });
+
+        assetMarker.bindPopup(`
+          <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 250px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">
+              <div>
+                <div style="font-weight: 900; font-size: 13px; color: ${accentColor}; display: flex; align-items: center; gap: 4px;">
+                  <span>${isAir ? '✈️' : '🚜'} ${asset.name}</span>
+                </div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 1px;">
+                  [${asset.code}] • ${asset.model}
+                </div>
+              </div>
+              <span style="font-size: 8.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${accentColor}25; color: ${accentColor}; border: 1px solid ${accentColor}60;">
+                ${asset.status.toUpperCase()}
+              </span>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 10.5px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                <div><span style="color: #64748b;">COORDS:</span> <strong style="color: #38bdf8;">${safeLat.toFixed(4)}°, ${safeLng.toFixed(4)}°</strong></div>
+                <div><span style="color: #64748b;">HEADING:</span> <strong style="color: #fbbf24;">${Math.round(tracker.getHeading())}°</strong></div>
+                <div><span style="color: #64748b;">SPEED:</span> <strong style="color: #4ade80;">${asset.telemetry?.speedKmh || 22} km/h</strong></div>
+                <div><span style="color: #64748b;">COLD LIMIT:</span> <strong style="color: #7dd3fc;">${asset.coldRatingC}°C</strong></div>
+              </div>
+              <div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+                <div style="display: flex; justify-content: space-between; font-size: 9.5px; margin-bottom: 2px;">
+                  <span style="color: #94a3b8;">ENERGY / FUEL:</span>
+                  <strong style="color: ${asset.fuelOrBatteryPercent < 25 ? '#f43f5e' : '#38bdf8'};">${asset.fuelOrBatteryPercent}% (${asset.fuelType})</strong>
+                </div>
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                  <div style="width: ${asset.fuelOrBatteryPercent}%; height: 100%; background: ${asset.fuelOrBatteryPercent < 25 ? '#f43f5e' : '#38bdf8'};"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size: 10px; color: #94a3b8; margin-bottom: 8px;">
+              <span style="color: #64748b;">LOCATION:</span> ${asset.currentLocation.name}
+            </div>
+
+            <button id="select-asset-btn-${asset.id}" style="width: 100%; background: ${accentColor}; color: #ffffff; border: none; padding: 6px; border-radius: 4px; font-size: 10px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 2px 10px ${accentColor}50;">
+              <span>🎯</span> SELECT ASSET ON HUD
+            </button>
+          </div>
+        `, { className: 'tactical-hud-popup' });
+
+        assetMarker.on('popupopen', () => {
+          const btn = document.getElementById(`select-asset-btn-${asset.id}`);
+          if (btn && onSelectAsset) {
+            btn.onclick = () => {
+              onSelectAsset(asset);
+              mapInstance.closePopup();
+            };
+          }
+        });
+
+        assetMarker.on('click', () => {
+          if (onSelectAsset) onSelectAsset(asset);
+        });
+
+        assetTrackersRef.current.set(asset.id, { marker: assetMarker, tracker });
+        layerGroup.addLayer(assetMarker);
+      }
     });
 
     // 4. Crevasse Fields & Katabatic Zones (Hazards)
     hazards.forEach((hz) => {
       const [safeLat, safeLng] = safeMercatorLatLng(hz.lat, hz.lng);
+      const isExtreme = hz.dangerLevel === 'extreme';
       const circle = L.circle([safeLat, safeLng], {
         radius: (hz.radiusKm || 15) * 1000,
-        color: hz.dangerLevel === 'extreme' ? '#e11d48' : '#f97316',
-        fillColor: hz.dangerLevel === 'extreme' ? '#e11d48' : '#f97316',
+        color: isExtreme ? '#e11d48' : '#f97316',
+        fillColor: isExtreme ? '#e11d48' : '#f97316',
         fillOpacity: 0.22,
         weight: 1.5,
         dashArray: '4, 4',
       });
 
+      circle.bindTooltip(`<b>⚠️ ${hz.name}</b><br/>Type: ${hz.type.toUpperCase().replace('_', ' ')} • Radius: ${hz.radiusKm}km`, {
+        className: 'tactical-hud-tooltip',
+        sticky: true,
+      });
+
       circle.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 220px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 800; font-size: 12px; color: #e11d48; margin-bottom: 2px;">⚠️ ${hz.name}</div>
-          <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">TYPE: ${hz.type.toUpperCase().replace('_', ' ')} • RADIUS: ${hz.radiusKm}km</div>
-          <div style="font-size: 11px; margin-bottom: 6px;">${hz.notes}</div>
-          <div style="font-size: 10px; background: #ffe4e6; color: #9f1239; padding: 4px 6px; border-radius: 4px; font-weight: bold;">
-            THREAT LEVEL: ${hz.dangerLevel.toUpperCase()}
+        <div style="font-family: ui-monospace, monospace; min-width: 240px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(244, 63, 94, 0.4); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div style="font-weight: 800; font-size: 12px; color: #f43f5e;">⚠️ ${hz.name}</div>
+            <span style="font-size: 8.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(225, 29, 72, 0.2); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.5);">
+              ${hz.dangerLevel.toUpperCase()}
+            </span>
+          </div>
+          <div style="font-size: 10.5px; color: #94a3b8; margin-bottom: 6px;">
+            TYPE: ${hz.type.toUpperCase().replace('_', ' ')} • RADIUS: ${hz.radiusKm}km
+          </div>
+          <div style="font-size: 10.5px; color: #cbd5e1; margin-bottom: 6px; background: rgba(15, 23, 42, 0.7); padding: 5px 7px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
+            ${hz.notes}
           </div>
         </div>
-      `);
+      `, { className: 'tactical-hud-popup' });
 
       layerGroup.addLayer(circle);
     });
@@ -1046,7 +1481,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       const [safeDistressLat, safeDistressLng] = safeMercatorLatLng(rawDistressLat, rawDistressLng);
 
       const distressHtml = `
-        <div style="
+        <div class="tactical-pulse-lethal" style="
           position: relative;
           display: flex;
           align-items: center;
@@ -1060,6 +1495,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           color: #ffffff;
           font-weight: 900;
           font-size: 11px;
+          cursor: pointer;
         ">
           SOS
         </div>
@@ -1074,76 +1510,42 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
       const distressMarker = L.marker([safeDistressLat, safeDistressLng], { icon: distressIcon });
       distressMarker.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 250px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 900; font-size: 14px; color: #e11d48; margin-bottom: 2px;">🚨 ACTIVE POLAR MAYDAY DISTRESS</div>
-          <div style="font-size: 11px; color: #475569; font-weight: bold; margin-bottom: 4px;">${activeDistress.incidentType}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Sector:</strong> ${activeDistress.location}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Coordinates:</strong> ${safeDistressLat.toFixed(5)}°, ${safeDistressLng.toFixed(5)}°</div>
-          <div style="font-size: 11px; margin-bottom: 6px;"><strong>Summary:</strong> ${activeDistress.summary}</div>
-          <div style="font-size: 10px; background: #fee2e2; color: #991b1b; padding: 4px 6px; border-radius: 4px; font-weight: bold;">
+        <div style="font-family: ui-monospace, monospace; min-width: 260px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(225, 29, 72, 0.6); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="font-weight: 900; font-size: 13px; color: #f43f5e; margin-bottom: 2px;">🚨 ACTIVE POLAR MAYDAY DISTRESS</div>
+          <div style="font-size: 11px; color: #fca5a5; font-weight: bold; margin-bottom: 4px;">${activeDistress.incidentType}</div>
+          <div style="font-size: 10.5px; margin-bottom: 3px;"><strong style="color:#94a3b8;">Sector:</strong> ${activeDistress.location}</div>
+          <div style="font-size: 10.5px; margin-bottom: 3px;"><strong style="color:#94a3b8;">Coordinates:</strong> ${safeDistressLat.toFixed(5)}°, ${safeDistressLng.toFixed(5)}°</div>
+          <div style="font-size: 10.5px; margin-bottom: 6px; background: rgba(15, 23, 42, 0.8); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">${activeDistress.summary}</div>
+          <div style="font-size: 9.5px; background: rgba(225, 29, 72, 0.2); color: #fda4af; padding: 4px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(225, 29, 72, 0.4);">
             ${activeDistress.acknowledgedByHQ ? `ACKNOWLEDGED (SAR DISPATCHED: ${activeDistress.dispatchedSARName || 'En Route'})` : 'AWAITING RESCUE DISPATCH'}
           </div>
         </div>
-      `);
+      `, { className: 'tactical-hud-popup' });
 
       layerGroup.addLayer(distressMarker);
     }
-
-    // 7. Custom Tactical Waypoints / Ground Fixes
-    if (customWaypoints && customWaypoints.length > 0) {
-      customWaypoints.forEach((cwp) => {
-        const [cLat, cLng] = safeMercatorLatLng(cwp.lat, cwp.lng);
-        const cwpIcon = L.divIcon({
-          html: `
-            <div style="
-              width: 22px;
-              height: 22px;
-              background: #d97706;
-              border: 2px solid #ffffff;
-              border-radius: 5px;
-              box-shadow: 0 0 10px rgba(217,119,6,0.85);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #ffffff;
-              font-weight: 900;
-              font-size: 11px;
-            ">
-              ▲
-            </div>
-          `,
-          className: 'custom-tactical-waypoint-pin',
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-        });
-
-        const cwpMarker = L.marker([cLat, cLng], { icon: cwpIcon });
-        cwpMarker.bindPopup(`
-          <div style="font-family: sans-serif; min-width: 190px; color: #0f172a; padding: 2px;">
-            <div style="font-weight: 800; font-size: 12px; color: #b45309; margin-bottom: 2px;">🧭 TACTICAL FIX: ${cwp.name}</div>
-            <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Standalone Navigation Landmark</div>
-            <div style="font-size: 11px;"><strong>Coordinates:</strong> ${cwp.lat.toFixed(4)}°, ${cwp.lng.toFixed(4)}°</div>
-            <div style="font-size: 11px; margin-bottom: 4px;"><strong>Elevation:</strong> ${cwp.elevationM}m</div>
-            ${cwp.hazardNote ? `<div style="font-size: 10px; margin-bottom: 6px; background: #fef3c7; color: #92400e; padding: 3px 5px; border-radius: 4px;">⚠️ ${cwp.hazardNote}</div>` : ''}
-            <button id="delete-cwp-${cwp.id}" style="width: 100%; background: #e11d48; color: #ffffff; border: none; padding: 6px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; margin-top: 4px;">
-              🗑 DELETE WAYPOINT
-            </button>
-          </div>
-        `);
-
-        cwpMarker.on('popupopen', () => {
-          const deleteBtn = document.getElementById(`delete-cwp-${cwp.id}`);
-          if (deleteBtn && onDeleteWaypoint) {
-            deleteBtn.onclick = () => {
-              onDeleteWaypoint(cwp.id);
-              mapInstance?.closePopup();
-            };
-          }
-        });
-        layerGroup.addLayer(cwpMarker);
-      });
-    }
-  }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition, showGpsTrack, arrivalRadiusKm, showWaypointLabels, onUpdateWaypoint, onDeleteWaypoint, activeProposedRoute]);
+  }, [
+    mapInstance,
+    stations,
+    assets,
+    expeditions,
+    hazards,
+    activeDistress,
+    region,
+    customWaypoints,
+    onSelectStation,
+    onSelectAsset,
+    onSelectExpedition,
+    showGpsTrack,
+    arrivalRadiusKm,
+    showWaypointLabels,
+    onUpdateWaypoint,
+    onDeleteWaypoint,
+    activeProposedRoute,
+    currentZoom,
+    showTelemetryOverlay,
+    enableClustering,
+  ]);
 
   // 6.5. Draw Sub-Zero Danger Zones Heatmap Overlay
   useEffect(() => {
@@ -1190,80 +1592,76 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         dashArray: isLethal ? '4, 4' : '3, 3',
       });
 
-      // Pin badge HTML
+      // Sleek Epicenter Node Pin
+      const zoneColor = isLethal ? '#f43f5e' : isExtreme ? '#818cf8' : '#38bdf8';
       const badgeHtml = `
-        <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer; pointer-events:auto;">
+        <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; cursor: pointer;">
+          ${isLethal ? `
+            <div class="tactical-pulse-lethal" style="
+              position: absolute;
+              width: 24px;
+              height: 24px;
+              border-radius: 50%;
+              border: 1.5px solid #f43f5e;
+            "></div>
+          ` : ''}
           <div style="
-            background: ${isLethal ? 'rgba(159,18,57,0.95)' : isExtreme ? 'rgba(49,46,129,0.95)' : 'rgba(8,51,68,0.95)'};
-            border: 2px solid ${isLethal ? '#fda4af' : isExtreme ? '#818cf8' : '#38bdf8'};
-            color: #ffffff;
-            font-family: ui-monospace, monospace;
-            font-size: 10px;
-            font-weight: 800;
-            padding: 3px 6px;
-            border-radius: 6px;
-            box-shadow: 0 0 16px ${isLethal ? 'rgba(225,29,72,0.9)' : isExtreme ? 'rgba(79,70,229,0.8)' : 'rgba(2,132,199,0.7)'};
-            white-space: nowrap;
+            width: 16px;
+            height: 16px;
+            background: ${isLethal ? '#9f1239' : isExtreme ? '#312e81' : '#083344'};
+            border: 1.5px solid ${zoneColor};
+            border-radius: 50%;
+            box-shadow: 0 0 10px ${zoneColor};
             display: flex;
             align-items: center;
-            gap: 4px;
-          ">
-            <span>${isLethal ? '⚠️' : '❄️'}</span>
-            <span>${zone.tempC}°C</span>
-            <span style="
-              background: ${isLethal ? '#e11d48' : isExtreme ? '#4f46e5' : '#0284c7'};
-              color: #ffffff;
-              font-size: 8.5px;
-              padding: 1px 4px;
-              border-radius: 3px;
-            ">${zone.severityLevel}</span>
-          </div>
-          <div style="
+            justify-content: center;
+            color: #ffffff;
             font-size: 8.5px;
-            font-family: ui-monospace, monospace;
-            color: ${isLethal ? '#fecdd3' : isExtreme ? '#c7d2fe' : '#bae6fd'};
-            background: rgba(15, 23, 42, 0.85);
-            padding: 1px 4px;
-            border-radius: 2px;
-            margin-top: 2px;
-            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 5;
           ">
-            Wind: ${zone.windSpeedKts}kt • Feels ${zone.apparentTempC}°C
+            ${isLethal ? '⚠️' : '❄️'}
           </div>
         </div>
       `;
 
       const badgeIcon = L.divIcon({
         html: badgeHtml,
-        className: 'danger-heatmap-pin',
-        iconSize: [120, 36],
-        iconAnchor: [60, 18],
+        className: 'danger-heatmap-epicenter-pin',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
       });
 
       const dangerMarker = L.marker([safeLat, safeLng], { icon: badgeIcon });
 
+      // Compact Tactical Tooltip on hover
+      dangerMarker.bindTooltip(
+        `<b>${zone.name}</b> [${zone.severityLevel}]<br/>${zone.tempC}°C (Feels ${zone.apparentTempC}°C) • Wind: ${zone.windSpeedKts}kt`,
+        { className: 'tactical-hud-tooltip', sticky: true }
+      );
+
+      // Glassmorphic HUD popup
       const popupContent = `
-        <div style="font-family: ui-monospace, monospace; min-width: 270px; color: #0f172a; padding: 4px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 4px;">
+        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 270px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid ${zoneColor}; box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
             <span style="
-              background: ${isLethal ? '#ffe4e6' : isExtreme ? '#e0e7ff' : '#e0f2fe'};
-              color: ${isLethal ? '#9f1239' : isExtreme ? '#3730a3' : '#0369a1'};
+              background: ${isLethal ? 'rgba(225,29,72,0.2)' : isExtreme ? 'rgba(99,102,241,0.2)' : 'rgba(2,132,199,0.2)'};
+              color: ${isLethal ? '#fda4af' : isExtreme ? '#c7d2fe' : '#7dd3fc'};
               font-size: 9px;
               font-weight: 800;
               padding: 2px 6px;
               border-radius: 4px;
-              border: 1px solid ${isLethal ? '#f43f5e' : isExtreme ? '#6366f1' : '#0284c7'};
+              border: 1px solid ${zoneColor};
             ">
               SUB-ZERO DANGER ZONE // ${zone.severityLevel}
             </span>
-            <span style="font-size: 10px; color: #64748b;">R: ${zone.radiusKm} km</span>
+            <span style="font-size: 10px; color: #94a3b8;">R: ${zone.radiusKm} km</span>
           </div>
           
-          <div style="font-weight: 800; font-size: 13px; color: #0f172a; margin-bottom: 4px;">${zone.name}</div>
+          <div style="font-weight: 900; font-size: 13px; color: #ffffff; margin-bottom: 6px;">${zone.name}</div>
           
-          <div style="background: #0f172a; color: #f8fafc; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 8px; margin-bottom: 8px;">
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
-              <span style="font-size: 18px; font-weight: 900; color: ${isLethal ? '#fb7185' : isExtreme ? '#a5b4fc' : '#38bdf8'};">
+              <span style="font-size: 18px; font-weight: 900; color: ${zoneColor};">
                 ${zone.tempC}°C
               </span>
               <span style="font-size: 11px; color: #94a3b8;">
@@ -1271,32 +1669,32 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
               </span>
             </div>
             <div style="font-size: 10px; color: #cbd5e1; margin-top: 4px; display:grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-              <div>Wind: <strong>${zone.windSpeedKts} kts</strong></div>
-              <div>Gusts: <strong>${zone.windGustsKts} kts</strong></div>
-              <div>Pressure: <strong>${zone.pressureHpa} hPa</strong></div>
-              <div>Rec. Min: <strong>${zone.historicalMinC}°C</strong></div>
+              <div>Wind: <strong style="color:#f1f5f9;">${zone.windSpeedKts} kts</strong></div>
+              <div>Gusts: <strong style="color:#f1f5f9;">${zone.windGustsKts} kts</strong></div>
+              <div>Pressure: <strong style="color:#f1f5f9;">${zone.pressureHpa} hPa</strong></div>
+              <div>Rec. Min: <strong style="color:#f1f5f9;">${zone.historicalMinC}°C</strong></div>
             </div>
           </div>
 
-          <div style="background: ${isLethal ? '#fff1f2' : '#f8fafc'}; border: 1px solid ${isLethal ? '#fecdd3' : '#e2e8f0'}; border-radius: 6px; padding: 6px; font-size: 10.5px; margin-bottom: 6px;">
-            <div style="color: #be123c; font-weight: 800; margin-bottom: 2px;">⏱️ SURVIVAL TIME WINDOWS:</div>
-            <div style="color: #334155;">• Unprotected Human Survival: <strong>< ${zone.survivalTimeMinutes} min</strong></div>
-            <div style="color: #334155;">• Exposed Skin Frostbite: <strong>< ${zone.frostbiteTimeMinutes} min</strong></div>
-            ${zone.fuelCloudPointHazard ? '<div style="color: #b91c1c; font-weight: 700; margin-top: 2px;">⚠️ Arctic Diesel Waxing / Cloud Point Warning</div>' : ''}
+          <div style="background: ${isLethal ? 'rgba(225,29,72,0.15)' : 'rgba(15,23,42,0.8)'}; border: 1px solid ${isLethal ? 'rgba(225,29,72,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius: 6px; padding: 6px 8px; font-size: 10px; margin-bottom: 8px;">
+            <div style="color: ${isLethal ? '#fca5a5' : '#fbbf24'}; font-weight: 800; margin-bottom: 2px;">⏱️ SURVIVAL TIME WINDOWS:</div>
+            <div style="color: #cbd5e1;">• Unprotected Human Survival: <strong>&lt; ${zone.survivalTimeMinutes} min</strong></div>
+            <div style="color: #cbd5e1;">• Exposed Skin Frostbite: <strong>&lt; ${zone.frostbiteTimeMinutes} min</strong></div>
+            ${zone.fuelCloudPointHazard ? '<div style="color: #fda4af; font-weight: 700; margin-top: 2px;">⚠️ Arctic Diesel Waxing / Cloud Point Warning</div>' : ''}
           </div>
 
-          <div style="font-size: 10px; color: #475569; margin-bottom: 6px;">
-            <strong>Advisory:</strong> ${zone.survivalAdvisory}
+          <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">
+            <strong style="color:#cbd5e1;">Advisory:</strong> ${zone.survivalAdvisory}
           </div>
 
-          <div style="font-size: 9.5px; color: #64748b; background: #f1f5f9; padding: 4px; border-radius: 4px;">
-            <strong>Equipment:</strong> ${zone.equipmentAdvisory}
+          <div style="font-size: 9.5px; color: #94a3b8; background: rgba(15, 23, 42, 0.6); padding: 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+            <strong style="color:#cbd5e1;">Equipment:</strong> ${zone.equipmentAdvisory}
           </div>
         </div>
       `;
 
-      dangerMarker.bindPopup(popupContent);
-      coreRing.bindPopup(popupContent);
+      dangerMarker.bindPopup(popupContent, { className: 'tactical-hud-popup' });
+      coreRing.bindPopup(popupContent, { className: 'tactical-hud-popup' });
 
       dangerMarker.on('click', () => {
         if (onSelectDangerZone) onSelectDangerZone(zone);
@@ -1397,19 +1795,25 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
       const userMarker = L.marker([safeLat, safeLng], { icon: gpsIcon });
       userMarker.bindPopup(`
-        <div style="font-family: sans-serif; min-width: 250px; color: #0f172a; padding: 4px;">
-          <div style="font-weight: 800; font-size: 13px; color: #0284c7; margin-bottom: 2px;">📍 ${locationTitle.toUpperCase()}</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Latitude:</strong> ${userLat.toFixed(6)}°</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Longitude:</strong> ${userLng.toFixed(6)}°</div>
-          <div style="font-size: 11px; margin-bottom: 3px;"><strong>Fix Precision:</strong> ${formattedAccuracy}</div>
-          ${userAlt !== null ? `<div style="font-size: 11px; margin-bottom: 3px;"><strong>Altitude:</strong> ${Math.round(userAlt)}m AMSL</div>` : ''}
-          ${userSpeed !== null ? `<div style="font-size: 11px; margin-bottom: 3px;"><strong>Ground Speed:</strong> ${(userSpeed * 3.6).toFixed(1)} km/h</div>` : ''}
+        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 250px; background: rgba(10, 15, 30, 0.96); backdrop-filter: blur(16px); color: #f1f5f9; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.4); box-shadow: 0 16px 40px rgba(0,0,0,0.85);">
+          <div style="font-weight: 900; font-size: 13px; color: #38bdf8; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">
+            📍 ${locationTitle.toUpperCase()}
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 10.5px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+              <div><span style="color: #64748b;">LAT:</span> <strong style="color: #38bdf8;">${userLat.toFixed(5)}°</strong></div>
+              <div><span style="color: #64748b;">LNG:</span> <strong style="color: #38bdf8;">${userLng.toFixed(5)}°</strong></div>
+              <div><span style="color: #64748b;">PRECISION:</span> <strong style="color: #4ade80;">${formattedAccuracy}</strong></div>
+              <div><span style="color: #64748b;">SPEED:</span> <strong style="color: #fbbf24;">${userSpeed !== null ? `${(userSpeed * 3.6).toFixed(1)} km/h` : '0.0 km/h'}</strong></div>
+            </div>
+            ${userAlt !== null ? `<div style="margin-top: 4px; color: #94a3b8; font-size: 10px;"><span style="color: #64748b;">ALTITUDE:</span> <strong style="color: #7dd3fc;">${Math.round(userAlt)}m AMSL</strong></div>` : ''}
+          </div>
           ${weatherPopupSection}
-          <div style="font-size: 10px; background: #e0f2fe; color: #0369a1; padding: 4px 6px; border-radius: 4px; font-weight: bold; margin-top: 4px;">
+          <div style="font-size: 9.5px; background: rgba(56, 189, 248, 0.15); color: #7dd3fc; padding: 4px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(56, 189, 248, 0.3);">
             ${isWatching ? 'CONTINUOUS SATELLITE LIVE TRACKING ACTIVE' : 'REAL-TIME LOCATION FIX ACTIVE'}
           </div>
         </div>
-      `);
+      `, { className: 'tactical-hud-popup' });
 
       userGroup.addLayer(userMarker);
     }
@@ -1541,28 +1945,86 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     try {
       emitAiActionBroadcast({
         category: 'logistics',
-        message: `${isSimulation ? '[SIMULATION] ' : ''}Analyzing ${currentExpedition.waypoints.length} waypoints via Gemini 3.8 Flash AI...`,
+        message: `${isSimulation ? '[SIMULATION] ' : ''}Calculating A* tactical path across ${currentExpedition.waypoints.length} waypoints via Gemini 3.8 Flash AI...`,
         stationOrAsset: currentExpedition.name,
-        impact: 'Hazard circumnavigation & sequence optimization',
+        impact: 'DEM slope & LETHAL hazard circumnavigation',
       });
 
-      const res = await fetch('/api/ai/waypoints/optimize', {
+      // Execute Polar A* route optimization with DEM slope, cold-soak, wind, and lethal hazard cost matrices
+      const astarRes = await apiFetch('/api/ai/route-optimizer/astar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          waypoints: currentExpedition.waypoints,
+          environment: payload.environment,
+          asset: {
+            id: activeAsset?.id,
+            name: activeAsset?.name,
+            minOperatingTemp: -50,
+            speedKmh: activeAsset?.telemetry?.speedKmh || 24,
+          },
+        }),
       });
-      const data = await res.json();
-      if (data.status === 'ok' && data.plan) {
-        setLocalProposedRoute(data.plan);
+      const astarData = await astarRes.json();
+
+      if (astarData.status === 'ok' && astarData.path) {
+        const plan: WaypointOptimizationResult = {
+          recommendedOrder: astarData.path.map((n: any) => n.id),
+          orderedWaypoints: astarData.path.map((n: any, idx: number) => ({
+            id: n.id,
+            name: n.name || `Waypoint ${idx + 1}`,
+            lat: n.lat,
+            lng: n.lng,
+            elevationM: n.elevationM,
+            status: idx === 0 ? 'completed' : idx === 1 ? 'current' : 'pending',
+            sequence: idx + 1,
+            environmentalHazard: n.hazardNote,
+          })),
+          estimatedDistanceKm: astarData.metadata.totalDistanceKm,
+          estimatedDurationHours: parseFloat((astarData.metadata.estimatedTimeMinutes / 60).toFixed(1)),
+          riskLevel: astarData.metadata.hazardsAvoided.length > 0 ? 'LOW' : 'MEDIUM',
+          reasoning: [
+            astarData.tacticalRecommendation || 'Route calculated via polar A* weighted cost function.',
+            `Traverse distance: ${astarData.metadata.totalDistanceKm} km (+${astarData.metadata.distanceDeltaKm} km detour vs straight-line to circumnavigate severe hazards).`,
+            `Wind impact: ${astarData.metadata.windConditions.headwindTailwind} (${astarData.metadata.windConditions.costImpactPercent > 0 ? `+${astarData.metadata.windConditions.costImpactPercent}%` : `${astarData.metadata.windConditions.costImpactPercent}%`}). Max DEM slope: ${astarData.metadata.maxSlopeDeg}°.`,
+            `Cost advantage: ${astarData.metadata.savingsVsStraightLinePercent}% cost savings vs straight-line.`,
+          ],
+          warnings: astarData.metadata.maxTempEncountered < -45 ? [`Extreme cold soak: ${astarData.metadata.maxTempEncountered}°C requires continuous auxiliary block heating.`] : [],
+          confidence: 0.96,
+          mode: astarData.mode === 'gemini_ai_live' ? 'gemini_ai_live' : 'cv_heuristic_fallback',
+          engineUsed: astarData.model || 'gemini-3.8-flash',
+          cached: false,
+          timestamp: astarData.timestamp || new Date().toISOString(),
+          validationDetails: {
+            allCandidateIdsValid: true,
+            mandatoryPreserved: true,
+            hazardAvoidanceCount: astarData.metadata.hazardsAvoided.length,
+            fallbackUsed: astarData.mode !== 'gemini_ai_live',
+          },
+        };
+
+        setLocalProposedRoute(plan);
         setShowProposedPanel(true);
         emitAiActionBroadcast({
           category: 'logistics',
-          message: `${isSimulation ? '[SIMULATION] ' : ''}Gemini route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
+          message: `${isSimulation ? '[SIMULATION] ' : ''}Gemini A* route proposed: ${plan.estimatedDistanceKm} km, Risk: ${plan.riskLevel}.`,
           stationOrAsset: currentExpedition.name,
-          impact: `Pending operator approval. Mode: ${data.plan.mode}.`,
+          impact: `Pending operator approval. Mode: ${plan.mode}.`,
         });
       } else {
-        setOptimizerError(data.message || 'Optimization request failed.');
+        // Fallback to legacy endpoint if astar fails
+        const res = await apiFetch('/api/ai/waypoints/optimize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.status === 'ok' && data.plan) {
+          setLocalProposedRoute(data.plan);
+          setShowProposedPanel(true);
+        } else {
+          setOptimizerError(data.message || 'Optimization request failed.');
+        }
       }
     } catch (err: any) {
       setOptimizerError(err.message || 'Network error during route optimization.');
@@ -1609,364 +2071,519 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
   return (
     <div className="relative w-full flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
-      {/* Top Map Toolbar */}
-      <div className="p-3 bg-slate-900/90 backdrop-blur border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 z-10">
-        {/* Layer Type Switcher */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-          <button
-            type="button"
-            onClick={() => setMapType('satellite')}
-            className={`px-2.5 py-1 rounded font-bold transition-colors ${
-              mapType === 'satellite'
-                ? 'bg-sky-600 text-white shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Satellite Aerial
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapType('dark')}
-            className={`px-2.5 py-1 rounded font-bold transition-colors ${
-              mapType === 'dark'
-                ? 'bg-sky-600 text-white shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Tactical Dark
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapType('terrain')}
-            className={`px-2.5 py-1 rounded font-bold transition-colors ${
-              mapType === 'terrain'
-                ? 'bg-sky-600 text-white shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Topographic
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapType('osm')}
-            className={`px-2.5 py-1 rounded font-bold transition-colors ${
-              mapType === 'osm'
-                ? 'bg-sky-600 text-white shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Cartographic
-          </button>
-          {googleMapsApiKey && (
+      {/* Top Map Toolbar - Refactored Compact Tactical Command HUD */}
+      <div className="px-3.5 py-2.5 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-2.5 z-30 select-none relative font-mono text-xs">
+        {/* Left Side: Map Cartography, Overlays, and Quick Jump */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 1. Basemap Style Dropdown */}
+          <div className="relative">
             <button
               type="button"
-              onClick={() => setMapType('google_hybrid')}
-              className={`px-2.5 py-1 rounded font-bold transition-colors ${
-                mapType === 'google_hybrid'
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'text-emerald-400 hover:text-white'
+              onClick={() => setActiveMenu(activeMenu === 'style' ? 'none' : 'style')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                activeMenu === 'style'
+                  ? 'bg-slate-800 text-white border-slate-600'
+                  : 'bg-slate-900/90 text-slate-300 hover:text-white border-slate-700/80 hover:bg-slate-800'
               }`}
+              title="Select basemap cartographic raster"
             >
-              Google Maps
+              <MapIcon className="w-3.5 h-3.5 text-cyan-400" />
+              <span>
+                {mapType === 'dark'
+                  ? 'Tactical Dark'
+                  : mapType === 'satellite'
+                  ? 'Esri Satellite'
+                  : mapType === 'tactical_canvas'
+                  ? 'Tactical Deep'
+                  : mapType === 'terrain'
+                  ? 'Topographic'
+                  : 'OpenStreetMap'}
+              </span>
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${activeMenu === 'style' ? 'rotate-180' : ''}`} />
             </button>
-          )}
+
+            {activeMenu === 'style' && (
+              <div className="absolute top-10 left-0 z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-1.5 min-w-[210px] space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-900 mb-1">
+                  Cartographic Projection
+                </div>
+                {[
+                  { id: 'dark', label: 'Tactical Dark', desc: 'Esri Dark Canvas (Watermark-Free)' },
+                  { id: 'satellite', label: 'Esri Polar Aerial', desc: 'High-res satellite imagery' },
+                  { id: 'tactical_canvas', label: 'Tactical Deep Grid', desc: 'Cryo vector #060B18 contrast' },
+                  { id: 'terrain', label: 'Topographic Contours', desc: 'Elevation relief & contours' },
+                  { id: 'osm', label: 'OpenStreetMap', desc: 'Standard street cartography' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setMapType(item.id as any);
+                      setActiveMenu('none');
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                      mapType === item.id
+                        ? 'bg-cyan-950/70 text-cyan-300 font-semibold border border-cyan-800/60'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs">{item.label}</div>
+                      <div className="text-[10px] text-slate-500">{item.desc}</div>
+                    </div>
+                    {mapType === item.id && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 ml-2" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 2. Overlays & Filters Menu Popover */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setActiveMenu(activeMenu === 'overlays' ? 'none' : 'overlays')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                activeMenu === 'overlays'
+                  ? 'bg-slate-800 text-white border-slate-600'
+                  : isHeatmapActive
+                  ? 'bg-rose-950/40 text-rose-200 border-rose-800/70 hover:bg-rose-900/50'
+                  : 'bg-slate-900/90 text-slate-300 hover:text-white border-slate-700/80 hover:bg-slate-800'
+              }`}
+              title="Configure vector layers, sub-zero thermal heatmap, tracking breadcrumbs"
+            >
+              <Layers className={`w-3.5 h-3.5 ${isHeatmapActive ? 'text-rose-400' : 'text-cyan-400'}`} />
+              <span>Overlays</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                isHeatmapActive
+                  ? 'bg-rose-900 text-rose-200 border border-rose-700'
+                  : 'bg-slate-800 text-slate-300 border border-slate-700'
+              }`}>
+                {[showAddLayers, isHeatmapActive, showGpsTrack, showWaypointLabels, showTelemetryOverlay, enableClustering].filter(Boolean).length}
+              </span>
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${activeMenu === 'overlays' ? 'rotate-180' : ''}`} />
+            </button>
+
+            {activeMenu === 'overlays' && (
+              <div className="absolute top-10 left-0 z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-3 w-[min(320px,calc(100vw-2rem))] space-y-2.5 animate-in fade-in zoom-in-95 duration-100">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                  <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider">Map Overlays &amp; Hazards</span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveMenu('none')}
+                    className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Sub-Zero Danger Heatmap Switch */}
+                <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80 space-y-2">
+                  <div
+                    onClick={() => {
+                      if (onToggleDangerHeatmap) onToggleDangerHeatmap();
+                      else setLocalHeatmapActive(!localHeatmapActive);
+                    }}
+                    className="flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ThermometerSnowflake className="w-4 h-4 text-rose-400" />
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">Sub-Zero Thermal Heatmap</div>
+                        <div className="text-[10px] text-slate-400">Extreme cold-soak stress modeling</div>
+                      </div>
+                    </div>
+                    <div className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors ${isHeatmapActive ? 'bg-rose-600' : 'bg-slate-800'}`}>
+                      <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform ${isHeatmapActive ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                    </div>
+                  </div>
+
+                  {/* Filter pills if active */}
+                  {isHeatmapActive && (
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1 text-[10px]">
+                      <span className="text-slate-500 font-mono">SEVERITY:</span>
+                      {(['all', 'extreme', 'lethal'] as const).map((filterKey) => (
+                        <button
+                          key={filterKey}
+                          type="button"
+                          onClick={() => setDangerFilter(filterKey)}
+                          className={`px-2 py-0.5 rounded font-mono transition-colors cursor-pointer ${
+                            dangerFilter === filterKey
+                              ? filterKey === 'lethal'
+                                ? 'bg-rose-600 text-white font-bold'
+                                : filterKey === 'extreme'
+                                ? 'bg-indigo-600 text-white font-bold'
+                                : 'bg-sky-600 text-white font-bold'
+                              : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {filterKey === 'all' ? '< -25°C' : filterKey === 'extreme' ? '< -35°C' : '< -45°C'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Vector Overlays: SCAR ADD v7.4 */}
+                <div
+                  onClick={() => setShowAddLayers(!showAddLayers)}
+                  className="flex items-center justify-between p-2 rounded-lg bg-slate-900/70 border border-slate-800/80 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <div className="text-xs font-semibold text-slate-200">ADD v7.4 Vector Outlines</div>
+                      <div className="text-[10px] text-slate-400">Antarctic coastlines &amp; grounding lines</div>
+                    </div>
+                  </div>
+                  <div className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors ${showAddLayers ? 'bg-cyan-600' : 'bg-slate-800'}`}>
+                    <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform ${showAddLayers ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                  </div>
+                </div>
+
+                {/* Breadcrumbs & Labels */}
+                <div className="space-y-1 pt-1">
+                  <div
+                    onClick={() => setShowGpsTrack(!showGpsTrack)}
+                    className="flex items-center justify-between p-1.5 rounded hover:bg-slate-900/60 cursor-pointer text-xs"
+                  >
+                    <span className="text-slate-300">Traverse GPS Breadcrumb Track</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${showGpsTrack ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-900 text-slate-500'}`}>
+                      {showGpsTrack ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setShowWaypointLabels(!showWaypointLabels)}
+                    className="flex items-center justify-between p-1.5 rounded hover:bg-slate-900/60 cursor-pointer text-xs"
+                  >
+                    <span className="text-slate-300">Waypoint Tactical Callout Labels</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${showWaypointLabels ? 'bg-sky-950 text-sky-300 border border-sky-800' : 'bg-slate-900 text-slate-500'}`}>
+                      {showWaypointLabels ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setShowTelemetryOverlay(!showTelemetryOverlay)}
+                    className="flex items-center justify-between p-1.5 rounded hover:bg-slate-900/60 cursor-pointer text-xs"
+                  >
+                    <span className="text-slate-300">Progressive Telemetry HUD</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${showTelemetryOverlay ? 'bg-sky-950 text-sky-300 border border-sky-800' : 'bg-slate-900 text-slate-500'}`}>
+                      {showTelemetryOverlay ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setEnableClustering(!enableClustering)}
+                    className="flex items-center justify-between p-1.5 rounded hover:bg-slate-900/60 cursor-pointer text-xs"
+                  >
+                    <span className="text-slate-300">Marker Auto-Clustering</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${enableClustering ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-slate-900 text-slate-500'}`}>
+                      {enableClustering ? 'AUTO' : 'OFF'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Arrival Detection Radius */}
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Waypoint Arrival Radius:</span>
+                  <div className="flex items-center gap-1 font-mono text-[10px]">
+                    {[1, 3, 5, 10].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setArrivalRadiusKm(r)}
+                        className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                          arrivalRadiusKm === r
+                            ? 'bg-sky-600 text-white font-bold'
+                            : 'bg-slate-900 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {r}km
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Quick Jump Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setActiveMenu(activeMenu === 'jump' ? 'none' : 'jump')}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                activeMenu === 'jump'
+                  ? 'bg-slate-800 text-white border-slate-600'
+                  : 'bg-slate-900/90 text-slate-300 hover:text-white border-slate-700/80 hover:bg-slate-800'
+              }`}
+              title="Quick focus camera to key polar sectors"
+            >
+              <Compass className="w-3.5 h-3.5 text-slate-300" />
+              <span>Jump</span>
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${activeMenu === 'jump' ? 'rotate-180' : ''}`} />
+            </button>
+
+            {activeMenu === 'jump' && (
+              <div className="absolute top-10 left-0 z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-1.5 min-w-[230px] space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-900 mb-1">
+                  Polar Sector Locations
+                </div>
+                {region === 'antarctica' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleFlyToSouthPole();
+                        setActiveMenu('none');
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <div>
+                        <div className="text-xs font-medium">South Pole Station</div>
+                        <div className="text-[10px] text-sky-400">Amundsen-Scott (-90.0°)</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleFlyToMcMurdo();
+                        setActiveMenu('none');
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <div>
+                        <div className="text-xs font-medium">McMurdo Station</div>
+                        <div className="text-[10px] text-sky-400">Ross Island (-77.8°)</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleFlyToConcordia();
+                        setActiveMenu('none');
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <div>
+                        <div className="text-xs font-medium">Concordia Dome C</div>
+                        <div className="text-[10px] text-sky-400">High Plateau (-75.1°)</div>
+                      </div>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleFlyToSvalbard();
+                      setActiveMenu('none');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div>
+                      <div className="text-xs font-medium">Ny-Ålesund Station</div>
+                      <div className="text-[10px] text-amber-400">Svalbard Arctic (78.9°N)</div>
+                    </div>
+                  </button>
+                )}
+
+                <div className="pt-1 mt-1 border-t border-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleFitAllPoints();
+                      setActiveMenu('none');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-2 transition-colors cursor-pointer text-xs"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Fit All Active Bases &amp; Fleet</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Sub-Zero Danger Zones Heatmap Controls */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-          <button
-            type="button"
-            onClick={() => {
-              if (onToggleDangerHeatmap) onToggleDangerHeatmap();
-              else setLocalHeatmapActive(!localHeatmapActive);
-            }}
-            className={`px-2.5 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-colors ${
-              isHeatmapActive
-                ? 'bg-rose-600 text-white shadow-[0_0_12px_rgba(225,29,72,0.4)]'
-                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-            title="Toggle Sub-Zero Danger Zones Thermal Heatmap"
-          >
-            <ThermometerSnowflake className="w-3.5 h-3.5" />
-            <span>DANGER HEATMAP: {isHeatmapActive ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {isHeatmapActive && (
-            <div className="flex items-center gap-0.5 pl-1 border-l border-slate-800 font-mono text-[10px]">
-              <button
-                type="button"
-                onClick={() => setDangerFilter('all')}
-                className={`px-1.5 py-0.5 rounded ${
-                  dangerFilter === 'all'
-                    ? 'bg-sky-700 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ALL (&lt; -25°C)
-              </button>
-              <button
-                type="button"
-                onClick={() => setDangerFilter('extreme')}
-                className={`px-1.5 py-0.5 rounded ${
-                  dangerFilter === 'extreme'
-                    ? 'bg-indigo-700 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                EXTREME (&lt; -35°C)
-              </button>
-              <button
-                type="button"
-                onClick={() => setDangerFilter('lethal')}
-                className={`px-1.5 py-0.5 rounded ${
-                  dangerFilter === 'lethal'
-                    ? 'bg-rose-700 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                LETHAL (&lt; -45°C)
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Waypoint Tracing & Tracking Navigation Controls */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-mono">
-          {/* Follow Mode Toggle */}
+        {/* Right Side: Follow Asset, AI Route Optimizer, GPS Lock, and Settings */}
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
+          {/* Follow Asset Toggle */}
           <button
             type="button"
             onClick={() => setFollowMode(!followMode)}
-            className={`px-2.5 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
               followMode
-                ? 'bg-emerald-600 text-white shadow-[0_0_12px_rgba(16,185,129,0.5)] border border-emerald-400'
-                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                ? 'bg-emerald-950/80 text-emerald-200 border-emerald-500/70 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'bg-slate-900/90 text-slate-300 hover:text-white border-slate-700/80 hover:bg-slate-800'
             }`}
-            title="Auto-Center and Track Active Expedition Asset (Disables on manual pan)"
+            title="Auto-Center and Track Active Expedition Convoy"
           >
-            <LocateFixed className={`w-3.5 h-3.5 ${followMode ? 'animate-spin text-emerald-200' : ''}`} />
-            <span>FOLLOW ASSET: {followMode ? 'ON' : 'OFF'}</span>
+            <LocateFixed className={`w-3.5 h-3.5 ${followMode ? 'animate-spin text-emerald-300' : 'text-slate-400'}`} />
+            <span>{followMode ? 'Tracking Asset' : 'Follow Asset'}</span>
           </button>
 
-          {/* GPS Track Breadcrumbs Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowGpsTrack(!showGpsTrack)}
-            className={`px-2 py-1 rounded font-bold font-mono text-[10px] flex items-center gap-1 transition-colors ${
-              showGpsTrack
-                ? 'bg-amber-600/90 text-white border border-amber-500'
-                : 'bg-slate-900 text-slate-500 border border-slate-800 hover:text-slate-300'
-            }`}
-            title="Toggle Traveled GPS Breadcrumb History Track"
-          >
-            <Navigation className="w-3 h-3" />
-            <span>GPS TRACK: {showGpsTrack ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {/* Arrival Radius Selector */}
-          <div className="flex items-center gap-1 border-l border-slate-800 pl-1.5 text-[10px]">
-            <span className="text-slate-500 uppercase tracking-wider">RADIUS:</span>
-            {[1, 3, 5, 10].map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setArrivalRadiusKm(r)}
-                className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
-                  arrivalRadiusKm === r
-                    ? 'bg-sky-600 text-white'
-                    : 'text-slate-400 hover:text-white bg-slate-900'
-                }`}
-                title={`Set arrival detection radius to ${r}km`}
-              >
-                {r}km
-              </button>
-            ))}
-          </div>
-
-          {/* Waypoint Label Tags Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowWaypointLabels(!showWaypointLabels)}
-            className={`px-2 py-0.5 rounded font-bold font-mono text-[10px] border border-slate-800 transition-colors ${
-              showWaypointLabels
-                ? 'bg-sky-950 text-sky-300 border-sky-700'
-                : 'bg-slate-900 text-slate-500'
-            }`}
-            title="Toggle Waypoint Labels on Map"
-          >
-            LABELS: {showWaypointLabels ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-        {/* Gemini AI Route Optimizer Button & Status */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-purple-800/80 text-xs font-mono shadow-md">
-          <button
-            type="button"
-            onClick={handleRunGeminiRouteOptimization}
-            disabled={optimizingRoute}
-            className={`px-3 py-1 rounded font-bold font-mono text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
-              optimizingRoute
-                ? 'bg-purple-900/70 text-purple-200 animate-pulse border border-purple-500'
-                : activeProposedRoute
-                ? 'bg-gradient-to-r from-purple-700 to-indigo-700 text-white shadow-[0_0_14px_rgba(168,85,247,0.6)] border border-purple-400'
-                : 'bg-purple-950/90 text-purple-300 hover:bg-purple-900 hover:text-white border border-purple-800'
-            }`}
-            title="Analyze waypoints using Gemini 3.8 Flash AI and current polar hazard conditions"
-          >
-            {optimizingRoute ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-300" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-            )}
-            <span>
-              {optimizingRoute
-                ? 'GEMINI ANALYZING...'
-                : activeProposedRoute
-                ? 'AI PROPOSAL ACTIVE'
-                : 'AI ROUTE OPTIMIZER'}
-            </span>
-          </button>
-
-          {activeProposedRoute && (
+          {/* AI Route Optimizer */}
+          <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setShowProposedPanel(!showProposedPanel)}
-              className="px-2 py-0.5 rounded text-[10px] text-purple-300 hover:text-white bg-purple-950 border border-purple-800 font-bold cursor-pointer"
-              title="Toggle Recommendation Review Panel"
-            >
-              {showProposedPanel ? 'HIDE PANEL' : 'SHOW PANEL'}
-            </button>
-          )}
-
-          {optimizerError && (
-            <span className="text-rose-400 text-[10px] max-w-xs truncate" title={optimizerError}>
-              {optimizerError}
-            </span>
-          )}
-        </div>
-
-        {/* Polar Quick Jump Presets */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-slate-500 font-mono text-[10px] uppercase">JUMP:</span>
-          {region === 'antarctica' ? (
-            <>
-              <button
-                type="button"
-                onClick={handleFlyToSouthPole}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[11px] font-mono"
-              >
-                South Pole (-90°)
-              </button>
-              <button
-                type="button"
-                onClick={handleFlyToMcMurdo}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[11px] font-mono"
-              >
-                McMurdo (-77.8°)
-              </button>
-              <button
-                type="button"
-                onClick={handleFlyToConcordia}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[11px] font-mono"
-              >
-                Concordia Dome C
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={handleFlyToSvalbard}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-mono"
-            >
-              Svalbard Ny-Ålesund (78.9°N)
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleFitAllPoints}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-            title="Fit All Active Assets & Bases"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-
-          {/* User Add Base & Add Waypoint Actions */}
-          {onOpenAddBase && (
-            <button
-              type="button"
-              onClick={onOpenAddBase}
-              className="px-2 py-1 rounded bg-sky-700 hover:bg-sky-600 text-white font-mono font-bold text-[11px] flex items-center gap-1 border border-sky-500 transition-colors"
-              title="Commission New Research Base Location"
-            >
-              <Plus className="w-3 h-3" />
-              <span>ADD BASE</span>
-            </button>
-          )}
-
-          {onOpenAddWaypoint && (
-            <button
-              type="button"
-              onClick={onOpenAddWaypoint}
-              className="px-2 py-1 rounded bg-amber-700 hover:bg-amber-600 text-white font-mono font-bold text-[11px] flex items-center gap-1 border border-amber-500 transition-colors"
-              title="Add Tactical Waypoint or Expedition Fix"
-            >
-              <Plus className="w-3 h-3" />
-              <span>ADD WAYPOINT</span>
-            </button>
-          )}
-        </div>
-
-        {/* Real-time GPS Acquisition & Key Config Buttons */}
-        <div className="flex items-center gap-2 ml-auto">
-          {onOpenApiKeyModal && (
-            <button
-              type="button"
-              onClick={onOpenApiKeyModal}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-1.5 transition-colors ${
-                googleMapsApiKey 
-                  ? 'border-emerald-600 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60'
-                  : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300'
+              onClick={handleRunGeminiRouteOptimization}
+              disabled={optimizingRoute}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                optimizingRoute
+                  ? 'bg-purple-950/80 text-purple-200 border-purple-500/80 animate-pulse'
+                  : activeProposedRoute
+                  ? 'bg-purple-950/80 text-purple-200 border-purple-500/70 shadow-[0_0_14px_rgba(168,85,247,0.3)]'
+                  : 'bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 border-purple-800/80 hover:border-purple-600'
               }`}
-              title="Configure Google Maps Platform Key & Gemini AI"
+              title="Analyze waypoints using Gemini 3.8 Flash AI and current polar hazard conditions"
             >
-              <Key className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">
-                {googleMapsApiKey ? 'GMAPS KEY ACTIVE' : 'MAP KEY'}
+              {optimizingRoute ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-300" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+              )}
+              <span>
+                {optimizingRoute
+                  ? 'AI Analyzing...'
+                  : activeProposedRoute
+                  ? 'AI Proposal Active'
+                  : 'AI Route Optimizer'}
               </span>
             </button>
-          )}
 
+            {activeProposedRoute && (
+              <button
+                type="button"
+                onClick={() => setShowProposedPanel(!showProposedPanel)}
+                className="px-2 py-1.5 rounded-lg text-[10px] text-purple-300 hover:text-white bg-purple-950/90 border border-purple-800 font-mono font-bold cursor-pointer transition-colors"
+                title="Toggle Recommendation Review Panel"
+              >
+                {showProposedPanel ? 'Hide Panel' : 'Show Panel'}
+              </button>
+            )}
+          </div>
+
+          {/* Live Device GPS Lock */}
           <button
             type="button"
             onClick={handleAcquireAndFlyToGps}
             disabled={geoLoading}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
               userLat !== null
-                ? 'bg-sky-600 hover:bg-sky-500 border-sky-400 text-white shadow-[0_0_15px_rgba(56,189,248,0.4)]'
-                : 'bg-sky-950 hover:bg-sky-900 border-sky-600 text-sky-200'
+                ? 'bg-sky-950/90 hover:bg-sky-900 border-sky-500/70 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.25)]'
+                : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white'
             }`}
+            title="Acquire live GPS location fix from device GNSS receiver"
           >
             {geoLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-sky-300" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-300" />
             ) : (
-              <Crosshair className={`w-4 h-4 ${userLat !== null ? 'animate-pulse' : ''}`} />
+              <Crosshair className={`w-3.5 h-3.5 ${userLat !== null ? 'text-sky-400 animate-pulse' : 'text-slate-400'}`} />
             )}
-            <span>{userLat !== null ? `LIVE GPS LOCK (${formattedAccuracy})` : 'LOCK LIVE DEVICE GPS'}</span>
+            <span>{userLat !== null ? `GPS Locked (${formattedAccuracy})` : 'Acquire GPS'}</span>
           </button>
+
+          {/* Settings & Fast Actions Drawer Popover */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setActiveMenu(activeMenu === 'tools' ? 'none' : 'tools')}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                activeMenu === 'tools'
+                  ? 'bg-slate-800 text-white border-slate-600'
+                  : 'bg-slate-900/90 text-slate-400 hover:text-white border-slate-700/80 hover:bg-slate-800'
+              }`}
+              title="Map Configuration & Fast Actions"
+            >
+              <Settings2 className="w-4 h-4" />
+            </button>
+
+            {activeMenu === 'tools' && (
+              <div className="absolute top-10 right-0 z-50 bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-2 min-w-[200px] space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-900 mb-1 flex items-center justify-between">
+                  <span>Map Controls</span>
+                  <span className="text-cyan-400 font-mono">z{currentZoom}</span>
+                </div>
+
+                {onOpenAddBase && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAddBase();
+                      setActiveMenu('none');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-2 transition-colors cursor-pointer text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Establish Research Base</span>
+                  </button>
+                )}
+
+                {onOpenAddWaypoint && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAddWaypoint();
+                      setActiveMenu('none');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-2 transition-colors cursor-pointer text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Add Tactical Waypoint</span>
+                  </button>
+                )}
+
+                {onOpenApiKeyModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenApiKeyModal();
+                      setActiveMenu('none');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-2 transition-colors cursor-pointer text-xs"
+                  >
+                    <Key className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AI &amp; Vector Cartography</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleFitAllPoints();
+                    setActiveMenu('none');
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-2 transition-colors cursor-pointer text-xs"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Fit All Map Entities</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Backdrop for closing popover menus on click outside */}
+        {activeMenu !== 'none' && (
+          <div
+            onClick={() => setActiveMenu('none')}
+            className="fixed inset-0 z-20 bg-transparent"
+          />
+        )}
       </div>
 
       {/* Main Map Container */}
-      <div className="relative w-full h-[560px] min-h-[500px] bg-slate-950">
+      <div className="relative w-full bg-slate-950" style={{ height: 'clamp(300px, 55vh, 560px)', minHeight: '300px' }}>
         <div 
           ref={mapContainerRef} 
           className="w-full h-full absolute inset-0 z-0 bg-slate-950" 
-          style={{ width: '100%', height: '100%', minHeight: '500px' }}
+          style={{ width: '100%', height: '100%', minHeight: '300px' }}
         />
 
         {/* Overlaid Real Geolocation Telemetry HUD */}
         {userLat !== null && userLng !== null && (
-          <div className="absolute top-3 right-3 z-[400] bg-slate-950/90 backdrop-blur-md border border-sky-500/60 p-3 rounded-lg shadow-2xl text-xs font-mono max-w-xs text-slate-200 pointer-events-none">
+          <div className="absolute top-3 right-3 z-[400] bg-slate-950/90 backdrop-blur-md border border-sky-500/60 p-3 rounded-lg shadow-2xl text-xs font-mono max-w-[min(280px,calc(55vw))] text-slate-200 pointer-events-none">
             <div className="flex items-center gap-2 text-sky-400 font-bold border-b border-slate-800 pb-1.5 mb-2">
               <LocateFixed className="w-4 h-4 animate-pulse" />
               <span>AUTHENTIC REAL-TIME GPS FIX</span>
@@ -2053,7 +2670,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
         {/* Gemini AI Route Recommendation & Operator Approval Panel */}
         {activeProposedRoute && showProposedPanel && (
-          <div className="absolute bottom-3 sm:bottom-4 right-3 z-[450] bg-slate-950/95 backdrop-blur-md border border-purple-500/80 p-4 rounded-xl shadow-[0_0_30px_rgba(168,85,247,0.35)] text-xs font-mono max-w-md w-full text-slate-200 pointer-events-auto max-h-[85vh] overflow-y-auto">
+          <div className="absolute bottom-3 sm:bottom-4 left-2 right-2 sm:left-auto sm:right-3 z-[450] bg-slate-950/95 backdrop-blur-md border border-purple-500/80 p-4 rounded-xl shadow-[0_0_30px_rgba(168,85,247,0.35)] text-xs font-mono w-auto sm:max-w-md sm:w-full text-slate-200 pointer-events-auto max-h-[85vh] overflow-y-auto">
             {/* Simulation Warning Banner */}
             {(isSimulation || activeProposedRoute.isSimulation) && (
               <div className="mb-2.5 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-500/80 text-amber-300 font-bold text-[10px] flex items-center gap-1.5 uppercase tracking-wider">
@@ -2246,6 +2863,15 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* Polar SCAR ADD Attribution & Polar GNSS Geometry Disclaimer Footer */}
+        <div className="absolute bottom-3 right-3 z-[1000]">
+          <PolarAttributionFooter
+            cacheStatus={addCacheStatus}
+            isWarningDismissed={isGnssWarningDismissed}
+            onDismissWarning={() => setIsGnssWarningDismissed(true)}
+          />
+        </div>
       </div>
 
       {/* Geolocation Status / Error Bar */}

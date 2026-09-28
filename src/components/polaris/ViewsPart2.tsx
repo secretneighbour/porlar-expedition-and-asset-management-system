@@ -3,7 +3,7 @@ import {
   AlertTriangle, Wallet, TrendingUp, Compass, FileText, Download, Sun, Moon,
   ShieldCheck, ShieldAlert, ArrowRight, Snowflake, Radio, Layers, Navigation, MapPin, Zap,
   RefreshCw, Smartphone, Laptop, Eye, Plus, ThermometerSnowflake, Crosshair, Globe,
-  CheckCircle2, Trash2, Fuel, Key, Clock, Archive, Bot
+  CheckCircle2, Trash2, Fuel, Key, Clock, Archive, Bot, Monitor, Volume2, VolumeX, Terminal, QrCode, Wifi, WifiOff
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -575,95 +575,137 @@ export function MapView({
         subtitle="Real-time polar geospatial projection displaying research stations, mobile field teams, asset tracking, sub-zero danger heatmaps, and emergency beacons."
       />
 
-      {/* Map Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Tactical Station Context & Environmental Telemetry Strip */}
+      <div className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-xl px-4 py-2.5 mb-4 font-mono text-xs flex flex-wrap items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-bold text-slate-200">
+              {filterRegion === 'arctic' ? 'Ny-Ålesund Station Hub (Arctic)' : 'Maitri Station Hub (Antarctica)'}
+            </span>
+            <span className="text-slate-500">|</span>
+            <span className="text-sky-400">
+              {filterRegion === 'arctic' ? '78.9° N, 11.9° E' : '70.7° S, 11.7° E'}
+            </span>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2.5 text-slate-400 border-l border-slate-800 pl-3">
+            <span className="flex items-center gap-1 text-cyan-300">
+              <ThermometerSnowflake className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{filterRegion === 'arctic' ? '-24.5°C' : '-48.2°C'} AWOS</span>
+            </span>
+            <span>•</span>
+            <span className="text-slate-300">
+              {filterRegion === 'arctic' ? '28 kts NE' : '45 kts Katabatic SW'}
+            </span>
+            <span>•</span>
+            <span className="text-slate-400">978 hPa</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+          <span className="hidden sm:inline text-emerald-400/90 font-medium">
+            AES-GCM Polar Link Synchronized
+          </span>
+          <span className="hidden sm:inline">|</span>
+          <div className="flex items-center gap-1 text-slate-300 font-mono">
+            <Clock className="w-3.5 h-3.5 text-sky-400" />
+            <span>UTC LIVE OPS</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Map Control Bar - Proper Segmented Tabs & Standardized Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 font-mono">
+        {/* Segmented Map Mode Tabs */}
+        <div className="inline-flex p-1 bg-slate-950/90 rounded-xl border border-slate-800 shadow-inner">
           <button
+            type="button"
             onClick={() => setMapMode('satellite')}
-            style={{
-              background: mapMode === 'satellite' ? t.accentSoft : t.bgAlt,
-              color: mapMode === 'satellite' ? t.accent : t.textDim,
-              border: `1px solid ${mapMode === 'satellite' ? t.accent : t.border}`,
-            }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+              mapMode === 'satellite'
+                ? 'bg-slate-800 text-sky-400 font-bold border border-slate-700/80 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
           >
             <Globe className="w-3.5 h-3.5 text-sky-400" />
             <span>Interactive Real Map</span>
-            <span className="px-1.5 py-0.2 text-[9px] bg-sky-950 text-sky-400 rounded font-mono border border-sky-800/60">
-              LEAFLET + HEATMAP
-            </span>
           </button>
 
           <button
+            type="button"
             onClick={() => setMapMode('radar')}
-            style={{
-              background: mapMode === 'radar' ? t.accentSoft : t.bgAlt,
-              color: mapMode === 'radar' ? t.accent : t.textDim,
-              border: `1px solid ${mapMode === 'radar' ? t.accent : t.border}`,
-            }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+              mapMode === 'radar'
+                ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700/80 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
           >
             <Radio className="w-3.5 h-3.5 text-emerald-400" />
             <span>Vector Radar View</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setMapMode('smart_route')}
-            style={{
-              background: mapMode === 'smart_route' ? 'rgba(16, 185, 129, 0.2)' : t.bgAlt,
-              color: mapMode === 'smart_route' ? '#34d399' : t.textDim,
-              border: `1px solid ${mapMode === 'smart_route' ? '#10b981' : t.border}`,
-            }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+              mapMode === 'smart_route'
+                ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700/80 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
           >
             <Navigation className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Smart Route (Satellite CV)</span>
+            <span>Smart Route (CV)</span>
           </button>
         </div>
 
+        {/* Sector Filter & Fast Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Add Actions */}
+          {/* Sector Filter Segmented Control */}
+          <div className="inline-flex p-1 bg-slate-950/90 rounded-xl border border-slate-800 text-xs">
+            {(['all', 'antarctica', 'arctic'] as const).map((reg) => (
+              <button
+                key={reg}
+                type="button"
+                onClick={() => setFilterRegion(reg)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
+                  filterRegion === reg
+                    ? 'bg-sky-600 text-white font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {reg === 'all' ? 'All Sectors' : reg}
+              </button>
+            ))}
+          </div>
+
+          {/* Fast Action: Set Waypoint */}
           <button
             type="button"
             onClick={() => {
               setClickCoords(null);
               setIsAddWaypointOpen(true);
             }}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700/80 hover:bg-emerald-600 text-white flex items-center gap-1.5 border border-emerald-500/60 transition-colors cursor-pointer"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900/90 hover:bg-slate-800 text-emerald-300 hover:text-white border border-emerald-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Plot tactical waypoint fix"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Set Waypoint</span>
+            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <span>+ Waypoint</span>
           </button>
 
+          {/* Fast Action: Establish Base */}
           <button
             type="button"
             onClick={() => {
               setClickCoords(null);
               setIsAddBaseOpen(true);
             }}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-700/80 hover:bg-sky-600 text-white flex items-center gap-1.5 border border-sky-500/60 transition-colors cursor-pointer"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900/90 hover:bg-slate-800 text-sky-300 hover:text-white border border-sky-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Commission new polar research station"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Establish Base</span>
+            <Plus className="w-3.5 h-3.5 text-sky-400" />
+            <span>+ Base</span>
           </button>
-
-          {/* Sector filter */}
-          <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-400 font-bold px-1 uppercase">SECTOR:</span>
-            {(['all', 'antarctica', 'arctic'] as const).map((reg) => (
-              <button
-                key={reg}
-                onClick={() => setFilterRegion(reg)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase cursor-pointer ${
-                  filterRegion === reg
-                    ? 'bg-sky-600 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {reg}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -815,14 +857,14 @@ export function MapView({
         {/* Right Info Sidebar / Multi-Tab Detail Card */}
         <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-4 flex flex-col justify-between min-h-[520px]">
           <div>
-            {/* Sidebar Tabs */}
-            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-950/80 rounded-lg border border-slate-800 mb-3">
+            {/* Sidebar Tabs - Cohesive Tactical Segmented Control */}
+            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-950/90 rounded-xl border border-slate-800 mb-3 font-mono text-xs">
               <button
                 type="button"
                 onClick={() => setSideTab('telemetry')}
-                className={`py-1.5 px-1 text-[11px] font-bold rounded cursor-pointer transition-colors text-center ${
+                className={`py-1.5 px-1 text-[11px] font-medium rounded-lg cursor-pointer transition-colors text-center ${
                   sideTab === 'telemetry'
-                    ? 'bg-sky-600 text-white'
+                    ? 'bg-slate-800 text-sky-400 font-bold border border-slate-700/80 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -831,9 +873,9 @@ export function MapView({
               <button
                 type="button"
                 onClick={() => setSideTab('danger_zones')}
-                className={`py-1.5 px-1 text-[11px] font-bold rounded cursor-pointer transition-colors text-center flex items-center justify-center gap-0.5 ${
+                className={`py-1.5 px-1 text-[11px] font-medium rounded-lg cursor-pointer transition-colors text-center flex items-center justify-center gap-1 ${
                   sideTab === 'danger_zones'
-                    ? 'bg-rose-700 text-white'
+                    ? 'bg-slate-800 text-rose-300 font-bold border border-rose-800/80 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -843,9 +885,9 @@ export function MapView({
               <button
                 type="button"
                 onClick={() => setSideTab('waypoints')}
-                className={`py-1.5 px-1 text-[11px] font-bold rounded cursor-pointer transition-colors text-center ${
+                className={`py-1.5 px-1 text-[11px] font-medium rounded-lg cursor-pointer transition-colors text-center ${
                   sideTab === 'waypoints'
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-slate-800 text-emerald-400 font-bold border border-slate-700/80 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -854,9 +896,9 @@ export function MapView({
               <button
                 type="button"
                 onClick={() => setSideTab('bases')}
-                className={`py-1.5 px-1 text-[11px] font-bold rounded cursor-pointer transition-colors text-center ${
+                className={`py-1.5 px-1 text-[11px] font-medium rounded-lg cursor-pointer transition-colors text-center ${
                   sideTab === 'bases'
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-slate-800 text-cyan-300 font-bold border border-slate-700/80 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -1019,11 +1061,73 @@ export function MapView({
                     </div>
                   )
                 ) : (
-                  <div className="p-6 text-center text-slate-500 space-y-2">
-                    <Compass className="w-8 h-8 mx-auto text-slate-600 animate-spin" />
-                    <p className="text-xs">
-                      Click any station, danger zone heatmap badge, waypoint, or distress beacon on the map to load live telemetry.
-                    </p>
+                  <div className="py-5 px-2 flex flex-col items-center text-center space-y-3 font-mono">
+                    {/* Stylized Polar Azimuth Reticle SVG */}
+                    <div className="relative w-14 h-14 flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-full border border-slate-800 animate-pulse bg-cyan-950/20" />
+                      <svg viewBox="0 0 100 100" className="w-14 h-14 text-cyan-400 select-none">
+                        <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.35" />
+                        <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" strokeWidth="0.9" strokeDasharray="2 2" opacity="0.5" />
+                        <circle cx="50" cy="50" r="14" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.75" />
+                        <line x1="50" y1="4" x2="50" y2="96" stroke="currentColor" strokeWidth="0.7" opacity="0.4" />
+                        <line x1="4" y1="50" x2="96" y2="50" stroke="currentColor" strokeWidth="0.7" opacity="0.4" />
+                        <circle cx="50" cy="50" r="3" fill="#38bdf8" />
+                      </svg>
+                    </div>
+
+                    <div className="space-y-1 max-w-xs">
+                      <h4 className="text-xs font-bold text-slate-200">
+                        Awaiting Target Selection
+                      </h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Select any base, expedition convoy, waypoint, or hazard area from the map to inspect real-time telemetry.
+                      </p>
+                    </div>
+
+                    {/* Quick Inspect Stations & Mobile Units */}
+                    <div className="w-full text-left space-y-1.5 pt-2 border-t border-slate-800">
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                        Quick Inspect Stations
+                      </div>
+                      <div className="space-y-1">
+                        {allStations.slice(0, 4).map((st) => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => {
+                              setSelected({ ...st, kind: 'station', label: st.name });
+                              setFocusCoords({ lat: st.lat, lng: st.lng });
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/60 hover:bg-slate-800/90 border border-slate-800/80 hover:border-slate-700 flex items-center justify-between transition-colors cursor-pointer group"
+                          >
+                            <div className="flex flex-col text-left">
+                              <span className="text-xs text-slate-200 group-hover:text-cyan-300 font-medium">
+                                {st.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                {st.country || 'Polar Base'} • {st.elevationM}m MSL
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-sky-400 font-mono flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                              <span>Inspect</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sector Telemetry Snapshot */}
+                    <div className="w-full grid grid-cols-2 gap-1.5 pt-1 text-[10px]">
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-left">
+                        <span className="text-slate-500 block uppercase">Active Bases</span>
+                        <span className="text-xs font-bold text-slate-200">{allStations.length} Nominal</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-left">
+                        <span className="text-slate-500 block uppercase">Traverse Units</span>
+                        <span className="text-xs font-bold text-amber-300">{mappedExpeditions.length} En-Route</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2007,31 +2111,196 @@ export function UsersPage({ t, db }: { t: any; db: any }) {
 }
 
 /* ============================== SETTINGS ============================== */
-export function SettingsPage({ t, theme, setTheme, user, onOpenApiKeyModal }: { t: any; theme: string; setTheme: (s: string) => void; user: any; onOpenApiKeyModal?: () => void }) {
+export function SettingsPage({
+  t,
+  theme,
+  setTheme,
+  user,
+  onOpenApiKeyModal,
+  crtEnabled = false,
+  onToggleCrt,
+  soundEnabled = true,
+  onToggleSound,
+  currentDeviceId = 'NODE-01',
+  connectedClients = 1,
+  syncStatus = 'synced',
+  selectedStation = 'Maitri',
+  onOpenPairing,
+  onOpenPreBoot,
+}: {
+  t: any;
+  theme: string;
+  setTheme: (s: any) => void;
+  user: any;
+  onOpenApiKeyModal?: () => void;
+  crtEnabled?: boolean;
+  onToggleCrt?: () => void;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
+  currentDeviceId?: string;
+  connectedClients?: number;
+  syncStatus?: 'synced' | 'connecting' | 'offline';
+  selectedStation?: string;
+  onOpenPairing?: () => void;
+  onOpenPreBoot?: () => void;
+}) {
   return (
     <div>
       <PageHeader t={t} title="Settings & Mission Configuration" subtitle="Platform preferences, external satellite API configurations, and account information." />
       <div style={{ background: t.panel, border: `1px solid ${t.border}` }} className="rounded-xl p-5 max-w-2xl space-y-6">
         <div>
-          <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Appearance Theme</span>
-          <p style={{ color: t.textDim }} className="text-xs mb-2.5">Select high-contrast dark tactical mode or polar daylight mode.</p>
-          <div className="flex gap-2">
-            <button onClick={() => setTheme("light")} style={{ background: theme === "light" ? t.accentSoft : t.bgAlt, color: theme === "light" ? t.accent : t.textDim, border: `1px solid ${theme === "light" ? t.accent : t.border}` }} className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium cursor-pointer"><Sun size={15} />Daylight High-Contrast</button>
-            <button onClick={() => setTheme("dark")} style={{ background: theme === "dark" ? t.accentSoft : t.bgAlt, color: theme === "dark" ? t.accent : t.textDim, border: `1px solid ${theme === "dark" ? t.accent : t.border}` }} className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium cursor-pointer"><Moon size={15} />Sub-Zero Tactical Dark</button>
+          <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Appearance & Tactical Theme</span>
+          <p style={{ color: t.textDim }} className="text-xs mb-2.5">Calibrated color schemes optimized for extreme cold operations, low glare, and high contrast.</p>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {[
+              { id: 'cyan', label: 'Sub-Zero Cyan', desc: 'Tactical dark navy & cyan HUD', accent: '#00F2FE' },
+              { id: 'green', label: 'Cryo Phosphor', desc: 'Tactical night green HUD', accent: '#10B981' },
+              { id: 'amber', label: 'Polar Amber', desc: 'High-contrast storm amber', accent: '#F59E0B' },
+              { id: 'light', label: 'Daylight High-Contrast', desc: 'Reflective polar snow daylight', accent: '#0284C7' },
+            ].map(p => {
+              const active = theme === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setTheme(p.id)}
+                  style={{
+                    background: active ? t.accentSoft || 'rgba(0, 242, 254, 0.15)' : t.bgAlt,
+                    border: `1px solid ${active ? p.accent : t.border}`,
+                    color: active ? '#FFFFFF' : t.textDim,
+                  }}
+                  className="p-2.5 rounded-lg text-left transition-all cursor-pointer hover:border-slate-500"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold font-mono" style={{ color: p.accent }}>{p.label}</span>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: p.accent }} />
+                  </div>
+                  <span className="text-[10px] text-slate-400 block leading-tight">{p.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* CRT Scanlines & Acoustic Audio */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+            <div
+              style={{ background: t.bgAlt, border: `1px solid ${t.border}` }}
+              className="p-2.5 rounded-lg flex items-center justify-between"
+            >
+              <div>
+                <span className="text-xs font-semibold block" style={{ color: t.text }}>CRT Scanlines</span>
+                <span className="text-[10px] text-slate-400">Authentic scanline overlay</span>
+              </div>
+              {onToggleCrt && (
+                <button
+                  type="button"
+                  onClick={onToggleCrt}
+                  style={{
+                    background: crtEnabled ? 'rgba(0, 242, 254, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                    border: `1px solid ${crtEnabled ? '#00F2FE' : t.border}`,
+                    color: crtEnabled ? '#00F2FE' : t.textDim,
+                  }}
+                  className="px-2 py-0.5 rounded text-[11px] font-mono font-bold cursor-pointer transition-all"
+                >
+                  {crtEnabled ? 'ACTIVE' : 'OFF'}
+                </button>
+              )}
+            </div>
+
+            <div
+              style={{ background: t.bgAlt, border: `1px solid ${t.border}` }}
+              className="p-2.5 rounded-lg flex items-center justify-between"
+            >
+              <div>
+                <span className="text-xs font-semibold block" style={{ color: t.text }}>Acoustic Audio</span>
+                <span className="text-[10px] text-slate-400">Tactical chirp feedback</span>
+              </div>
+              {onToggleSound && (
+                <button
+                  type="button"
+                  onClick={onToggleSound}
+                  style={{
+                    background: soundEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                    border: `1px solid ${soundEnabled ? '#10B981' : t.border}`,
+                    color: soundEnabled ? '#10B981' : t.textDim,
+                  }}
+                  className="px-2 py-0.5 rounded text-[11px] font-mono font-bold cursor-pointer transition-all"
+                >
+                  {soundEnabled ? 'ON' : 'MUTED'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* SATCOM Mesh & Hardware Node Diagnostics */}
+        <div className="pt-4" style={{ borderTop: `1px solid ${t.border}` }}>
+          <div className="flex items-center gap-2 mb-1">
+            <Radio className="w-4 h-4 text-emerald-400" />
+            <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">
+              SATCOM Mesh &amp; Node Operations
+            </span>
+          </div>
+          <p style={{ color: t.textDim }} className="text-xs mb-3">
+            Primary terminal hardware identity, local mesh synchronization, and cryo-sensor pre-boot tests.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 font-mono text-xs mb-3">
+            <div style={{ background: t.bgAlt, border: `1px solid ${t.border}` }} className="p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Primary Node ID</span>
+              <span className="text-xs font-bold text-white">{currentDeviceId}</span>
+            </div>
+            <div style={{ background: t.bgAlt, border: `1px solid ${t.border}` }} className="p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Mesh Uplink</span>
+              <span className={`text-xs font-bold flex items-center gap-1 ${syncStatus === 'synced' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {syncStatus === 'synced' ? <Wifi size={12} /> : <WifiOff size={12} />}
+                {syncStatus.toUpperCase()} ({connectedClients} {connectedClients === 1 ? 'Node' : 'Nodes'})
+              </span>
+            </div>
+            <div style={{ background: t.bgAlt, border: `1px solid ${t.border}` }} className="p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Assigned Sector</span>
+              <span className="text-xs font-semibold text-cyan-300">{selectedStation}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {onOpenPairing && (
+              <button
+                type="button"
+                onClick={onOpenPairing}
+                style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38BDF8' }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-sky-500/25 transition-all font-mono"
+              >
+                <QrCode size={13} />
+                <span>Pair Field Device (QR Mesh)</span>
+              </button>
+            )}
+
+            {onOpenPreBoot && (
+              <button
+                type="button"
+                onClick={onOpenPreBoot}
+                style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34D399' }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-500/25 transition-all font-mono"
+              >
+                <Terminal size={13} />
+                <span>Run POST &amp; Cryo Diagnostics</span>
+              </button>
+            )}
           </div>
         </div>
 
         {onOpenApiKeyModal && (
           <div className="pt-4" style={{ borderTop: `1px solid ${t.border}` }}>
-            <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">External API & Satellite Integrations</span>
-            <p style={{ color: t.textDim }} className="text-xs mb-3">Configure Gemini AI Reconnaissance engine and Google Maps Platform high-resolution satellite cartography.</p>
+            <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Mission AI &amp; Polar Cartography Integrations</span>
+            <p style={{ color: t.textDim }} className="text-xs mb-3">Configure Gemini AI Reconnaissance engine and SCAR Antarctic Digital Database (ADD v7.4) vector cartography.</p>
             <button
               onClick={onOpenApiKeyModal}
               style={{ background: 'linear-gradient(135deg, #7C3AED, #60A5FA)', color: "#FFFFFF", boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }}
               className="px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
             >
               <Key size={14} />
-              <span>Configure API Keys (Gemini &amp; Google Maps)</span>
+              <span>Configure Mission AI &amp; ADD Overlays</span>
             </button>
           </div>
         )}
@@ -2041,7 +2310,7 @@ export function SettingsPage({ t, theme, setTheme, user, onOpenApiKeyModal }: { 
           <div className="mt-2 text-sm space-y-1.5 font-mono">
             <p style={{ color: t.textDim }}>Operator: <span style={{ color: t.text }} className="font-sans font-medium">{user.name}</span></p>
             <p style={{ color: t.textDim }}>Permission Level: <span className="text-emerald-400 font-bold">{user.role}</span></p>
-            <p style={{ color: t.textDim }}>Active Ingress Port: <span className="text-sky-400">3000 (0.0.0.0)</span></p>
+            <p style={{ color: t.textDim }}>Active Ingress Port: <span className="text-sky-400">3000 (0.0.0.0, allowedHosts: true)</span></p>
           </div>
         </div>
       </div>

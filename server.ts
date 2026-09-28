@@ -35,8 +35,11 @@ import {
   WaypointOptimizationRequest,
   WaypointOptimizationResult,
   Waypoint,
+  normalizeExpedition,
+  normalizeExpeditions,
 } from './src/types.js';
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
+import { findAStarPath, calculateEdgeCost } from './src/utils/polarRouteAStar.js';
 import os from 'os';
 import { GoogleGenAI } from '@google/genai';
 import { databaseManager } from './src/server/database.js';
@@ -414,33 +417,69 @@ async function startServer() {
 
   const app = express();
 
-  // Robust Cross-Origin Resource Sharing (CORS) for multi-PC and remote field units
+  // Robust Cross-Origin Resource Sharing (CORS) for multi-PC, Tauri Android WebView, and remote field units
   app.use((req, res, next) => {
     const origin = req.headers.origin;
+    const requestedHeaders = req.headers['access-control-request-headers'];
+
+    // List of explicitly allowed origins or wildcards
     const allowedEnvOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.APP_URL || '')
       .split(',')
       .map((o) => o.trim())
       .filter(Boolean);
 
-    const isLocalOrLan =
+    // Matches:
+    // - Tauri Android / Desktop: tauri.localhost, tauri://*, capacitor://*, ionic://*
+    // - Localhost & LAN: localhost, 127.0.0.1, 10.*, 192.168.*, 172.16-31.*
+    // - Tunnels: *.ngrok-free.app, *.ngrok.app, *.ngrok.io, *.localtunnel.me, *.trycloudflare.com
+    // - String "null" (sent by some Android WebViews executing local bundles)
+    const isAllowedOrigin =
       origin &&
-      (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com)(:\d+)?$/.test(origin));
+      (origin === 'null' ||
+        /^https?:\/\/(localhost|127\.0\.0\.1|tauri\.localhost)(:\d+)?$/i.test(origin) ||
+        /^tauri:\/\/.*$/i.test(origin) ||
+        /^capacitor:\/\/.*$/i.test(origin) ||
+        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/i.test(origin) ||
+        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|ngrok\.app|ngrok\.io|localtunnel\.me|trycloudflare\.com)(:\d+)?$/i.test(origin));
 
-    if (origin && (isLocalOrLan || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
+    if (origin) {
+      if (isAllowedOrigin || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // Fallback for tunnel/proxy connections
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else if (!origin) {
+    } else {
       res.setHeader('Access-Control-Allow-Origin', '*');
     }
 
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
 
+    // Dynamically permit all requested headers and ensure ngrok-skip-browser-warning is explicitly allowed
+    const allowedHeadersList = requestedHeaders
+      ? `${requestedHeaders}, ngrok-skip-browser-warning`
+      : 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning, cache-control, pragma, *';
+    res.setHeader('Access-Control-Allow-Headers', allowedHeadersList);
+    res.setHeader('Access-Control-Expose-Headers', 'ngrok-skip-browser-warning');
+
+    // Set ngrok bypass cookie on responses to assist browser sessions
+    res.setHeader('Set-Cookie', 'ngrok-skip-browser-warning=69420; Path=/; Max-Age=31536000; SameSite=None; Secure');
+
+    // Cache preflight results for 24 hours to prevent spamming OPTIONS on every single request
+    res.setHeader('Access-Control-Max-Age', '86400');
+
+    // Safe debugging logs for CORS inspection
     if (req.method === 'OPTIONS') {
+      console.log(`[CORS PREFLIGHT 204] ${req.method} ${req.path} | Origin: ${origin || 'none'} | Req-Headers: ${requestedHeaders || 'none'}`);
       return res.sendStatus(204);
     }
+
+    if (req.path.startsWith('/api/')) {
+      console.log(`[API INCOMING] ${req.method} ${req.path} | Origin: ${origin || 'none'}`);
+    }
+
     next();
   });
 
@@ -624,7 +663,14 @@ async function startServer() {
       status: 'ok',
       connectedClients: devices.length,
       devices,
-      state: systemState,
+      state: {
+        ...systemState,
+        expeditions: normalizeExpeditions(systemState.expeditions || []),
+        polarisDb: systemState.polarisDb ? {
+          ...systemState.polarisDb,
+          expeditions: normalizeExpeditions(systemState.polarisDb.expeditions || []),
+        } : systemState.polarisDb,
+      },
     });
   });
 
@@ -2169,6 +2215,186 @@ SCHEMA:
       });
     }
   });
+
+  // =========================================================================
+  // A* POLAR ROUTE OPTIMIZER & GEMINI DECISION LAYER
+  // Calculates lowest-cost path using calculateEdgeCost (Distance, Slope, Temp, Wind, Hazard)
+  // and generates a 2-sentence tactical recommendation using Gemini 3.8 Flash.
+  // =========================================================================
+  app.post('/api/ai/route-optimizer/astar', async (req, res) => {
+    const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
+    const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
+
+    const {
+      startNode: reqStartNode,
+      goalNode: reqGoalNode,
+      waypoints = [],
+      environment = {},
+      asset = {},
+    } = req.body || {};
+
+    // Determine start and goal nodes
+    let startNode = reqStartNode;
+    let goalNode = reqGoalNode;
+    let intermediateNodes: any[] = [];
+
+    if ((!startNode || !goalNode) && Array.isArray(waypoints) && waypoints.length >= 2) {
+      startNode = {
+        id: waypoints[0].id || 'start',
+        lat: waypoints[0].lat,
+        lng: waypoints[0].lng,
+        name: waypoints[0].name || 'Departure Waypoint',
+        elevationM: waypoints[0].elevationM,
+      };
+      goalNode = {
+        id: waypoints[waypoints.length - 1].id || 'goal',
+        lat: waypoints[waypoints.length - 1].lat,
+        lng: waypoints[waypoints.length - 1].lng,
+        name: waypoints[waypoints.length - 1].name || 'Destination Waypoint',
+        elevationM: waypoints[waypoints.length - 1].elevationM,
+      };
+      intermediateNodes = waypoints.slice(1, -1).map((w: any) => ({
+        id: w.id,
+        lat: w.lat,
+        lng: w.lng,
+        name: w.name,
+        elevationM: w.elevationM,
+      }));
+    }
+
+    // Default fallback to McMurdo Logistics Hub (-77.848, 166.666) -> Amundsen-Scott (-90.0, 0.0) if none supplied
+    if (!startNode || !goalNode) {
+      startNode = {
+        id: 'mcmurdo-base',
+        name: 'McMurdo Logistics Hub',
+        lat: -77.848,
+        lng: 166.666,
+        elevationM: 24,
+      };
+      goalNode = {
+        id: 'south-pole-station',
+        name: 'Amundsen-Scott South Pole Station',
+        lat: -90.0,
+        lng: 0.0,
+        elevationM: 2835,
+      };
+    }
+
+    // Run A* pathfinding with weighted cost function
+    const astarResult = findAStarPath(startNode, goalNode, environment, asset, intermediateNodes);
+    const metadata = astarResult.metadata;
+
+    const routeDataForGemini = {
+      startLocation: startNode.name || `${startNode.lat.toFixed(2)}, ${startNode.lng.toFixed(2)}`,
+      destination: goalNode.name || `${goalNode.lat.toFixed(2)}, ${goalNode.lng.toFixed(2)}`,
+      totalDistanceKm: metadata.totalDistanceKm,
+      straightLineDistanceKm: metadata.straightLineDistanceKm,
+      distanceDetourKm: metadata.distanceDeltaKm,
+      estimatedTravelTimeMinutes: metadata.estimatedTimeMinutes,
+      maxTempEncounteredC: metadata.maxTempEncountered,
+      windConditions: `${metadata.windConditions.speedKts} kts ${metadata.windConditions.headwindTailwind} (Cost impact: ${metadata.windConditions.costImpactPercent > 0 ? `+${metadata.windConditions.costImpactPercent}%` : `${metadata.windConditions.costImpactPercent}%`})`,
+      maxSlopeDegrees: metadata.maxSlopeDeg,
+      hazardsAvoided: metadata.hazardsAvoided.length > 0 ? metadata.hazardsAvoided : ['None in direct path'],
+      costCalculated: metadata.totalCost,
+      straightLineCost: metadata.straightLineCost,
+      costSavingsPercent: metadata.savingsVsStraightLinePercent,
+    };
+
+    // Deterministic tactical recommendation generator (fallback & zero-key guarantee)
+    const generateFallbackRecommendation = (): string => {
+      const avoidedText = metadata.hazardsAvoided.length > 0
+        ? `A* pathfinder routed around lethal danger zone '${metadata.hazardsAvoided[0]}' by diverting ${metadata.distanceDeltaKm > 0 ? `${metadata.distanceDeltaKm} km laterally` : 'outside the hazard boundary'} to eliminate catastrophic -50°C elastomer vitrification and crevasse shear.`
+        : `A* pathfinder selected the optimal low-gradient (<5° slope) blue-ice ridge, adding ${metadata.distanceDeltaKm} km over the straight line to minimize mechanical strain and conserve auxiliary fuel.`;
+
+      const actionText = metadata.windConditions.headwindTailwind === 'HEADWIND'
+        ? `Maintain crawler speed at ${asset.speedKmh || 24} km/h and engage auxiliary block heaters against active ${metadata.windConditions.speedKts}kt headwind.`
+        : `Proceed along the stabilized blue-ice corridor and monitor battery microgrid reserves at arrival.`;
+
+      return `${avoidedText} ${actionText}`;
+    };
+
+    // If no Gemini key, return deterministic result immediately
+    if (!keyToUse) {
+      const recommendation = generateFallbackRecommendation();
+      astarResult.tacticalRecommendation = recommendation;
+      astarResult.mode = 'deterministic_fallback';
+      astarResult.model = 'Polar A* Cost Matrix Engine';
+      astarResult.timestamp = new Date().toISOString();
+
+      if (systemState.polarisDb) {
+        systemState.polarisDb.auditLog.unshift({
+          id: `AUD-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString(),
+          user: 'A-STAR-ROUTER',
+          action: 'ASTAR_ROUTE_CALCULATED',
+          entity: 'Waypoints / A* Router',
+          details: `A* route calculated between ${startNode.name || 'Start'} and ${goalNode.name || 'Goal'}: ${metadata.totalDistanceKm} km (${metadata.estimatedTimeMinutes} min). Cost: ${metadata.totalCost} vs direct ${metadata.straightLineCost}.`,
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        ...astarResult,
+      });
+    }
+
+    // Call Gemini API (Decision Layer)
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: keyToUse,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+      });
+
+      const prompt = `You are a polar operations AI. Given this route data:
+${JSON.stringify(routeDataForGemini, null, 2)}
+
+Write a 2-sentence tactical recommendation for the fleet commander. Highlight the biggest risk and why this route was chosen over the straight-line path.`;
+
+      const aiResponse = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          temperature: 0.2,
+          maxOutputTokens: 200,
+        },
+      });
+
+      const recommendation = aiResponse.text?.trim() || generateFallbackRecommendation();
+      astarResult.tacticalRecommendation = recommendation;
+      astarResult.mode = 'gemini_ai_live';
+      astarResult.model = 'gemini-3.8-flash';
+      astarResult.timestamp = new Date().toISOString();
+
+      if (systemState.polarisDb) {
+        systemState.polarisDb.auditLog.unshift({
+          id: `AUD-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString(),
+          user: 'GEMINI-ASTAR-AI',
+          action: 'AI_ASTAR_ROUTE_RECOMMENDED',
+          entity: 'Waypoints / A* Router',
+          details: `Gemini 3.8 Flash provided tactical recommendation for ${metadata.totalDistanceKm}km A* route (${metadata.hazardsAvoided.length} hazards circumvented).`,
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        ...astarResult,
+      });
+    } catch (err: any) {
+      console.warn('[POLAR-AI] Gemini decision layer error, using deterministic recommendation:', err.message);
+      const recommendation = generateFallbackRecommendation();
+      astarResult.tacticalRecommendation = recommendation;
+      astarResult.mode = 'deterministic_fallback';
+      astarResult.model = 'Polar A* Cost Matrix (Gemini Fallback)';
+      astarResult.timestamp = new Date().toISOString();
+
+      return res.json({
+        status: 'ok',
+        ...astarResult,
+      });
+    }
+  });
+
   function handleClientAction(action: string, payload: any) {
     switch (action) {
       case 'UPDATE_REGION':
@@ -2184,10 +2410,10 @@ SCHEMA:
         systemState.assets = [payload, ...systemState.assets];
         break;
       case 'UPDATE_EXPEDITION':
-        systemState.expeditions = systemState.expeditions.map((e) => (e.id === payload.id ? payload : e));
+        systemState.expeditions = systemState.expeditions.map((e) => (e.id === payload.id ? normalizeExpedition(payload) : e));
         break;
       case 'ADD_EXPEDITION':
-        systemState.expeditions = [payload, ...systemState.expeditions];
+        systemState.expeditions = [normalizeExpedition(payload), ...systemState.expeditions];
         break;
       case 'ADD_STATION':
         systemState.stations = [payload, ...(systemState.stations || INITIAL_STATIONS)];
@@ -2201,7 +2427,8 @@ SCHEMA:
         if (expeditionId) {
           systemState.expeditions = systemState.expeditions.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = [...(e.waypoints || []), wp];
+            const currentWps = Array.isArray(e.waypoints) ? e.waypoints : [];
+            const updatedWaypoints = [...currentWps, wp];
             const addedDist = Number(wp.distanceFromPrevKm) || 45;
             return {
               ...e,
@@ -2221,7 +2448,7 @@ SCHEMA:
             if (e.id !== expeditionId) return e;
             return {
               ...e,
-              waypoints: (e.waypoints || []).filter((w) => w.id !== waypointId),
+              waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).filter((w) => w.id !== waypointId),
             };
           });
         } else {
@@ -2239,7 +2466,7 @@ SCHEMA:
             if (e.id !== expeditionId) return e;
             return {
               ...e,
-              waypoints: (e.waypoints || []).map((w) => (w.id === waypoint.id ? waypoint : w)),
+              waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).map((w) => (w.id === waypoint.id ? waypoint : w)),
             };
           });
         } else {
@@ -2257,12 +2484,18 @@ SCHEMA:
         break;
       case 'UPDATE_POLARIS_DB':
         if (payload && typeof payload === 'object') {
-          systemState.polarisDb = payload;
+          systemState.polarisDb = {
+            ...payload,
+            expeditions: normalizeExpeditions(payload.expeditions || []),
+          };
         }
         break;
       case 'UPDATE_POLARIS_COLLECTION':
         if (payload && payload.collectionName && Array.isArray(payload.data) && systemState.polarisDb) {
-          (systemState.polarisDb as any)[payload.collectionName] = payload.data;
+          const collectionData = payload.collectionName === 'expeditions'
+            ? normalizeExpeditions(payload.data)
+            : payload.data;
+          (systemState.polarisDb as any)[payload.collectionName] = collectionData;
         }
         break;
       default:

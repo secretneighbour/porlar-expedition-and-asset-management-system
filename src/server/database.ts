@@ -22,7 +22,7 @@ import {
   INITIAL_AUDIT_LOG,
   INITIAL_COMPLETED_WORK_LOGS,
 } from '../data/polarisData.js';
-import { PolarSystemState, PolarisDb, PolarUser } from '../types.js';
+import { PolarSystemState, PolarisDb, PolarUser, normalizeExpeditions } from '../types.js';
 
 export interface DatabaseHealthInfo {
   status: 'connected' | 'initializing' | 'degraded';
@@ -67,7 +67,7 @@ export class PolarDatabaseManager {
 
   private createDefaultPolarisDb(): PolarisDb {
     return {
-      expeditions: INITIAL_POLARIS_EXPEDITIONS,
+      expeditions: normalizeExpeditions(INITIAL_POLARIS_EXPEDITIONS),
       personnel: INITIAL_PERSONNEL,
       assets: INITIAL_POLARIS_ASSETS,
       inventory: INITIAL_INVENTORY,
@@ -88,7 +88,7 @@ export class PolarDatabaseManager {
       region: 'antarctica',
       conditionLevel: 'COND-2_CAUTION',
       assets: INITIAL_ASSETS,
-      expeditions: INITIAL_EXPEDITIONS,
+      expeditions: normalizeExpeditions(INITIAL_EXPEDITIONS),
       supplies: INITIAL_SUPPLIES,
       dispatchLogs: INITIAL_DISPATCH_LOGS,
       activeDistress: null,
@@ -234,7 +234,7 @@ export class PolarDatabaseManager {
           region: loadedData.region || 'antarctica',
           conditionLevel: loadedData.conditionLevel || 'COND-2_CAUTION',
           assets: Array.isArray(loadedData.assets) && loadedData.assets.length > 0 ? loadedData.assets : INITIAL_ASSETS,
-          expeditions: Array.isArray(loadedData.expeditions) && loadedData.expeditions.length > 0 ? loadedData.expeditions : INITIAL_EXPEDITIONS,
+          expeditions: normalizeExpeditions(Array.isArray(loadedData.expeditions) && loadedData.expeditions.length > 0 ? loadedData.expeditions : INITIAL_EXPEDITIONS),
           supplies: Array.isArray(loadedData.supplies) ? loadedData.supplies : INITIAL_SUPPLIES,
           dispatchLogs: Array.isArray(loadedData.dispatchLogs) ? loadedData.dispatchLogs : INITIAL_DISPATCH_LOGS,
           activeDistress: loadedData.activeDistress || null,
@@ -245,7 +245,7 @@ export class PolarDatabaseManager {
         };
 
         // Guarantee all polarisDb tables
-        if (!Array.isArray(state.polarisDb.expeditions)) state.polarisDb.expeditions = INITIAL_POLARIS_EXPEDITIONS;
+        state.polarisDb.expeditions = normalizeExpeditions(Array.isArray(state.polarisDb.expeditions) ? state.polarisDb.expeditions : INITIAL_POLARIS_EXPEDITIONS);
         if (!Array.isArray(state.polarisDb.personnel)) state.polarisDb.personnel = INITIAL_PERSONNEL;
         if (!Array.isArray(state.polarisDb.assets)) state.polarisDb.assets = INITIAL_POLARIS_ASSETS;
         if (!Array.isArray(state.polarisDb.inventory)) state.polarisDb.inventory = INITIAL_INVENTORY;

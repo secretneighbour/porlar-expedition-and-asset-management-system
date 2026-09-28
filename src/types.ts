@@ -183,6 +183,45 @@ export interface Expedition {
   };
 }
 
+/**
+ * Normalizes an expedition object to guarantee a canonical waypoints array.
+ * If waypoints is undefined, null, or malformed, it defaults to an empty array [].
+ */
+export function normalizeExpedition(exp: any): Expedition {
+  if (!exp || typeof exp !== 'object') {
+    return { waypoints: [] } as any;
+  }
+
+  const rawWaypoints = Array.isArray((exp as any).waypoints) ? (exp as any).waypoints : [];
+  const safeWaypoints: Waypoint[] = rawWaypoints
+    .filter((wp: any) => wp && typeof wp === 'object')
+    .map((wp: any, idx: number) => ({
+      id: typeof wp.id === 'string' && wp.id ? wp.id : `wp-auto-${Date.now()}-${idx}`,
+      name: typeof wp.name === 'string' && wp.name ? wp.name : `Waypoint Fix #${idx + 1}`,
+      lat: typeof wp.lat === 'number' && !isNaN(wp.lat) ? wp.lat : 0,
+      lng: typeof wp.lng === 'number' && !isNaN(wp.lng) ? wp.lng : 0,
+      elevationM: typeof wp.elevationM === 'number' && !isNaN(wp.elevationM) ? wp.elevationM : 0,
+      distanceFromPrevKm: typeof wp.distanceFromPrevKm === 'number' && !isNaN(wp.distanceFromPrevKm) ? wp.distanceFromPrevKm : 0,
+      passed: Boolean(wp.passed),
+      priority: wp.priority || 'normal',
+      isMandatory: Boolean(wp.isMandatory),
+      ...wp,
+    }));
+
+  return {
+    ...exp,
+    waypoints: safeWaypoints,
+  } as Expedition;
+}
+
+/**
+ * Normalizes a list of expeditions ensuring every expedition has a valid waypoints array.
+ */
+export function normalizeExpeditions(expeditions: any): Expedition[] {
+  if (!Array.isArray(expeditions)) return [];
+  return expeditions.map(normalizeExpedition);
+}
+
 export interface ResearchStation {
   id: string;
   name: string;
@@ -635,5 +674,71 @@ export interface SimulationReport {
   performanceGrade: 'S - OPTIMAL' | 'A - PROFICIENT' | 'B - ACCEPTABLE' | 'C - COMPROMISED';
   timelineLog: SimulationTimelineEvent[];
 }
+
+export interface AStarNode {
+  id: string;
+  lat: number;
+  lng: number;
+  elevationM?: number;
+  name?: string;
+  hazardNote?: string;
+}
+
+export interface AStarEnvironment {
+  tempC?: number;
+  apparentTempC?: number;
+  windSpeedKts?: number;
+  windDirectionDeg?: number;
+  dangerZones?: Array<{
+    id?: string;
+    name?: string;
+    lat: number;
+    lng: number;
+    radiusKm: number;
+    severityLevel: 'LETHAL' | 'EXTREME' | 'HIGH_RISK' | string;
+  }>;
+  crevasses?: Array<{ id: string; name: string; lat: number; lng: number; dangerLevel?: string }>;
+  mockDem?: (lat: number, lng: number) => number;
+}
+
+export interface AStarAsset {
+  id?: string;
+  name?: string;
+  minOperatingTemp?: number;
+  coldRatingC?: number;
+  speedKmh?: number;
+  type?: string;
+}
+
+export interface AStarRouteMetadata {
+  totalDistanceKm: number;
+  straightLineDistanceKm: number;
+  distanceDeltaKm: number;
+  estimatedTimeMinutes: number;
+  maxTempEncountered: number;
+  minTempEncountered: number;
+  windConditions: {
+    speedKts: number;
+    directionDeg: number;
+    headwindTailwind: 'HEADWIND' | 'TAILWIND' | 'CROSSWIND';
+    costImpactPercent: number;
+  };
+  hazardsAvoided: string[];
+  maxSlopeDeg: number;
+  totalCost: number;
+  straightLineCost: number;
+  savingsVsStraightLinePercent: number;
+}
+
+export interface AStarOptimizationResult {
+  path: AStarNode[];
+  coordinates: [number, number][];
+  metadata: AStarRouteMetadata;
+  tacticalRecommendation?: string;
+  mode?: 'gemini_ai_live' | 'deterministic_fallback';
+  model?: string;
+  timestamp?: string;
+}
+
 
 

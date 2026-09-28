@@ -23,6 +23,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { ActiveDistressAlert, PolarAsset } from '../types';
+import { apiFetch } from '../utils/api';
 
 export interface ActiveDistressBannerProps {
   distress?: ActiveDistressAlert;
@@ -97,7 +98,7 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
       if (onTriggerCrevasseFall) {
         await onTriggerCrevasseFall();
       } else {
-        const res = await fetch('/api/ai/sar/dispatch-crevasse-fall', { method: 'POST' });
+        const res = await apiFetch('/api/ai/sar/dispatch-crevasse-fall', { method: 'POST' });
         await res.json();
       }
     } catch (err) {

@@ -746,8 +746,8 @@ export const INITIAL_EXPEDITIONS = [
       { id: 'wp-exp3-6', name: 'South Pole Inland Depot', lat: -71.95, lng: 12.90, elevationM: 2680, passed: false, distanceFromPrevKm: 24 }
     ]
   },
-  { id: "EXP-0004", name: "Southern Ocean Krill Survey", region: "Antarctica", destination: "Bharati Station", base: "Bharati", start: "2025-11-01", end: "2026-02-10", status: "Completed", manager: "PER-0004", objectives: "Krill population assessment for fisheries research.", description: "Completed marine biology survey mission in the Southern Ocean." },
-  { id: "EXP-0005", name: "Arctic Glaciology Winter Study", region: "Arctic", destination: "Himadri Station", base: "Himadri", start: "2026-02-01", end: "2026-05-30", status: "In Transit", manager: "PER-0005", objectives: "Winter ice-core sampling and permafrost temperature logging.", description: "Specialized winter research team en route to Himadri Station." },
+  { id: "EXP-0004", name: "Southern Ocean Krill Survey", region: "Antarctica", destination: "Bharati Station", base: "Bharati", start: "2025-11-01", end: "2026-02-10", status: "Completed", manager: "PER-0004", objectives: "Krill population assessment for fisheries research.", description: "Completed marine biology survey mission in the Southern Ocean.", waypoints: [] },
+  { id: "EXP-0005", name: "Arctic Glaciology Winter Study", region: "Arctic", destination: "Himadri Station", base: "Himadri", start: "2026-02-01", end: "2026-05-30", status: "In Transit", manager: "PER-0005", objectives: "Winter ice-core sampling and permafrost temperature logging.", description: "Specialized winter research team en route to Himadri Station.", waypoints: [] },
 ];
 
 export const INITIAL_EXPENSES = INITIAL_EXPEDITIONS.map((e, i) => ({

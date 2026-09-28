@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Polaris Ops
+Comment=Tactical Polar Expedition & Asset Management System
+Exec=polaris-ops
+Icon=polaris-ops
+Terminal=false
+Type=Application
+Categories=Utility;Science;Geography;Network;
+Keywords=polar;expedition;telemetry;antarctica;arctic;sar;
+StartupWMClass=polaris-ops

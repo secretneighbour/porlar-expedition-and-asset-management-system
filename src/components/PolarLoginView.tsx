@@ -106,9 +106,13 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
       });
 
       let data: AuthLoginResponse;
+      const rawText = await response.text();
       try {
-        data = await response.json();
-      } catch (jsonErr) {
+        data = JSON.parse(rawText);
+      } catch {
+        if (rawText.includes('ERR_NGROK') || rawText.includes('ngrok')) {
+          throw new Error('ngrok warning page intercepted the request. Tap "Check" or open the ngrok tunnel in your browser.');
+        }
         throw new Error('Backend returned an invalid non-JSON response. Check network proxy or server logs.');
       }
 
@@ -146,7 +150,11 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
     } catch (err: any) {
       console.error('[PolarLoginView] Backend authentication failure:', err.message);
       const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
-      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify server is running on port 3000 and shared database is reachable.`);
+      setStatusText(
+        err.message?.includes('ngrok')
+          ? err.message
+          : `Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify server is running on port 3000 and shared database is reachable.`
+      );
       setStatusType('error');
       verifyBackend();
     } finally {
@@ -163,7 +171,9 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px',
+        padding: 'clamp(12px, 4vw, 24px)',
+        boxSizing: 'border-box',
+        overflowY: 'auto',
         background: `
           radial-gradient(circle at 10% 15%, rgba(167,139,250,0.30), transparent 45%),
           radial-gradient(circle at 90% 10%, rgba(96,165,250,0.20), transparent 40%),
@@ -180,9 +190,9 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.14)',
-          borderRadius: '26px',
+          borderRadius: 'clamp(16px, 4vw, 26px)',
           boxShadow: '0 25px 60px rgba(0, 0, 0, 0.4)',
-          padding: '34px 30px 26px',
+          padding: 'clamp(20px, 5vw, 34px) clamp(16px, 5vw, 30px) clamp(16px, 4vw, 26px)',
           boxSizing: 'border-box',
         }}
       >

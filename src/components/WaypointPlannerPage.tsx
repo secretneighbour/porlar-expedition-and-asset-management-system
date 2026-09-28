@@ -26,8 +26,9 @@ import {
   XCircle,
   ArrowRight
 } from 'lucide-react';
-import { Expedition, Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest } from '../types';
+import { Expedition, Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest, normalizeExpeditions } from '../types';
 import { emitAiActionBroadcast } from '../data/polarisData';
+import { apiFetch } from '../utils/api';
 
 interface WaypointPlannerPageProps {
   expeditions: Expedition[];
@@ -149,11 +150,13 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const activeExpedition = expeditions.find((e) => e.id === selectedExpId) || expeditions[0];
+  const safeExpeditions = normalizeExpeditions(expeditions || []);
+  const activeExpedition = safeExpeditions.find((e) => e.id === selectedExpId) || safeExpeditions[0];
+  const activeWaypoints: Waypoint[] = Array.isArray(activeExpedition?.waypoints) ? activeExpedition.waypoints : [];
 
   // Run Gemini AI Waypoint Route Optimization
   const handleRunAiWaypointOptimizer = async () => {
-    if (!activeExpedition || !activeExpedition.waypoints || activeExpedition.waypoints.length < 2) {
+    if (!activeExpedition || activeWaypoints.length < 2) {
       setValidationError('At least 2 registered waypoints are required on active expedition for route optimization.');
       return;
     }
@@ -162,7 +165,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
     setAiError(null);
 
     const payload: WaypointOptimizationRequest = {
-      waypoints: activeExpedition.waypoints,
+      waypoints: activeWaypoints,
       environment: {
         tempC: activeExpedition.currentWeather?.tempC ?? -35,
         apparentTempC: activeExpedition.currentWeather?.windchillC ?? -48,
@@ -173,19 +176,19 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
         ]
       },
       constraints: {
-        mandatoryWaypointIds: activeExpedition.waypoints.filter((w) => w.isMandatory || w.priority === 'mandatory').map((w) => w.id),
+        mandatoryWaypointIds: activeWaypoints.filter((w) => w.isMandatory || w.priority === 'mandatory').map((w) => w.id),
       },
     };
 
     try {
       emitAiActionBroadcast({
         category: 'logistics',
-        message: `Analyzing ${activeExpedition.waypoints.length} waypoints on ${activeExpedition.name} via Gemini 3.8 Flash AI...`,
-        stationOrAsset: activeExpedition.name,
+        message: `Analyzing ${activeWaypoints.length} waypoints on ${activeExpedition.name || 'Expedition'} via Gemini 3.8 Flash AI...`,
+        stationOrAsset: activeExpedition.name || 'Expedition',
         impact: 'Hazard avoidance and sequence optimization'
       });
 
-      const res = await fetch('/api/ai/waypoints/optimize', {
+      const res = await apiFetch('/api/ai/waypoints/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -197,7 +200,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
         emitAiActionBroadcast({
           category: 'logistics',
           message: `AI route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
-          stationOrAsset: activeExpedition.name,
+          stationOrAsset: activeExpedition.name || 'Expedition',
           impact: 'Awaiting operator review in Waypoint Studio.'
         });
       } else {
@@ -240,14 +243,14 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
     setAiProposal(null);
   };
 
-  const filteredWaypoints = activeExpedition?.waypoints.filter((wp) =>
+  const filteredWaypoints = activeWaypoints.filter((wp) =>
     wp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (wp.hazardNote && wp.hazardNote.toLowerCase().includes(searchQuery.toLowerCase()))
-  ) || [];
+  );
 
-  const totalDistanceKm = activeExpedition?.waypoints.reduce((acc, wp) => acc + (wp.distanceFromPrevKm || 0), 0) || 0;
-  const clearedCount = activeExpedition?.waypoints.filter((wp) => wp.passed).length || 0;
-  const hazardCount = activeExpedition?.waypoints.filter((wp) => !!wp.hazardNote).length || 0;
+  const totalDistanceKm = activeWaypoints.reduce((acc, wp) => acc + (wp.distanceFromPrevKm || 0), 0);
+  const clearedCount = activeWaypoints.filter((wp) => wp.passed).length;
+  const hazardCount = activeWaypoints.filter((wp) => !!wp.hazardNote).length;
 
   const handleApplyPreset = (preset: WaypointPreset) => {
     setValidationError(null);
@@ -256,8 +259,8 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
     setDistanceInput(preset.defaultDistance);
     setHazardNote(preset.defaultHazard);
 
-    if (activeExpedition && activeExpedition.waypoints.length > 0) {
-      const lastWp = activeExpedition.waypoints[activeExpedition.waypoints.length - 1];
+    if (activeExpedition && activeWaypoints.length > 0) {
+      const lastWp = activeWaypoints[activeWaypoints.length - 1];
       setLatInput((lastWp.lat - 0.2).toFixed(4));
       setLngInput((lastWp.lng + 0.3).toFixed(4));
     }
@@ -295,17 +298,17 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
   };
 
   const handleClearAllRouteWaypoints = () => {
-    if (!activeExpedition || activeExpedition.waypoints.length === 0) return;
-    activeExpedition.waypoints.forEach((wp) => {
+    if (!activeExpedition || activeWaypoints.length === 0) return;
+    activeWaypoints.forEach((wp) => {
       onDeleteWaypoint(wp.id, activeExpedition.id);
     });
-    setSuccessToast(`All ${activeExpedition.waypoints.length} waypoints removed from ${activeExpedition.name}.`);
+    setSuccessToast(`All ${activeWaypoints.length} waypoints removed from ${activeExpedition.name || 'Expedition'}.`);
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
   const handleClearClearedWaypoints = () => {
     if (!activeExpedition) return;
-    const cleared = activeExpedition.waypoints.filter((wp) => wp.passed);
+    const cleared = activeWaypoints.filter((wp) => wp.passed);
     if (cleared.length === 0) return;
     cleared.forEach((wp) => {
       onDeleteWaypoint(wp.id, activeExpedition.id);
@@ -319,8 +322,8 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
     let baseLng = parseFloat(lngInput) || 142.50;
     let baseElev = parseFloat(elevationInput) || 2000;
 
-    if (activeExpedition && activeExpedition.waypoints.length > 0) {
-      const lastWp = activeExpedition.waypoints[activeExpedition.waypoints.length - 1];
+    if (activeExpedition && activeWaypoints.length > 0) {
+      const lastWp = activeWaypoints[activeWaypoints.length - 1];
       baseLat = lastWp.lat;
       baseLng = lastWp.lng;
       baseElev = lastWp.elevationM;
@@ -328,7 +331,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
 
     const nextLat = Number((baseLat - 0.25).toFixed(4));
     const nextLng = Number((baseLng + 0.35).toFixed(4));
-    const nextNum = (activeExpedition?.waypoints.length || 0) + 1;
+    const nextNum = activeWaypoints.length + 1;
     const nextName = `Waypoint Fix #${nextNum}`;
 
     const newWp: Waypoint = {
@@ -396,15 +399,16 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
   };
 
   const exportWaypointsGpx = (expName: string, waypoints: Waypoint[]) => {
+    const safeWps = Array.isArray(waypoints) ? waypoints : [];
     let gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="PolarOps Route Studio" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
-    <name>${expName} Route</name>
+    <name>${expName || 'Expedition'} Route</name>
   </metadata>
   <rte>
-    <name>${expName} Traverse Route</name>\n`;
+    <name>${expName || 'Expedition'} Traverse Route</name>\n`;
 
-    waypoints.forEach((wp, i) => {
+    safeWps.forEach((wp, i) => {
       gpxContent += `    <rtept lat="${wp.lat}" lon="${wp.lng}">
       <ele>${wp.elevationM || 0}</ele>
       <name>WP-${i + 1}: ${wp.name}</name>
@@ -418,7 +422,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${expName.replace(/\s+/g, '_')}_Waypoints.gpx`;
+    a.download = `${(expName || 'Expedition').replace(/\s+/g, '_')}_Waypoints.gpx`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -479,18 +483,18 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
             </button>
           </div>
 
-          {activeExpedition && activeExpedition.waypoints.length > 0 && (
+          {activeExpedition && activeWaypoints.length > 0 && (
             <button
               type="button"
-              onClick={() => exportWaypointsGpx(activeExpedition.name, activeExpedition.waypoints)}
+              onClick={() => exportWaypointsGpx(activeExpedition.name || 'Expedition', activeWaypoints)}
               className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 font-bold border border-slate-700 flex items-center justify-center gap-2 transition-colors cursor-pointer text-xs"
             >
               <Download className="w-4 h-4 text-sky-400 shrink-0" />
-              <span>EXPORT GPX ({activeExpedition.waypoints.length} WPs)</span>
+              <span>EXPORT GPX ({activeWaypoints.length} WPs)</span>
             </button>
           )}
 
-          {activeExpedition && activeExpedition.waypoints.length >= 2 && (
+          {activeExpedition && activeWaypoints.length >= 2 && (
             <button
               type="button"
               onClick={handleRunAiWaypointOptimizer}
@@ -502,7 +506,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
               ) : (
                 <Sparkles className="w-4 h-4 text-purple-200 shrink-0" />
               )}
-              <span>{aiOptimizing ? 'AI OPTIMIZING...' : `AI ROUTE OPTIMIZER (${activeExpedition.waypoints.length} WPs)`}</span>
+              <span>{aiOptimizing ? 'AI OPTIMIZING...' : `AI ROUTE OPTIMIZER (${activeWaypoints.length} WPs)`}</span>
             </button>
           )}
         </div>
@@ -527,7 +531,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase block">REGISTERED WPs</span>
-              <span className="text-sm font-bold text-white">{activeExpedition.waypoints.length}</span>
+              <span className="text-sm font-bold text-white">{activeWaypoints.length}</span>
             </div>
           </div>
 
@@ -537,7 +541,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase block">CLEARED / REACHED</span>
-              <span className="text-sm font-bold text-white">{clearedCount} / {activeExpedition.waypoints.length}</span>
+              <span className="text-sm font-bold text-white">{clearedCount} / {activeWaypoints.length}</span>
             </div>
           </div>
 
@@ -635,9 +639,9 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                   onChange={(e) => setSelectedExpId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-bold focus:outline-none focus:border-amber-500 cursor-pointer text-xs min-h-[44px]"
                 >
-                  {expeditions.map((exp) => (
+                  {safeExpeditions.map((exp) => (
                     <option key={exp.id} value={exp.id}>
-                      [{exp.code}] {exp.name} ({exp.waypoints.length} WPs)
+                      [{exp.code}] {exp.name} ({(Array.isArray(exp.waypoints) ? exp.waypoints.length : 0)} WPs)
                     </option>
                   ))}
                 </select>
@@ -854,7 +858,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                   </button>
                 )}
 
-                {activeExpedition.waypoints.length > 0 && (
+                {activeWaypoints.length > 0 && (
                   <button
                     type="button"
                     onClick={handleClearAllRouteWaypoints}
@@ -862,7 +866,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                     title="Clear all waypoints for this expedition route"
                   >
                     <Trash2 className="w-3 h-3 text-rose-400" />
-                    <span>Clear All Route ({activeExpedition.waypoints.length})</span>
+                    <span>Clear All Route ({activeWaypoints.length})</span>
                   </button>
                 )}
               </div>
@@ -984,7 +988,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400 flex items-center gap-2">
-                    <span>Expedition: {activeExpedition.name}</span>
+                    <span>Expedition: {activeExpedition?.name || 'Expedition'}</span>
                     <span>•</span>
                     <span className={aiProposal.mode === 'gemini_ai_live' ? 'text-emerald-400 font-bold' : aiProposal.mode === 'gemini_ai_cached' ? 'text-sky-400 font-bold' : 'text-amber-400 font-bold'}>
                       {aiProposal.mode === 'gemini_ai_live' ? 'GEMINI 3.8 FLASH' : aiProposal.mode === 'gemini_ai_cached' ? 'AI CACHED' : 'OFFLINE HEURISTIC'}
@@ -1008,10 +1012,10 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                   CURRENT WAYPOINT SEQUENCE:
                 </div>
                 <div className="text-slate-300 text-xs font-bold flex flex-wrap items-center gap-1.5">
-                  {(activeExpedition?.waypoints || []).map((w, i) => (
+                  {activeWaypoints.map((w, i) => (
                     <React.Fragment key={w.id}>
                       <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">{w.name || w.id}</span>
-                      {i < (activeExpedition?.waypoints?.length || 0) - 1 && <span className="text-slate-500">→</span>}
+                      {i < activeWaypoints.length - 1 && <span className="text-slate-500">→</span>}
                     </React.Fragment>
                   ))}
                 </div>

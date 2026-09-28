@@ -16,6 +16,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { DispatchLog } from '../types';
+import { apiFetch } from '../utils/api';
 
 interface DispatchLogbookProps {
   logs: DispatchLog[];
@@ -48,7 +49,7 @@ export const DispatchLogbook: React.FC<DispatchLogbookProps> = ({
     setIsAiPanelOpen(true);
 
     try {
-      const res = await fetch('/api/ai/recon-eval', {
+      const res = await apiFetch('/api/ai/recon-eval', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
