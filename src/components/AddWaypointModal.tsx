@@ -17,6 +17,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Waypoint, Expedition } from '../types';
+import { safeDisplayValue } from '../utils/safeFormat';
 
 interface AddWaypointModalProps {
   isOpen: boolean;
@@ -327,7 +328,7 @@ export const AddWaypointModal: React.FC<AddWaypointModalProps> = ({
           <div className="p-3 rounded-xl bg-rose-950/90 border border-rose-600 text-rose-200 flex items-center justify-between gap-2 animate-shake">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span className="font-bold text-xs">{validationError}</span>
+              <span className="font-bold text-xs">{safeDisplayValue(validationError)}</span>
             </div>
             <button
               type="button"

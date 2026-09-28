@@ -38,6 +38,7 @@ import { useRealtimeWeather } from '../../hooks/useRealtimeWeather';
 import { evaluateLocationWeatherHazards, WeatherHazardEvaluation } from '../../utils/weatherHazards';
 import { INITIAL_STATIONS, INITIAL_EXPEDITIONS } from '../../data/polarData';
 import { Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest } from '../../types';
+import { formatError, safeDisplayValue } from '../../utils/safeFormat';
 
 interface SmartRouteOptimizerProps {
   t: any;
@@ -288,11 +289,11 @@ export function SmartRouteOptimizer({
           impact: data.result.reasoning[0] || 'Safe polar waypoint sequence',
         });
       } else {
-        throw new Error(data.error || 'Optimization calculation failed.');
+        throw new Error(formatError(data?.error || data?.message, 'Optimization calculation failed.'));
       }
     } catch (err: any) {
       console.warn('Gemini route optimization error:', err);
-      setGeminiError(err.message || 'Route optimization error');
+      setGeminiError(formatError(err, 'Route optimization error'));
     } finally {
       setOptimizing(false);
     }
@@ -1010,7 +1011,7 @@ export function SmartRouteOptimizer({
             {geminiError && (
               <div className="mb-2 p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-start gap-1.5">
                 <AlertTriangle size={13} className="text-rose-400 shrink-0 mt-0.5" />
-                <span>{geminiError}</span>
+                <span>{safeDisplayValue(geminiError)}</span>
               </div>
             )}
 

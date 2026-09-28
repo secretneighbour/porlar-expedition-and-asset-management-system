@@ -24,6 +24,7 @@ import {
 } from '../../types';
 import { getSubZeroDangerZones, SubZeroDangerZone } from '../../utils/dangerZones';
 import { AiActionLogsPanel } from './AiActionLogsPanel';
+import { safeDisplayValue } from '../../utils/safeFormat';
 
 const DEFAULT_RESEARCH_STATIONS: ResearchStation[] = [
   {
@@ -932,12 +933,12 @@ export function MapView({
                         <span>EMERGENCY DISTRESS BEACON</span>
                       </div>
                       <div className="space-y-1 text-slate-300">
-                        <p><strong>Incident:</strong> {selected.incidentType || selected.label}</p>
-                        <p><strong>Sector / Location:</strong> {selected.location}</p>
-                        <p><strong>GPS Coordinates:</strong> <span className="font-mono text-amber-300">{selected.coords || `${selected.lat}, ${selected.lng}`}</span></p>
-                        <p><strong>Reporter Callsign:</strong> {selected.reporter || 'FIELD MOBILE'}</p>
-                        <p><strong>Reporting Device:</strong> {selected.device || 'Mobile Phone'}</p>
-                        {selected.summary && <p className="text-slate-400 pt-1 italic">{selected.summary}</p>}
+                        <p><strong>Incident:</strong> {safeDisplayValue(selected.incidentType || selected.label)}</p>
+                        <p><strong>Sector / Location:</strong> {safeDisplayValue(selected.location)}</p>
+                        <p><strong>GPS Coordinates:</strong> <span className="font-mono text-amber-300">{safeDisplayValue(selected.coords || `${selected.lat}, ${selected.lng}`)}</span></p>
+                        <p><strong>Reporter Callsign:</strong> {safeDisplayValue(selected.reporter || 'FIELD MOBILE')}</p>
+                        <p><strong>Reporting Device:</strong> {safeDisplayValue(selected.device || 'Mobile Phone')}</p>
+                        {selected.summary && <p className="text-slate-400 pt-1 italic">{safeDisplayValue(selected.summary)}</p>}
                       </div>
                       <div className="pt-2">
                         <span className={`px-2 py-1 rounded text-[10px] font-bold block text-center ${selected.acknowledged ? 'bg-amber-900 text-amber-200 border border-amber-600' : 'bg-rose-600 text-white animate-pulse'}`}>
@@ -1055,9 +1056,9 @@ export function MapView({
                     </div>
                   ) : (
                     <div className="space-y-2 text-xs">
-                      <p><strong>Asset:</strong> {selected.label}</p>
-                      <p><strong>Status:</strong> {selected.status}</p>
-                      <p><strong>Location:</strong> {selected.location || selected.currentLocation?.name}</p>
+                      <p><strong>Asset:</strong> {safeDisplayValue(selected.label)}</p>
+                      <p><strong>Status:</strong> {safeDisplayValue(selected.status)}</p>
+                      <p><strong>Location:</strong> {safeDisplayValue(selected.location || selected.currentLocation?.name)}</p>
                     </div>
                   )
                 ) : (

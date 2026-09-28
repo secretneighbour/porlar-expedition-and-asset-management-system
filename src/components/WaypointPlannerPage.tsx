@@ -29,6 +29,7 @@ import {
 import { Expedition, Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest, normalizeExpeditions } from '../types';
 import { emitAiActionBroadcast } from '../data/polarisData';
 import { apiFetch } from '../utils/api';
+import { safeDisplayValue } from '../utils/safeFormat';
 
 interface WaypointPlannerPageProps {
   expeditions: Expedition[];
@@ -575,7 +576,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
           {validationError && (
             <div className="p-3 rounded-xl bg-rose-950/90 border border-rose-600 text-rose-200 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span className="font-bold text-[11px]">{validationError}</span>
+              <span className="font-bold text-[11px]">{safeDisplayValue(validationError)}</span>
             </div>
           )}
 

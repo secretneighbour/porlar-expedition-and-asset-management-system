@@ -20,6 +20,7 @@ import {
 import { getApiBaseUrl, setCustomApiBaseUrl, clearCustomApiBaseUrl, checkBackendConnection } from '../utils/api';
 import { isLocalhost } from '../config/api';
 import { getPlatformMetadata, PlatformMetadata } from '../platform';
+import { safeDisplayValue } from '../utils/safeFormat';
 
 interface OfflineCacheModalProps {
   isOpen: boolean;
@@ -271,7 +272,7 @@ export function OfflineCacheModal({
                   : 'bg-slate-900 border border-slate-700 text-slate-300'
               }`}>
                 {pingStatus === 'online' ? <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                <span>{pingDetails}</span>
+                <span>{safeDisplayValue(pingDetails)}</span>
               </div>
             )}
 

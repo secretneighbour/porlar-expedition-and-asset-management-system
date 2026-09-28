@@ -1,9 +1,10 @@
 import React from 'react';
 import { Search, Plus, X, ChevronRight } from 'lucide-react';
 import { FONT_BODY, FONT_HEAD, badgeColors } from '../../data/polarisData';
+import { safeDisplayValue } from '../../utils/safeFormat';
 
-export function Badge({ status, t }: { status: string; t: any }) {
-  const c = badgeColors(status, t);
+export function Badge({ status, t }: { status: any; t: any }) {
+  const c = badgeColors(typeof status === 'string' ? status : String(status?.code || status?.status || 'UNKNOWN'), t);
   return (
     <span
       style={{
@@ -15,7 +16,7 @@ export function Badge({ status, t }: { status: string; t: any }) {
       className="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1 shadow-sm"
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.fg }} />
-      {status}
+      {safeDisplayValue(status)}
     </span>
   );
 }
@@ -75,7 +76,7 @@ export function StatCard({
         style={{ color: '#F5F3FF', fontFamily: FONT_HEAD }}
         className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight truncate"
       >
-        {value}
+        {safeDisplayValue(value)}
       </div>
       {sub && (
         <div style={{ color: '#A78BFA' }} className="text-[11px] sm:text-xs font-medium truncate">
@@ -271,11 +272,11 @@ export function Table({
             <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
               <div className="font-bold text-sm text-white font-mono flex items-center gap-1.5 min-w-0">
                 <span className="truncate">
-                  {columns[0]?.render ? columns[0].render(row) : row[columns[0]?.key]}
+                  {safeDisplayValue(columns[0]?.render ? columns[0].render(row) : row[columns[0]?.key])}
                 </span>
                 {columns[1] && (
                   <span className="text-xs text-purple-200/90 font-normal truncate">
-                    &bull; {columns[1]?.render ? columns[1].render(row) : row[columns[1]?.key]}
+                    &bull; {safeDisplayValue(columns[1]?.render ? columns[1].render(row) : row[columns[1]?.key])}
                   </span>
                 )}
               </div>
@@ -297,7 +298,7 @@ export function Table({
                       {c.label || c.key}
                     </span>
                     <div style={{ color: '#F5F3FF' }} className="text-xs font-medium">
-                      {rendered}
+                      {safeDisplayValue(rendered)}
                     </div>
                   </div>
                 );
@@ -369,7 +370,7 @@ export function Table({
                     style={{ color: '#F5F3FF', fontFamily: FONT_BODY }}
                     className="px-4.5 py-3.5 align-middle"
                   >
-                    {c.render ? c.render(row) : row[c.key]}
+                    {safeDisplayValue(c.render ? c.render(row) : row[c.key])}
                   </td>
                 ))}
               </tr>

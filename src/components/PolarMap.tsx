@@ -22,6 +22,7 @@ import {
 import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint, ActiveDistressAlert, RealtimeWeatherReading } from '../types';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { RealMapView } from './RealMapView';
+import { safeDisplayValue } from '../utils/safeFormat';
 
 interface PolarMapProps {
   region: PolarRegion;
@@ -1413,7 +1414,7 @@ export const PolarMap: React.FC<PolarMapProps> = ({
         <div className="px-4 py-1.5 bg-rose-950/80 border-t border-rose-800 text-[11px] font-mono text-rose-300 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span>{geoError}</span>
+            <span>{safeDisplayValue(geoError)}</span>
           </div>
           <button
             type="button"

@@ -3767,6 +3767,14 @@
     ],
     "auditLog": [
       {
+        "id": "AUD-AUTH-0910",
+        "timestamp": "2026-09-28T12:21:00.910Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: false. Target route: dashboard."
+      },
+      {
         "id": "AUD-AUTH-1131",
         "timestamp": "2026-09-28T09:50:31.131Z",
         "user": "Dr. Elena Rostova",
@@ -4195,5 +4203,5 @@
     ],
     "customWaypoints": []
   },
-  "lastUpdated": "2026-09-28T09:50:31.381Z"
+  "lastUpdated": "2026-09-28T12:21:01.161Z"
 }

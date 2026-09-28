@@ -60,7 +60,7 @@ The system runs seamlessly across all expedition targets using **Tauri 2**:
 - [📱 Connecting Mobile Phones & Field Devices](#-connecting-mobile-phones--field-devices)
 - [🌐 Exposing Field Consoles over Public Internet (ngrok Usage)](#-exposing-field-consoles-over-public-internet-ngrok-usage)
 - [📡 Connecting External Hardware GPS Modules](#-connecting-external-hardware-gps-modules)
-- [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
+- [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
 - [🔑 Environment Configuration](#-environment-configuration)
 - [🚨 Troubleshooting & Diagnostics Guide](#-troubleshooting--diagnostics-guide)
 - [📄 License](#-license)
@@ -2310,6 +2310,57 @@ Desktop Workstation Native Installers Mobile Terminals
              ACID Shared Database
              (./data/polar-database.json)
 ```
+
+---
+
+## ☁️ Vercel Deployment & Cloud Hosting
+
+POLAR-OS is engineered for cloud hosting on **Vercel** as a high-performance single-page application (SPA) with automated offline resilience and hybrid gateway connectivity.
+
+### 1. Zero-Configuration Deployment
+When importing this repository into Vercel:
+* **Framework Preset**: `Vite`
+* **Build Command**: `vite build` (or `npm run build`)
+* **Output Directory**: `dist`
+* **Configuration File**: Automatically managed via [`vercel.json`](file:///home/solid/porlar-expedition-and-asset-management-system/vercel.json) with SPA clean rewrites:
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+### 2. Operational Modes on Vercel
+
+| Deployment Mode | Configuration | Capabilities |
+| :--- | :--- | :--- |
+| **Standalone / Offline Mode** *(Default)* | Leave `VITE_API_BASE_URL` blank. | Client-side simulation, full SCAR ADD v7.4 cartography, tactical waypoints, danger zone heatmaps, local auth fallback (`RSC-0142` / `polar2026`), and local storage persistence. |
+| **Connected Expedition Hub** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Real-time multi-PC WebSocket telemetry synchronization, authoritative database persistence, and automated SAR dispatch. |
+
+### 3. Vercel Environment Variables
+
+Configure these in **Vercel Project Settings > Environment Variables**:
+
+| Variable | Required? | Description |
+| :--- | :---: | :--- |
+| `VITE_API_BASE_URL` | *Optional* | Remote base URL for the backend server (`server.ts`). If omitted, POLAR-OS operates in standalone offline mode. |
+| `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
+| `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
+
+### 4. React Production Error Protection (Anti-Error #31)
+Production builds on Vercel are protected by the centralized [`safeFormat.ts`](file:///home/solid/porlar-expedition-and-asset-management-system/src/utils/safeFormat.ts) suite:
+* `safeDisplayValue()`: Intercepts raw objects `{ code, message }`, telemetry records, and API errors, safely serializing them before JSX rendering.
+* `formatError()`: Extracts human-readable messages from HTTP, network, and Vercel serverless error objects.
+* `ErrorBoundary`: Automatically translates minified React errors (such as Error #31) into human-readable diagnostic messages with call stack previews and infinite reload protection.
 
 ---
 

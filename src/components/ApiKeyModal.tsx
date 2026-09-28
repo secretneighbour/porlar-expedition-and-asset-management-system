@@ -22,6 +22,7 @@ import {
 import { AiOptimizationMetrics } from '../types';
 import { loadAddVectorLayers, getAddLayerCacheStatus, AddCacheStatus } from '../utils/addFeatureService';
 import { apiFetch } from '../utils/api';
+import { formatError, safeDisplayValue } from '../utils/safeFormat';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -123,11 +124,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         fetchMetrics();
       } else {
         setTestGeminiStatus('error');
-        setTestGeminiMsg(data.error || 'Failed to authenticate with Gemini API. Check your key.');
+        setTestGeminiMsg(formatError(data?.error || data?.message, 'Failed to authenticate with Gemini API. Check your key.'));
       }
     } catch (err: any) {
       setTestGeminiStatus('error');
-      setTestGeminiMsg(`Validation request error: ${err.message}`);
+      setTestGeminiMsg(formatError(err, 'Validation request error'));
     }
   };
 
@@ -294,7 +295,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             {purgeMsg && (
               <div className="mt-2 text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-700/60 rounded p-1.5 flex items-center gap-1.5">
                 <CheckCircle2 className="w-3 h-3 shrink-0" />
-                <span>{purgeMsg}</span>
+                <span>{safeDisplayValue(purgeMsg)}</span>
               </div>
             )}
           </div>
@@ -375,7 +376,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             {addSyncMsg && (
               <div className="p-2.5 rounded-lg text-xs font-mono bg-cyan-950/70 border border-cyan-700/60 text-cyan-200 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>{addSyncMsg}</span>
+                <span>{safeDisplayValue(addSyncMsg)}</span>
               </div>
             )}
           </div>
@@ -456,7 +457,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 ) : (
                   <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0" />
                 )}
-                <span>{testGeminiMsg}</span>
+                <span>{safeDisplayValue(testGeminiMsg)}</span>
               </div>
             )}
           </div>

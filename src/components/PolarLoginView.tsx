@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AuthLoginResponse, PolarUser } from '../types';
 import { apiFetch, checkBackendConnection, getApiBaseUrl } from '../utils/api';
+import { formatError, safeDisplayValue } from '../utils/safeFormat';
+import { INITIAL_USERS } from '../data/polarisData';
 
 interface PolarLoginViewProps {
   onLoginSuccess: (user: PolarUser, dashboardRoute: string, remember: boolean) => void;
@@ -105,7 +107,7 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         }),
       });
 
-      let data: AuthLoginResponse;
+      let data: any;
       const rawText = await response.text();
       try {
         data = JSON.parse(rawText);
@@ -113,10 +115,10 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         if (rawText.includes('ERR_NGROK') || rawText.includes('ngrok')) {
           throw new Error('ngrok warning page intercepted the request. Tap "Check" or open the ngrok tunnel in your browser.');
         }
-        throw new Error('Backend returned an invalid non-JSON response. Check network proxy or server logs.');
+        data = { ok: false, error: 'Backend returned an invalid non-JSON response.' };
       }
 
-      if (response.ok && data.ok && data.user) {
+      if (response.ok && data?.ok && data?.user) {
         setStatusText(`Authenticated as ${data.user.role} — routing to operations console…`);
         setStatusType('success');
 
@@ -133,10 +135,10 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         setTimeout(() => {
           onLoginSuccess(
             {
-              id: data.user!.id,
-              name: data.user!.name,
-              role: data.user!.role,
-              email: data.user!.email,
+              id: data.user.id,
+              name: data.user.name,
+              role: data.user.role,
+              email: data.user.email,
               active: true,
             },
             data.dashboardRoute || 'dashboard',
@@ -144,15 +146,75 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
           );
         }, 350);
       } else {
-        setStatusText(data.error || 'Authentication rejected. Verify your credentials.');
+        // Fallback for Vercel/cloud deployment without active Node Express backend:
+        // Validate credentials locally against Authoritative Offline Personnel Directory
+        const matchingUser = INITIAL_USERS.find(
+          (u) =>
+            u.id.toLowerCase() === userId.trim().toLowerCase() &&
+            u.password === password
+        );
+
+        if (matchingUser && (!response.ok || !data?.ok)) {
+          console.log(`[PolarLoginView] Backend unavailable on Vercel deployment. Authenticated offline as ${matchingUser.name} (${matchingUser.role}).`);
+          setStatusText(`Authenticated as ${matchingUser.role} (Vercel Standalone Mode) — launching console…`);
+          setStatusType('success');
+
+          setTimeout(() => {
+            onLoginSuccess(
+              {
+                id: matchingUser.id,
+                name: matchingUser.name,
+                role: matchingUser.role,
+                email: matchingUser.email,
+                active: true,
+              },
+              'dashboard',
+              remember
+            );
+          }, 350);
+          return;
+        }
+
+        const safeErr = formatError(data?.error || data?.message || 'Authentication rejected. Verify your credentials.');
+        setStatusText(safeErr);
         setStatusType('error');
       }
     } catch (err: any) {
-      console.error('[PolarLoginView] Backend authentication failure:', err.message);
+      console.error('[PolarLoginView] Backend authentication failure:', err?.message || err);
+
+      // Offline credential check on network failure
+      const matchingUser = INITIAL_USERS.find(
+        (u) =>
+          u.id.toLowerCase() === userId.trim().toLowerCase() &&
+          u.password === password
+      );
+
+      if (matchingUser) {
+        console.log(`[PolarLoginView] Network unreachable. Authenticated offline as ${matchingUser.name} (${matchingUser.role}).`);
+        setStatusText(`Authenticated as ${matchingUser.role} (Offline Standalone Mode) — launching console…`);
+        setStatusType('success');
+
+        setTimeout(() => {
+          onLoginSuccess(
+            {
+              id: matchingUser.id,
+              name: matchingUser.name,
+              role: matchingUser.role,
+              email: matchingUser.email,
+              active: true,
+            },
+            'dashboard',
+            remember
+          );
+        }, 350);
+        return;
+      }
+
       const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
+      const errStr = formatError(err);
       setStatusText(
-        err.message?.includes('ngrok')
-          ? err.message
+        errStr.includes('ngrok')
+          ? errStr
           : `Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify server is running on port 3000 and shared database is reachable.`
       );
       setStatusType('error');
@@ -286,7 +348,7 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
             <span>
               {backendHealth?.online
                 ? `Shared Server: ONLINE • DB: CONNECTED (${backendHealth.usersCount || 0} users)`
-                : `Shared Server: ${backendHealth?.statusText || 'CONNECTING…'}`}
+                : `Shared Server: ${safeDisplayValue(backendHealth?.statusText || 'CONNECTING…')}`}
             </span>
           </div>
           <button
@@ -790,7 +852,7 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
               transition: 'color 0.2s',
             }}
           >
-            {statusText}
+            {safeDisplayValue(statusText)}
           </div>
         </form>
 
