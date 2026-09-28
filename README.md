@@ -45,6 +45,7 @@ A mission-critical tactical operations console and real-time telemetry workstati
 - [💻 Programmatic Integration (React)](#-programmatic-integration-react)
 - [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
 - [🔑 Environment Configuration](#-environment-configuration)
+- [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
 - [📄 License](#-license)
 
 ---
@@ -1378,6 +1379,57 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 *Note: You can also enter your Gemini API key dynamically via the frontend **API Key Config** modal inside the application interface.*
+
+---
+
+## ☁️ Vercel Deployment & Cloud Hosting
+
+POLAR-OS is engineered for cloud hosting on **Vercel** as a high-performance single-page application (SPA) with automated offline resilience and hybrid gateway connectivity.
+
+### 1. Zero-Configuration Deployment
+When importing this repository into Vercel:
+* **Framework Preset**: `Vite`
+* **Build Command**: `vite build` (or `npm run build`)
+* **Output Directory**: `dist`
+* **Configuration File**: Automatically managed via [`vercel.json`](vercel.json) with SPA clean rewrites:
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+### 2. Operational Modes on Vercel
+
+| Deployment Mode | Configuration | Capabilities |
+| :--- | :--- | :--- |
+| **Standalone / Offline Mode** *(Default)* | Leave `VITE_API_BASE_URL` blank. | Client-side simulation, full SCAR ADD v7.4 cartography, tactical waypoints, danger zone heatmaps, local auth fallback (`RSC-0142` / `polar2026`), and local storage persistence. |
+| **Connected Expedition Hub** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Real-time multi-PC WebSocket telemetry synchronization, authoritative database persistence, and automated SAR dispatch. |
+
+### 3. Vercel Environment Variables
+
+Configure these in **Vercel Project Settings > Environment Variables**:
+
+| Variable | Required? | Description |
+| :--- | :---: | :--- |
+| `VITE_API_BASE_URL` | *Optional* | Remote base URL for the backend server (`server.ts`). If omitted, POLAR-OS operates in standalone offline mode. |
+| `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
+| `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
+
+### 4. React Production Error Protection (Anti-Error #31)
+Production builds on Vercel are protected by the centralized [`safeFormat.ts`](src/utils/safeFormat.ts) suite:
+* `safeDisplayValue()`: Intercepts raw objects `{ code, message }`, telemetry records, and API errors, safely serializing them before JSX rendering.
+* `formatError()`: Extracts human-readable messages from HTTP, network, and Vercel serverless error objects.
+* `ErrorBoundary`: Automatically translates minified React errors (such as Error #31) into human-readable diagnostic messages with call stack previews and infinite reload protection.
 
 ---
 

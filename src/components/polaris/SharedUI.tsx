@@ -1,9 +1,10 @@
 import React from 'react';
 import { Search, Plus, X, ChevronRight } from 'lucide-react';
 import { FONT_BODY, FONT_HEAD, badgeColors } from '../../data/polarisData';
+import { safeDisplayValue } from '../../utils/safeFormat';
 
-export function Badge({ status, t }: { status: string; t: any }) {
-  const c = badgeColors(status, t);
+export function Badge({ status, t }: { status: any; t: any }) {
+  const c = badgeColors(typeof status === 'string' ? status : String(status?.code || status?.status || 'UNKNOWN'), t);
   return (
     <span
       style={{
@@ -15,7 +16,7 @@ export function Badge({ status, t }: { status: string; t: any }) {
       className="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1 shadow-sm"
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.fg }} />
-      {status}
+      {safeDisplayValue(status)}
     </span>
   );
 }
@@ -75,7 +76,7 @@ export function StatCard({
         style={{ color: t?.text || '#F5F3FF', fontFamily: FONT_HEAD }}
         className="text-2xl sm:text-3xl font-bold tracking-tight"
       >
-        {value}
+        {safeDisplayValue(value)}
       </div>
       {sub && (
         <div style={{ color: t?.accent || '#A78BFA' }} className="text-xs font-medium">
@@ -245,73 +246,151 @@ export function Table({
   onRowClick?: (r: any) => void;
 }) {
   return (
-    <div
-      style={{
-        background: t?.panel || 'rgba(255, 255, 255, 0.06)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        border: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.14)'}`,
-        borderRadius: '20px',
-        boxShadow: t?.cardShadow || '0 20px 50px rgba(0, 0, 0, 0.35)',
-      }}
-      className="overflow-x-auto"
-    >
-      <table className="w-full text-sm min-w-[700px]">
-        <thead>
-          <tr
+    <>
+      {/* Mobile Stacked Card View (Screens < 768px) */}
+      <div className="md:hidden space-y-3">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            onClick={() => onRowClick && onRowClick(row)}
             style={{
-              borderBottom: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.12)'}`,
-              background: t?.bgAlt || 'rgba(21, 11, 46, 0.45)',
+              background: t?.panel || 'rgba(255, 255, 255, 0.06)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.14)'}`,
+              borderRadius: '16px',
+              boxShadow: t?.cardShadow || '0 10px 25px rgba(0, 0, 0, 0.3)',
             }}
+            className={`p-3.5 space-y-2.5 transition-all ${
+              onRowClick ? 'cursor-pointer active:scale-[0.99] hover:opacity-90' : ''
+            }`}
           >
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                style={{ color: t?.textDim || '#C9C1E8', fontFamily: FONT_BODY }}
-                className="text-left font-semibold px-4.5 py-3.5 whitespace-nowrap text-xs uppercase tracking-wider"
-              >
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
+            {/* Header / Primary Column */}
+            <div
+              style={{ borderBottom: `1px solid ${t?.border ? `${t.border}44` : 'rgba(255, 255, 255, 0.1)'}` }}
+              className="flex items-center justify-between gap-2 pb-2"
+            >
+              <div className="font-bold text-sm font-mono flex items-center gap-1.5 min-w-0" style={{ color: t?.text || '#ffffff' }}>
+                <span className="truncate">
+                  {safeDisplayValue(columns[0]?.render ? columns[0].render(row) : row[columns[0]?.key])}
+                </span>
+                {columns[1] && (
+                  <span className="text-xs font-normal truncate" style={{ color: t?.textDim || '#C9C1E8' }}>
+                    &bull; {safeDisplayValue(columns[1]?.render ? columns[1].render(row) : row[columns[1]?.key])}
+                  </span>
+                )}
+              </div>
+              {onRowClick && (
+                <ChevronRight size={16} style={{ color: t?.textDim || '#94A3B8' }} className="shrink-0" />
+              )}
+            </div>
+
+            {/* Other detail columns in a responsive 2-column key-value grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {columns.slice(2).map((c) => {
+                if (!c.label && !c.key) return null;
+                const rendered = c.render ? c.render(row) : row[c.key];
+                if (rendered === undefined || rendered === null || rendered === '') return null;
+
+                return (
+                  <div key={c.key} className="space-y-0.5 min-w-0">
+                    <span style={{ color: t?.textDim || '#C9C1E8' }} className="text-[10px] uppercase font-semibold tracking-wider block truncate">
+                      {c.label || c.key}
+                    </span>
+                    <div style={{ color: t?.text || '#F5F3FF' }} className="text-xs font-medium">
+                      {safeDisplayValue(rendered)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {rows.length === 0 && (
+          <div
+            style={{
+              background: t?.panel || 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${t?.border || 'rgba(255, 255, 0.1)'}`,
+              borderRadius: '16px',
+              color: t?.textDim || '#A78BFA',
+            }}
+            className="p-8 text-center text-sm font-medium"
+          >
+            No operational records match your search criteria.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop & Tablet Full Table (Screens >= 768px) */}
+      <div
+        style={{
+          background: t?.panel || 'rgba(255, 255, 255, 0.06)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.14)'}`,
+          borderRadius: '20px',
+          boxShadow: t?.cardShadow || '0 20px 50px rgba(0, 0, 0, 0.35)',
+        }}
+        className="hidden md:block overflow-x-auto touch-scroll"
+      >
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
             <tr
-              key={i}
-              onClick={() => onRowClick && onRowClick(row)}
               style={{
-                borderBottom:
-                  i === rows.length - 1 ? 'none' : `1px solid ${t?.border ? `${t.border}44` : 'rgba(255, 255, 255, 0.08)'}`,
-                cursor: onRowClick ? 'pointer' : 'default',
+                borderBottom: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.12)'}`,
+                background: t?.bgAlt || 'rgba(21, 11, 46, 0.45)',
               }}
-              className="hover:bg-white/5 transition-colors"
             >
               {columns.map((c) => (
-                <td
+                <th
                   key={c.key}
-                  style={{ color: t?.text || '#F5F3FF', fontFamily: FONT_BODY }}
-                  className="px-4.5 py-3.5 align-middle"
+                  style={{ color: t?.textDim || '#C9C1E8', fontFamily: FONT_BODY }}
+                  className="text-left font-semibold px-4.5 py-3.5 whitespace-nowrap text-xs uppercase tracking-wider"
                 >
-                  {c.render ? c.render(row) : row[c.key]}
-                </td>
+                  {c.label}
+                </th>
               ))}
             </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td
-                colSpan={columns.length}
-                style={{ color: t?.textDim || '#A78BFA' }}
-                className="px-4 py-10 text-center text-sm font-medium"
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr
+                key={i}
+                onClick={() => onRowClick && onRowClick(row)}
+                style={{
+                  borderBottom:
+                    i === rows.length - 1 ? 'none' : `1px solid ${t?.border ? `${t.border}44` : 'rgba(255, 255, 255, 0.08)'}`,
+                  cursor: onRowClick ? 'pointer' : 'default',
+                }}
+                className="hover:bg-white/5 transition-colors"
               >
-                No operational records match your search criteria.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+                {columns.map((c) => (
+                  <td
+                    key={c.key}
+                    style={{ color: t?.text || '#F5F3FF', fontFamily: FONT_BODY }}
+                    className="px-4.5 py-3.5 align-middle"
+                  >
+                    {safeDisplayValue(c.render ? c.render(row) : row[c.key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  style={{ color: t?.textDim || '#A78BFA' }}
+                  className="px-4 py-10 text-center text-sm font-medium"
+                >
+                  No operational records match your search criteria.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

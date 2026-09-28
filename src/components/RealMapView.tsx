@@ -45,6 +45,7 @@ import { getSubZeroDangerZones, SubZeroDangerZone } from '../utils/dangerZones';
 import { evaluateWaypointProgress, formatDistanceKm, DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM } from '../utils/waypointTracing';
 import { emitAiActionBroadcast } from '../data/polarisData';
 import { apiFetch } from '../utils/api';
+import { safeDisplayValue } from '../utils/safeFormat';
 
 interface RealMapViewProps {
   region: PolarRegion;
@@ -2254,7 +2255,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         <div className="p-2.5 bg-rose-950 border-t border-rose-800 text-xs font-mono text-rose-300 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{geoError}</span>
+            <span>{safeDisplayValue(geoError)}</span>
           </div>
           <button
             type="button"
