@@ -197,9 +197,35 @@ function ensureAppBuildGradle() {
 }
 
 /**
+ * Loads configuration from the single .env file into process.env
+ */
+function loadSingleEnv() {
+  const envPath = path.join(projectRoot, '.env');
+  if (!fs.existsSync(envPath)) return;
+  try {
+    require('dotenv').config({ path: envPath });
+  } catch {
+    const content = fs.readFileSync(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const idx = trimmed.indexOf('=');
+      if (idx > 0) {
+        const key = trimmed.slice(0, idx).trim();
+        const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+}
+
+/**
  * Prepare environment variables for child processes (Tauri CLI, Gradle, Rust compiler)
  */
 function prepareEnvironment(options = { verbose: false }) {
+  loadSingleEnv();
   ensureAppBuildGradle();
   const sdk = findSystemSdk();
   const ndk = findSystemNdk(sdk);

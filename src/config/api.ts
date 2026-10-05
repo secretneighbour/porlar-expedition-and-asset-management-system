@@ -148,7 +148,9 @@ export function getApiBaseUrl(): string {
 
 /**
  * Resolves an API endpoint path to a URL.
- * In web / Vercel environments without an external API_BASE_URL, returns the clean relative path.
+ * Honors centralized API_BASE_URL across all targets:
+ * - On Mobile (Android/iOS) & Tauri: Uses complete centralized URL from .env
+ * - In Web browsers: Automatically uses clean relative path when targeting same origin/Vercel host
  * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api.
  */
 export function apiUrl(endpoint: string): string {
@@ -163,6 +165,26 @@ export function apiUrl(endpoint: string): string {
   // Deduplicate /api prefix if base already ends with /api
   if (base.endsWith('/api') && path.startsWith('/api/')) {
     path = path.substring(4);
+  }
+
+  // In standard browser on the same host (or Vercel preview environments),
+  // prefer clean relative paths to avoid cross-origin CORS or Vercel preview protection redirects
+  if (typeof window !== 'undefined' && window.location.host && !isMobile() && !isTauri()) {
+    try {
+      if (base) {
+        const parsedBase = new URL(base);
+        if (
+          parsedBase.host === window.location.host ||
+          (window.location.hostname.endsWith('.vercel.app') && parsedBase.hostname.endsWith('.vercel.app'))
+        ) {
+          return path;
+        }
+      } else {
+        return path;
+      }
+    } catch {
+      // In case of non-URL base string, proceed to fullUrl construction
+    }
   }
 
   let fullUrl = base ? `${base}${path}` : path;

@@ -1450,19 +1450,28 @@ REQUIRE_PRODUCTION_SIGNING=true npm run android:build:release
 
 ---
 
-## 🔑 Environment Configuration
+## 🔑 Unified Environment Configuration (`.env`)
 
-Declare optional environment variables in `.env`:
+All project configuration across web, desktop (Tauri), mobile (Android), and the Node server is consolidated into a single `.env` file (with an example template in `.env.example`). No separate `.env.production` or `.env.development` files are required:
 
 ```env
-# Optional Port (defaults to 3000)
-PORT=3000
+# Centralized Backend Gateway URL
+VITE_API_BASE_URL="https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"
 
-# Optional Gemini API Key for AI Tactical Reconnaissance Advisor
-GEMINI_API_KEY=your_gemini_api_key_here
+# Network & Server Port (defaults to 3000)
+PORT=3000
+HOST="0.0.0.0"
+
+# Optional Gemini AI API Key for Automated Route Risk & Tactical Reconnaissance
+GEMINI_API_KEY=""
+VITE_GEMINI_API_KEY=""
+
+# Optional Supabase Gateway Configuration
+VITE_SUPABASE_URL=""
+VITE_SUPABASE_ANON_KEY=""
 ```
 
-*Note: You can also enter your Gemini API key dynamically via the frontend **API Key Config** modal inside the application interface.*
+*Note: You can also enter your Gemini and Google Maps API keys dynamically via the frontend **API Key Config** modal inside the application interface.*
 
 ---
 
@@ -1485,7 +1494,7 @@ When importing this repository into Vercel:
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

@@ -123,10 +123,14 @@ export default function App() {
 
   // API Keys state
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(() => {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('POLAR_GMAPS_KEY') || '' : '';
+    return typeof localStorage !== 'undefined'
+      ? localStorage.getItem('POLAR_GMAPS_KEY') || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || ''
+      : (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
   });
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('POLAR_GEMINI_KEY') || '' : '';
+    return typeof localStorage !== 'undefined'
+      ? localStorage.getItem('POLAR_GEMINI_KEY') || (import.meta.env.VITE_GEMINI_API_KEY as string) || ''
+      : (import.meta.env.VITE_GEMINI_API_KEY as string) || '';
   });
 
   const handleSaveKeys = (gmapsKey: string, geminiKey: string) => {
