@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import {
   Compass, Users, Boxes, Wrench, Package, Ship, AlertTriangle, Sparkles,
-  CheckCircle2, TrendingDown, DollarSign, Clock, ArrowRight, Cpu, Zap,
+  CheckCircle2, DollarSign, Clock, ArrowRight, Cpu, Zap,
   CloudSnow, Route, Activity
 } from 'lucide-react';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, AreaChart, Area
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend
 } from 'recharts';
 import {
-  FONT_HEAD, FONT_BODY, STATIONS, EXP_STATUSES, computeReadiness, currency
+  FONT_HEAD, FONT_BODY, STATIONS, EXP_STATUSES, computeReadiness
 } from '../../data/polarisData';
 import { StatCard, PageHeader, inputClass, inputStyle } from './SharedUI';
 import { AiActionLogsPanel } from './AiActionLogsPanel';
@@ -121,9 +120,10 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
         borderRadius: '20px',
         boxShadow: '0 20px 50px rgba(0, 0, 0, 0.35)',
       }}
-      className="p-5"
+      className="p-4 sm:p-5 flex flex-col justify-between min-w-0"
     >
-      <div className="flex items-center justify-between mb-3">
+      <div>
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-[#C4B5FD] animate-pulse" />
           <span style={{ color: '#F5F3FF', fontFamily: FONT_HEAD }} className="text-sm font-bold">
@@ -135,24 +135,24 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
               background: 'rgba(124, 58, 237, 0.25)',
               border: '1px solid rgba(196, 181, 253, 0.3)',
             }}
-            className="text-[10px] font-mono px-2.5 py-0.5 rounded-full"
+            className="text-[10px] font-mono px-2.5 py-0.5 rounded-full whitespace-nowrap"
           >
             {geminiApiKey ? 'GEMINI 3.8 FLASH OPTIMIZED' : 'HYBRID AI LAYER'}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-[#5EEAB0] font-mono font-semibold">
+        <div className="flex items-center gap-1.5 text-[10px] text-[#5EEAB0] font-mono font-semibold shrink-0">
           <Zap size={12} className="animate-pulse" />
           <span>85% Key Quota Saved</span>
         </div>
       </div>
-      <div className="flex gap-2.5 mb-3">
+      <div className="flex flex-col sm:flex-row gap-2.5 mb-3">
         <input 
           value={q} 
           onChange={e => setQ(e.target.value)} 
           onKeyDown={e => e.key === "Enter" && run(q)} 
           placeholder="e.g. Which critical assets need maintenance before the Antarctica expedition?" 
           style={inputStyle(t)} 
-          className={inputClass} 
+          className={`${inputClass} min-w-0 flex-1`} 
         />
         <button 
           onClick={() => run(q)} 
@@ -162,7 +162,7 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
             boxShadow: '0 10px 25px rgba(124, 58, 237, 0.38)',
             color: '#fff',
           }} 
-          className="px-5 rounded-xl text-sm font-bold shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-2 hover:opacity-95 transition-opacity"
+          className="px-5 py-2.5 rounded-xl text-sm font-bold shrink-0 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
         >
           {loading ? (
             <>
@@ -174,6 +174,7 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
           )}
         </button>
       </div>
+      </div>
       {answer && (
         <div
           style={{
@@ -181,10 +182,10 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
             border: '1px solid rgba(196, 181, 253, 0.22)',
             borderRadius: '16px',
           }}
-          className="p-4 animate-in fade-in"
+          className="p-3.5 sm:p-4 mt-2 animate-in fade-in min-w-0"
         >
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <p style={{ color: '#F5F3FF', fontFamily: FONT_BODY }} className="text-sm font-semibold">{answer.text}</p>
+          <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
+            <p style={{ color: '#F5F3FF', fontFamily: FONT_BODY }} className="text-sm font-semibold flex-1 min-w-[200px] break-words">{answer.text}</p>
             {answer.meta && (
               <span className="shrink-0 text-[10px] font-mono px-2.5 py-1 rounded-lg bg-black/40 border border-[#5EEAB0]/40 text-[#5EEAB0] flex items-center gap-1 font-semibold">
                 <Zap size={10} />
@@ -194,9 +195,9 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
           </div>
           <ul className="space-y-1.5">
             {answer.list.map((l, i) => (
-              <li key={i} style={{ color: '#C9C1E8' }} className="text-xs flex items-start gap-2">
+              <li key={i} style={{ color: '#C9C1E8' }} className="text-xs flex items-start gap-2 break-words">
                 <span className="text-[#A78BFA] font-bold">&bull;</span>
-                <span>{l}</span>
+                <span className="flex-1">{l}</span>
               </li>
             ))}
           </ul>
@@ -286,7 +287,7 @@ export function DashboardView({
       <PageHeader t={t} title={`Welcome back, ${user.name.split(" ")[0]}`} subtitle="Unified command center for Arctic & Antarctic expedition operations." />
       
       {/* Top Stat Cards */}
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+      <div className="grid gap-3 sm:gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))" }}>
         <StatCard t={t} icon={Compass} label="Active Expeditions" value={activeExp} sub={`${upcomingExp} upcoming`} accent />
         <StatCard t={t} icon={Users} label="Total Personnel" value={db.personnel.length} sub={`${db.personnel.filter((p: any) => p.status === "On Expedition").length} on expedition`} />
         <StatCard t={t} icon={Boxes} label="Assets In Use" value={inUse} sub={`of ${db.assets.length} total assets`} />
@@ -302,10 +303,10 @@ export function DashboardView({
           background: maintainedToday ? t.panel : t.panelAlt,
           border: maintainedToday ? `1px solid ${t.border}` : `1px solid rgba(239, 68, 68, 0.35)`,
         }}
-        className="mt-4 rounded-xl p-4 transition-all duration-300"
+        className="mt-4 rounded-xl p-4 transition-all duration-300 min-w-0"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-2 max-w-3xl">
+          <div className="space-y-2 max-w-3xl min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5 ${maintainedToday ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-red-500/15 text-red-300 border border-red-500/30'}`}>
                 <AlertTriangle size={11} />
@@ -327,12 +328,12 @@ export function DashboardView({
             </div>
 
             {/* Savings Pills */}
-            <div className="flex items-center gap-3 pt-1 flex-wrap text-xs font-mono">
-              <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+            <div className="flex items-center gap-2 sm:gap-3 pt-1 flex-wrap text-xs font-mono">
+              <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 whitespace-nowrap">
                 <Clock size={12} />
                 <span>+48h Field Downtime Saved</span>
               </span>
-              <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+              <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20 whitespace-nowrap">
                 <DollarSign size={12} />
                 <span>+$18,500 Recovery Cost Saved</span>
               </span>
@@ -343,9 +344,9 @@ export function DashboardView({
           </div>
 
           {/* Quick Actions */}
-          <div className="flex flex-row lg:flex-col items-center lg:items-stretch gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-stretch gap-2 shrink-0 w-full sm:w-auto">
             {maintainedToday ? (
-              <div className="px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 shadow-lg">
+              <div className="px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg text-center">
                 <CheckCircle2 size={16} />
                 <span>Preventive Service Done Today!</span>
               </div>
@@ -391,7 +392,7 @@ export function DashboardView({
       </div>
 
       {/* OPERATIONAL QUICK ACCESS CARDS */}
-      <div className="grid gap-3 mt-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mt-4">
         {/* Weather Fuel Model */}
         {setActive && (
           <button
@@ -402,7 +403,7 @@ export function DashboardView({
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
             }}
-            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg flex flex-col justify-between min-w-0"
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -431,7 +432,7 @@ export function DashboardView({
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
             }}
-            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg flex flex-col justify-between min-w-0"
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -460,7 +461,7 @@ export function DashboardView({
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
             }}
-            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg flex flex-col justify-between min-w-0 sm:col-span-2 lg:col-span-1"
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -481,10 +482,11 @@ export function DashboardView({
       </div>
 
       {/* EXPEDITION STATUS & AI ASSISTANT */}
-      <div className="grid gap-4 mt-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
-        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl min-w-0 flex flex-col justify-between">
           <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Expedition Status Distribution</h3>
-          <ResponsiveContainer width="100%" height={220}>
+          <div className="w-full h-[220px]">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={statusDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={4}>
                 {statusDist.map((d, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(255,255,255,0.1)" />)}
@@ -493,22 +495,23 @@ export function DashboardView({
               <Legend wrapperStyle={{ fontSize: 11, color: t.textDim }} />
             </PieChart>
           </ResponsiveContainer>
+          </div>
         </div>
 
         <AIWidget t={t} db={db} geminiApiKey={geminiApiKey} />
       </div>
 
-      <div className="mt-5">
+      <div className="mt-4">
         <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Polar Operations Overview</h3>
-        <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
           {STATIONS.map(s => {
             const stExp = db.expeditions.filter((e: any) => e.base === s.name && (e.status === "Active" || e.status === "In Transit"));
             const stPersonnel = db.personnel.filter((p: any) => p.location === s.name).length;
             return (
-              <div key={s.id} style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 transition-transform hover:-translate-y-0.5 shadow-lg">
+              <div key={s.id} style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 transition-transform hover:-translate-y-0.5 shadow-lg min-w-0 flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-2">
-                  <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="font-semibold text-sm">{s.name} Station</span>
-                  <span style={{ color: '#C4B5FD', background: 'rgba(124, 58, 237, 0.25)', border: '1px solid rgba(196, 181, 253, 0.2)' }} className="text-[10px] px-2 py-0.5 rounded-full font-medium">{s.region}</span>
+                  <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="font-semibold text-sm truncate mr-1">{s.name} Station</span>
+                  <span style={{ color: '#C4B5FD', background: 'rgba(124, 58, 237, 0.25)', border: '1px solid rgba(196, 181, 253, 0.2)' }} className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0">{s.region}</span>
                 </div>
                 <p style={{ color: t.textFaint }} className="text-xs mb-3">{s.loc}</p>
                 <div className="flex justify-between text-xs">
