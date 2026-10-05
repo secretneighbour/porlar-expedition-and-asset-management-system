@@ -215,7 +215,7 @@ export function OfflineCacheModal({
                   type="text"
                   value={backendUrlInput}
                   onChange={(e) => setBackendUrlInput(e.target.value)}
-                  placeholder="https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"
+                  placeholder="https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"
                   className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 font-mono text-xs focus:outline-none focus:border-cyan-500"
                 />
               </div>
@@ -257,7 +257,7 @@ export function OfflineCacheModal({
               <div className="p-2 rounded-lg bg-amber-950/60 border border-amber-500/50 text-amber-300 text-[11px] font-mono flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  <strong>Mobile Notice:</strong> Physical Android phones cannot reach &apos;localhost&apos;. Set your HTTPS backend URL (e.g. https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app).
+                  <strong>Mobile Notice:</strong> Physical Android phones cannot reach &apos;localhost&apos;. Set your HTTPS backend URL (e.g. https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app).
                 </span>
               </div>
             )}

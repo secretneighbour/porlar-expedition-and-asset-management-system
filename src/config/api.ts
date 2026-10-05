@@ -9,9 +9,9 @@ export const API_BASE_STORAGE_KEY = 'polar_api_base_url';
 
 /**
  * Authoritative default backend gateway URL.
- * Centralized Single Source of Truth for production mobile and web deployments.
+ * Centralized Single Source of Truth for production mobile deployments.
  */
-export const DEFAULT_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+export const DEFAULT_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
 
 /**
  * Normalizes backend URLs:
@@ -35,12 +35,14 @@ export function normalizeBackendUrl(rawUrl?: string | null): string {
 
 /**
  * Raw build-time environment variable injected by Vite.
- * Falls back automatically to DEFAULT_BACKEND_URL if unset.
+ * Reads VITE_API_URL, VITE_API_BASE_URL, or VITE_BACKEND_URL.
+ * In a web deployment (like Vercel), defaults to empty string so requests use relative paths (/api/...).
  */
 export const API_BASE_URL: string = normalizeBackendUrl(
+  import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_BACKEND_URL ||
-  DEFAULT_BACKEND_URL
+  ''
 );
 
 /**
@@ -60,24 +62,18 @@ export function isNgrokUrl(url?: string | null): boolean {
 }
 
 /**
- * Validates the API Base URL against runtime environment constraints (especially Android / Mobile).
+ * Validates the API Base URL against runtime environment constraints.
  */
 export function validateApiBaseUrl(url?: string | null): { valid: boolean; warning?: string; error?: string } {
   const isAndroidOrMobile = isMobile();
   const isProduction = import.meta.env.PROD;
 
   if (!url || !url.trim()) {
-    if (isAndroidOrMobile) {
-      return {
-        valid: false,
-        error:
-          `[POLAR API CONFIG ERROR] Critical: VITE_API_BASE_URL is not configured for Android / Mobile! Falling back to ${DEFAULT_BACKEND_URL}.`,
-      };
-    }
+    // Relative paths are expected, secure, and valid on web / Vercel
     return { valid: true };
   }
 
-  const clean = url.trim().replace(/\/+$/, '');
+  const clean = normalizeBackendUrl(url);
 
   if (isLocalhost(clean)) {
     if (isAndroidOrMobile) {
@@ -101,8 +97,9 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
  * Retrieves the effective API Base URL with precedence:
  * 1. Window runtime override (window.__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
- * 3. Build-time environment variable (API_BASE_URL / VITE_API_BASE_URL)
- * 4. Authoritative fallback (DEFAULT_BACKEND_URL)
+ * 3. Build-time environment variable (VITE_API_URL / VITE_API_BASE_URL)
+ * 4. Android / Mobile fallback (DEFAULT_BACKEND_URL)
+ * 5. Web environment default: empty string '' (for clean relative paths like /api/auth/login)
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit window runtime override (e.g. injected by test harnesses)
@@ -117,7 +114,6 @@ export function getApiBaseUrl(): string {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
       if (stored && stored.trim()) {
         const cleanStored = normalizeBackendUrl(stored);
-        // On mobile, if stored value is accidentally localhost, ignore it with warning
         if (isMobile() && isLocalhost(cleanStored)) {
           console.warn(`[POLAR API] Discarding stale localhost override on mobile device: ${cleanStored}`);
         } else {
@@ -129,7 +125,7 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  // 3. Build-time environment variable or default
+  // 3. Build-time environment variable (VITE_API_URL or VITE_API_BASE_URL)
   if (API_BASE_URL) {
     if (isMobile() && isLocalhost(API_BASE_URL)) {
       console.warn(
@@ -140,12 +136,20 @@ export function getApiBaseUrl(): string {
     return API_BASE_URL;
   }
 
-  return DEFAULT_BACKEND_URL;
+  // 4. On Android / Mobile: relative URLs cannot resolve against a remote origin, so use gateway fallback
+  if (isMobile()) {
+    return DEFAULT_BACKEND_URL;
+  }
+
+  // 5. In standard browser / web (including Vercel deployment):
+  // Return empty string so all requests use clean relative paths (e.g. '/api/auth/login')
+  return '';
 }
 
 /**
- * Resolves an API endpoint path to a complete URL
- * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api
+ * Resolves an API endpoint path to a URL.
+ * In web / Vercel environments without an external API_BASE_URL, returns the clean relative path.
+ * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api.
  */
 export function apiUrl(endpoint: string): string {
   const base = getApiBaseUrl().replace(/\/+$/, '');
@@ -173,13 +177,12 @@ export function apiUrl(endpoint: string): string {
 }
 
 /**
- * Resolves a WebSocket URL based on configured base URL.
+ * Resolves a WebSocket URL based on configured base URL or current window host.
  * Automatically derives wss:// for https and ws:// for http.
- * NEVER returns localhost in mobile or production builds.
  */
 export function wsUrl(path: string = '/ws'): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const base = getApiBaseUrl() || DEFAULT_BACKEND_URL;
+  const base = getApiBaseUrl();
 
   if (base && !isLocalhost(base)) {
     try {
@@ -191,26 +194,19 @@ export function wsUrl(path: string = '/ws'): string {
     }
   }
 
-  // If base was localhost or empty on mobile/prod, always use DEFAULT_BACKEND_URL
-  if (isMobile() || import.meta.env.PROD || (base && isLocalhost(base))) {
-    try {
-      const parsed = new URL(DEFAULT_BACKEND_URL);
-      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${wsProtocol}//${parsed.host}${cleanPath}`;
-    } catch {}
-  }
-
+  // In browser, derive directly from current origin
   if (typeof window !== 'undefined' && window.location.host && !isMobile()) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${cleanPath}`;
   }
 
+  // Fallback for mobile / non-browser
   try {
     const parsed = new URL(DEFAULT_BACKEND_URL);
     const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProtocol}//${parsed.host}${cleanPath}`;
   } catch {
-    return `wss://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app${cleanPath}`;
+    return `wss://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app${cleanPath}`;
   }
 }
 
@@ -237,16 +233,6 @@ export function clearCustomApiBaseUrl(): void {
     localStorage.removeItem(API_BASE_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('polar:api_base_changed', { detail: '' }));
   }
-}
-
-// Initial startup validation check
-const initialValidation = validateApiBaseUrl(API_BASE_URL);
-if (initialValidation.error) {
-  console.error(initialValidation.error);
-} else if (initialValidation.warning) {
-  console.warn(initialValidation.warning);
-} else if (API_BASE_URL) {
-  console.log(`[POLAR API] Configured Backend Gateway: ${API_BASE_URL}`);
 }
 
 // Global automatic ngrok bypass injection for browser/webview environments
@@ -280,4 +266,3 @@ if (typeof window !== 'undefined') {
     };
   }
 }
-

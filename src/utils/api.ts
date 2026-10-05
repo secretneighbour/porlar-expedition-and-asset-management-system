@@ -57,7 +57,7 @@ export async function checkBackendConnection(): Promise<{
   usersCount?: number;
   origin: string;
 }> {
-  const targetOrigin = getApiBaseUrl();
+  const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'relative');
   try {
     const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store' });
     if (res.ok) {

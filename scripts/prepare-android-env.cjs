@@ -251,7 +251,10 @@ function prepareEnvironment(options = { verbose: false }) {
   }
 
   // Ensure Android build uses the centralized backend URL rather than localhost
-  const CENTRAL_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+  const CENTRAL_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+  if (process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')) {
+    process.env.VITE_API_BASE_URL = process.env.VITE_API_URL;
+  }
   if (!process.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')) {
     process.env.VITE_API_BASE_URL = CENTRAL_BACKEND_URL;
   }

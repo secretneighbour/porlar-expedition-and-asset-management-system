@@ -236,7 +236,8 @@ In polar base operations, multiple laptops, command displays, and ruggedized fie
   - `GET /api/auth/diagnostics`: Developer & station admin endpoint verifying `backendStatus: "ONLINE"`, `database: "CONNECTED"`, and `authService: "READY"`.
 * **Centralized API & Backend Gateway (`src/config/api.ts`)**:
   - **Single Source of Truth**: All REST API calls (`apiFetch`, `apiUrl`) and WebSockets (`wsUrl`) dynamically route through `src/config/api.ts`.
-  - **Configured Central Gateway**: Configured via `VITE_API_BASE_URL` in `.env` / `.env.production` (default: `https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app`).
+  - **Relative Path Routing for Web**: In standard browser and Vercel deployments, the application defaults to clean relative paths (e.g. `/api/auth/login`), preventing cross-origin mismatch and CORS issues.
+  - **Configured External Gateway**: Configured via `VITE_API_URL` or `VITE_API_BASE_URL` in `.env` or Vercel dashboard.
   - **Mobile Loopback Protection**: Automatically prevents Android APKs from attempting to call `localhost` or `127.0.0.1`, safely routing to the centralized HTTPS backend gateway.
   - **Dynamic WebSocket Translation**: Automatically converts `https:` to `wss:` and `http:` to `ws:`, ensuring secure field communications on mobile and web without hardcoded URLs.
   - **Clean Path Resolution**: Strips trailing slashes and deduplicates `/api/api` prefixes across all requests.
@@ -1495,8 +1496,8 @@ When importing this repository into Vercel:
 
 | Deployment Mode | Configuration | Capabilities |
 | :--- | :--- | :--- |
-| **Connected Gateway Mode** *(Centralized)* | `VITE_API_BASE_URL="https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"` | Real-time multi-terminal WebSocket synchronization, authenticated operations console, dynamic station telemetry, and automated SAR dispatch. |
-| **Custom Remote Server Mode** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Remote Node/Express backend (`server.ts`) hosted on Railway, Render, Fly.io, or VPS. |
+| **Vercel Serverless Mode** *(Default)* | Leave `VITE_API_URL` blank. | Client-side application uses clean relative paths (`/api/auth/login`, `/api/health`), automatically handled by Vercel serverless functions or proxy. |
+| **Connected External Backend** | Set `VITE_API_URL="https://your-node-backend.app"` | Remote Node/Express backend (`server.ts`) hosted on Railway, Render, Fly.io, or VPS. |
 
 ### 3. Vercel Environment Variables
 
@@ -1504,7 +1505,8 @@ Configure these in **Vercel Project Settings > Environment Variables**:
 
 | Variable | Required? | Description |
 | :--- | :---: | :--- |
-| `VITE_API_BASE_URL` | *Optional* | Centralized backend gateway URL. Defaults automatically to `https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app`. |
+| `VITE_API_URL` | *Optional* | Remote base URL for external backend server (`server.ts`). If omitted, POLAR-OS uses relative paths `/api/...` handled directly by Vercel serverless routes. |
+| `VITE_API_BASE_URL` | *Optional* | Backward-compatible alias for `VITE_API_URL`. |
 | `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
 | `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
 
