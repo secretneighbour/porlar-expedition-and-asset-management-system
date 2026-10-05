@@ -9,3 +9,4 @@ coverage/
 
 # Android signing credentials
 src-tauri/gen/android/keystore.properties
+.idea/ 
