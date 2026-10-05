@@ -8,7 +8,7 @@
       "code": "PB-ALPHA",
       "category": "heavy_traverse",
       "model": "Kässbohrer P300 Polar Custom",
-      "status": "cold_soaked",
+      "status": "in_transit",
       "currentLocation": {
         "name": "Leverett Glacier Waypoint 4",
         "lat": -85.25,
@@ -136,7 +136,7 @@
       "code": "AT-ECHO",
       "category": "emergency_sar",
       "model": "Hilux AT44 6WD Exped Spec",
-      "status": "standby",
+      "status": "in_transit",
       "currentLocation": {
         "name": "Amundsen-Scott South Pole Station",
         "lat": -90,
@@ -361,8 +361,10 @@
           "lat": -77.86,
           "lng": 167,
           "elevationM": 15,
+          "distanceFromPrevKm": 0,
           "passed": true,
-          "distanceFromPrevKm": 0
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-2",
@@ -370,8 +372,10 @@
           "lat": -79.2,
           "lng": 168.5,
           "elevationM": 45,
-          "passed": true,
           "distanceFromPrevKm": 180,
+          "passed": true,
+          "priority": "normal",
+          "isMandatory": false,
           "hazardNote": "Controlled crevasse crossing via snow bridges"
         },
         {
@@ -380,8 +384,10 @@
           "lat": -81.5,
           "lng": 165,
           "elevationM": 120,
+          "distanceFromPrevKm": 280,
           "passed": true,
-          "distanceFromPrevKm": 280
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-4",
@@ -389,8 +395,10 @@
           "lat": -84.1,
           "lng": 158,
           "elevationM": 850,
-          "passed": true,
           "distanceFromPrevKm": 340,
+          "passed": true,
+          "priority": "normal",
+          "isMandatory": false,
           "hazardNote": "Steep glacier climb, 12% grade"
         },
         {
@@ -399,8 +407,10 @@
           "lat": -85.25,
           "lng": 151.1,
           "elevationM": 2150,
-          "passed": false,
           "distanceFromPrevKm": 180,
+          "passed": false,
+          "priority": "normal",
+          "isMandatory": false,
           "hazardNote": "High katabatic wind pass"
         },
         {
@@ -409,8 +419,10 @@
           "lat": -88,
           "lng": 80,
           "elevationM": 2700,
+          "distanceFromPrevKm": 350,
           "passed": false,
-          "distanceFromPrevKm": 350
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-7",
@@ -418,8 +430,10 @@
           "lat": -90,
           "lng": 0,
           "elevationM": 2835,
+          "distanceFromPrevKm": 270,
           "passed": false,
-          "distanceFromPrevKm": 270
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-1788675012860-rafi",
@@ -428,7 +442,9 @@
           "lng": 77.2944,
           "elevationM": 2100,
           "distanceFromPrevKm": 65,
-          "passed": false
+          "passed": false,
+          "priority": "normal",
+          "isMandatory": false
         }
       ],
       "fuelBurnPerDayL": 420,
@@ -491,8 +507,10 @@
           "lat": -75.1,
           "lng": 123.33,
           "elevationM": 3233,
+          "distanceFromPrevKm": 0,
           "passed": true,
-          "distanceFromPrevKm": 0
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-11",
@@ -500,8 +518,10 @@
           "lat": -75.8,
           "lng": 124.5,
           "elevationM": 3180,
+          "distanceFromPrevKm": 150,
           "passed": true,
-          "distanceFromPrevKm": 150
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-12",
@@ -509,8 +529,10 @@
           "lat": -76.2,
           "lng": 125.8,
           "elevationM": 3100,
-          "passed": false,
           "distanceFromPrevKm": 270,
+          "passed": false,
+          "priority": "normal",
+          "isMandatory": false,
           "hazardNote": "Deep ice fracture zones detected"
         },
         {
@@ -519,8 +541,10 @@
           "lat": -77.4,
           "lng": 128.2,
           "elevationM": 2950,
+          "distanceFromPrevKm": 360,
           "passed": false,
-          "distanceFromPrevKm": 360
+          "priority": "normal",
+          "isMandatory": false
         }
       ],
       "fuelBurnPerDayL": 180,
@@ -574,8 +598,10 @@
           "lat": -71.95,
           "lng": 23.34,
           "elevationM": 1382,
+          "distanceFromPrevKm": 0,
           "passed": false,
-          "distanceFromPrevKm": 0
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-21",
@@ -583,8 +609,10 @@
           "lat": -72.4,
           "lng": 24.1,
           "elevationM": 1850,
+          "distanceFromPrevKm": 180,
           "passed": false,
-          "distanceFromPrevKm": 180
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-22",
@@ -592,8 +620,10 @@
           "lat": -73.5,
           "lng": 25.8,
           "elevationM": 2420,
+          "distanceFromPrevKm": 260,
           "passed": false,
-          "distanceFromPrevKm": 260
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-23",
@@ -601,8 +631,10 @@
           "lat": -74.8,
           "lng": 28,
           "elevationM": 2900,
+          "distanceFromPrevKm": 200,
           "passed": false,
-          "distanceFromPrevKm": 200
+          "priority": "normal",
+          "isMandatory": false
         }
       ],
       "fuelBurnPerDayL": 140,
@@ -654,8 +686,10 @@
           "lat": 78.92,
           "lng": 11.93,
           "elevationM": 10,
+          "distanceFromPrevKm": 0,
           "passed": true,
-          "distanceFromPrevKm": 0
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-31",
@@ -663,8 +697,10 @@
           "lat": 80.02,
           "lng": 14.5,
           "elevationM": 2,
+          "distanceFromPrevKm": 160,
           "passed": true,
-          "distanceFromPrevKm": 160
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-32",
@@ -672,8 +708,10 @@
           "lat": 80.45,
           "lng": 14.2,
           "elevationM": 1,
+          "distanceFromPrevKm": 130,
           "passed": false,
-          "distanceFromPrevKm": 130
+          "priority": "normal",
+          "isMandatory": false
         },
         {
           "id": "wp-33",
@@ -681,8 +719,10 @@
           "lat": 81.2,
           "lng": 15,
           "elevationM": 1,
+          "distanceFromPrevKm": 130,
           "passed": false,
-          "distanceFromPrevKm": 130
+          "priority": "normal",
+          "isMandatory": false
         }
       ],
       "fuelBurnPerDayL": 90,
@@ -795,6 +835,30 @@
   ],
   "dispatchLogs": [
     {
+      "id": "log-sar-1790572311730",
+      "timestamp": "05:11:51 UTC",
+      "callsign": "AI S.A.R. AUTONOMOUS DISPATCH",
+      "severity": "urgent_distress",
+      "sector": "Amundsen-Scott South Pole Station",
+      "message": "⚡ ZERO-CLICK S.A.R. DISPATCHED: Nearest Base: Amundsen-Scott South Pole Station (530.1 km). Local Weather: -54°C | Wind: 20 kt | Vis: 9.8 km (Thermal Drone Corridor Open). Drone Falcon-X (ETA 219m) & P300 Crawler (ETA 1223m) scrambled without operator click."
+    },
+    {
+      "id": "LOG-6259",
+      "timestamp": "2026-09-27T14:16:06.259Z",
+      "callsign": "MAITRI-MECH-01",
+      "severity": "routine",
+      "sector": "Maitri Depot",
+      "message": "PREDICTIVE SERVICE COMPLETE: Snowcat Tractor serpentine belt replaced today. Machine cleared for -50°C traverse."
+    },
+    {
+      "id": "log-sar-1790176194817",
+      "timestamp": "15:09:54 UTC",
+      "callsign": "AI S.A.R. AUTONOMOUS DISPATCH",
+      "severity": "urgent_distress",
+      "sector": "Amundsen-Scott South Pole Station",
+      "message": "⚡ ZERO-CLICK S.A.R. DISPATCHED: Nearest Base: Amundsen-Scott South Pole Station (530.1 km). Local Weather: -54°C | Wind: 20 kt | Vis: 9.8 km (Thermal Drone Corridor Open). Drone Falcon-X (ETA 219m) & P300 Crawler (ETA 1223m) scrambled without operator click."
+    },
+    {
       "id": "log-1788675012861",
       "timestamp": "06:10:12 UTC",
       "callsign": "Navigations Desk",
@@ -860,248 +924,6 @@
     }
   ],
   "activeDistress": null,
-  "personnel": [
-    {
-      "id": "PER-0001",
-      "name": "Meera Chatterjee",
-      "role": "Expedition Manager",
-      "department": "Administration",
-      "qualification": "B.Tech",
-      "contact": "+91-910000013",
-      "emergencyContact": "+91-820000021",
-      "expeditionId": "EXP-0002",
-      "location": "In Transit",
-      "status": "On Expedition"
-    },
-    {
-      "id": "PER-0002",
-      "name": "Varun Singh",
-      "role": "Asset Manager",
-      "department": "Communications",
-      "qualification": "M.B.B.S.",
-      "contact": "+91-910000027",
-      "emergencyContact": "+91-820000042",
-      "expeditionId": "EXP-0003",
-      "location": "Bharati",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0003",
-      "name": "Anil Kapoor",
-      "role": "Support Staff",
-      "department": "Communications",
-      "qualification": "B.Tech",
-      "contact": "+91-910000041",
-      "emergencyContact": "+91-820000063",
-      "expeditionId": "EXP-0004",
-      "location": "Himadri",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0004",
-      "name": "Nikhil Rao",
-      "role": "Support Staff",
-      "department": "Medical",
-      "qualification": "M.Sc.",
-      "contact": "+91-910000054",
-      "emergencyContact": "+91-820000084",
-      "expeditionId": "EXP-0005",
-      "location": "Goa HQ",
-      "status": "Unavailable"
-    },
-    {
-      "id": "PER-0005",
-      "name": "Manoj Reddy",
-      "role": "Asset Manager",
-      "department": "Administration",
-      "qualification": "Diploma",
-      "contact": "+91-910000068",
-      "emergencyContact": "+91-820000105",
-      "expeditionId": "EXP-0001",
-      "location": "In Transit",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0006",
-      "name": "Deepak Singh",
-      "role": "Support Staff",
-      "department": "Engineering",
-      "qualification": "Ph.D.",
-      "contact": "+91-910000082",
-      "emergencyContact": "+91-820000126",
-      "expeditionId": "EXP-0002",
-      "location": "Goa HQ",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0007",
-      "name": "Rohan Nair",
-      "role": "Asset Manager",
-      "department": "Logistics",
-      "qualification": "M.B.B.S.",
-      "contact": "+91-910000095",
-      "emergencyContact": "+91-820000147",
-      "expeditionId": "EXP-0003",
-      "location": "Bharati",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0008",
-      "name": "Manoj Iyer",
-      "role": "Medical Officer",
-      "department": "Science",
-      "qualification": "Ph.D.",
-      "contact": "+91-910000109",
-      "emergencyContact": "+91-820000168",
-      "expeditionId": "EXP-0004",
-      "location": "Maitri",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0009",
-      "name": "Ritika Menon",
-      "role": "Logistics Officer",
-      "department": "Medical",
-      "qualification": "M.Sc.",
-      "contact": "+91-910000123",
-      "emergencyContact": "+91-820000189",
-      "expeditionId": "EXP-0005",
-      "location": "Maitri",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0010",
-      "name": "Meera Joshi",
-      "role": "Support Staff",
-      "department": "Administration",
-      "qualification": "M.Tech",
-      "contact": "+91-910000137",
-      "emergencyContact": "+91-820000211",
-      "expeditionId": "EXP-0001",
-      "location": "Bharati",
-      "status": "On Expedition"
-    },
-    {
-      "id": "PER-0011",
-      "name": "Anil Reddy",
-      "role": "Asset Manager",
-      "department": "Medical",
-      "qualification": "B.Tech",
-      "contact": "+91-910000150",
-      "emergencyContact": "+91-820000232",
-      "expeditionId": "EXP-0002",
-      "location": "Goa HQ",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0012",
-      "name": "Divya Iyer",
-      "role": "Maintenance Technician",
-      "department": "Logistics",
-      "qualification": "M.Sc.",
-      "contact": "+91-910000164",
-      "emergencyContact": "+91-820000253",
-      "expeditionId": "EXP-0003",
-      "location": "Bharati",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0013",
-      "name": "Vikram Menon",
-      "role": "Asset Manager",
-      "department": "Logistics",
-      "qualification": "Diploma",
-      "contact": "+91-910000178",
-      "emergencyContact": "+91-820000274",
-      "expeditionId": null,
-      "location": "Himadri",
-      "status": "On Expedition"
-    },
-    {
-      "id": "PER-0014",
-      "name": "Aditya Kapoor",
-      "role": "Logistics Officer",
-      "department": "Medical",
-      "qualification": "B.Tech",
-      "contact": "+91-910000191",
-      "emergencyContact": "+91-820000295",
-      "expeditionId": null,
-      "location": "Maitri",
-      "status": "On Expedition"
-    },
-    {
-      "id": "PER-0015",
-      "name": "Shreya Chatterjee",
-      "role": "Meteorologist",
-      "department": "Science",
-      "qualification": "B.Tech",
-      "contact": "+91-910000205",
-      "emergencyContact": "+91-820000316",
-      "expeditionId": null,
-      "location": "In Transit",
-      "status": "Available"
-    },
-    {
-      "id": "PER-0016",
-      "name": "Vikram Verma",
-      "role": "Maintenance Technician",
-      "department": "Logistics",
-      "qualification": "B.Tech",
-      "contact": "+91-910000219",
-      "emergencyContact": "+91-820000337",
-      "expeditionId": null,
-      "location": "Himadri",
-      "status": "Unavailable"
-    },
-    {
-      "id": "PER-0017",
-      "name": "Meera Iyer",
-      "role": "Expedition Manager",
-      "department": "Engineering",
-      "qualification": "B.Tech",
-      "contact": "+91-910000232",
-      "emergencyContact": "+91-820000358",
-      "expeditionId": null,
-      "location": "In Transit",
-      "status": "On Expedition"
-    },
-    {
-      "id": "PER-0018",
-      "name": "Pooja Iyer",
-      "role": "Support Staff",
-      "department": "Logistics",
-      "qualification": "M.Tech",
-      "contact": "+91-910000246",
-      "emergencyContact": "+91-820000379",
-      "expeditionId": null,
-      "location": "In Transit",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0019",
-      "name": "Priya Sharma",
-      "role": "Maintenance Technician",
-      "department": "Medical",
-      "qualification": "B.Tech",
-      "contact": "+91-910000260",
-      "emergencyContact": "+91-820000400",
-      "expeditionId": null,
-      "location": "Goa HQ",
-      "status": "Assigned"
-    },
-    {
-      "id": "PER-0020",
-      "name": "Anil Kulkarni",
-      "role": "Support Staff",
-      "department": "Medical",
-      "qualification": "M.Tech",
-      "contact": "+91-910000274",
-      "emergencyContact": "+91-820000422",
-      "expeditionId": null,
-      "location": "Himadri",
-      "status": "On Expedition"
-    }
-  ],
   "stations": [
     {
       "id": "st-amundsen-scott",
@@ -1218,8 +1040,10 @@
             "lat": -69.41,
             "lng": 76.19,
             "elevationM": 35,
+            "distanceFromPrevKm": 0,
             "passed": true,
-            "distanceFromPrevKm": 0
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp1-2",
@@ -1227,8 +1051,10 @@
             "lat": -69.58,
             "lng": 76.45,
             "elevationM": 15,
+            "distanceFromPrevKm": 24,
             "passed": true,
-            "distanceFromPrevKm": 24
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp1-3",
@@ -1236,8 +1062,10 @@
             "lat": -69.75,
             "lng": 76.8,
             "elevationM": 110,
+            "distanceFromPrevKm": 28,
             "passed": true,
-            "distanceFromPrevKm": 28
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp1-4",
@@ -1245,9 +1073,12 @@
             "lat": -70.15,
             "lng": 77.2,
             "elevationM": 480,
-            "passed": false,
             "distanceFromPrevKm": 52,
-            "hazardNote": "Sub-surface crevasses on eastern ridge"
+            "passed": true,
+            "priority": "normal",
+            "isMandatory": false,
+            "hazardNote": "Sub-surface crevasses on eastern ridge",
+            "status": "completed"
           },
           {
             "id": "wp-exp1-5",
@@ -1255,8 +1086,10 @@
             "lat": -70.8,
             "lng": 77.65,
             "elevationM": 1450,
-            "passed": false,
             "distanceFromPrevKm": 76,
+            "passed": false,
+            "priority": "normal",
+            "isMandatory": false,
             "hazardNote": "Katabatic wind shear pass"
           },
           {
@@ -1265,8 +1098,10 @@
             "lat": -71.4,
             "lng": 78.1,
             "elevationM": 2350,
+            "distanceFromPrevKm": 72,
             "passed": false,
-            "distanceFromPrevKm": 72
+            "priority": "normal",
+            "isMandatory": false
           }
         ]
       },
@@ -1291,8 +1126,10 @@
             "lat": 78.923,
             "lng": 11.928,
             "elevationM": 12,
+            "distanceFromPrevKm": 0,
             "passed": true,
-            "distanceFromPrevKm": 0
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp2-2",
@@ -1300,8 +1137,10 @@
             "lat": 79.05,
             "lng": 12.2,
             "elevationM": 45,
+            "distanceFromPrevKm": 18,
             "passed": true,
-            "distanceFromPrevKm": 18
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp2-3",
@@ -1309,9 +1148,12 @@
             "lat": 79.12,
             "lng": 12.35,
             "elevationM": 110,
-            "passed": false,
             "distanceFromPrevKm": 12,
-            "hazardNote": "Tidal ice fracture zone"
+            "passed": true,
+            "priority": "normal",
+            "isMandatory": false,
+            "hazardNote": "Tidal ice fracture zone",
+            "status": "completed"
           },
           {
             "id": "wp-exp2-4",
@@ -1319,8 +1161,10 @@
             "lat": 79.18,
             "lng": 12.55,
             "elevationM": 280,
+            "distanceFromPrevKm": 15,
             "passed": false,
-            "distanceFromPrevKm": 15
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp2-5",
@@ -1328,8 +1172,10 @@
             "lat": 79.25,
             "lng": 12.8,
             "elevationM": 650,
+            "distanceFromPrevKm": 18,
             "passed": false,
-            "distanceFromPrevKm": 18
+            "priority": "normal",
+            "isMandatory": false
           }
         ]
       },
@@ -1354,8 +1200,10 @@
             "lat": -70.76,
             "lng": 11.73,
             "elevationM": 260,
+            "distanceFromPrevKm": 0,
             "passed": true,
-            "distanceFromPrevKm": 0
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp3-2",
@@ -1363,8 +1211,10 @@
             "lat": -71.08,
             "lng": 12.02,
             "elevationM": 740,
+            "distanceFromPrevKm": 38,
             "passed": true,
-            "distanceFromPrevKm": 38
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp3-3",
@@ -1372,9 +1222,12 @@
             "lat": -71.36,
             "lng": 12.15,
             "elevationM": 1200,
-            "passed": false,
             "distanceFromPrevKm": 32,
-            "hazardNote": "Active shear crevasse field"
+            "passed": true,
+            "priority": "normal",
+            "isMandatory": false,
+            "hazardNote": "Active shear crevasse field",
+            "status": "completed"
           },
           {
             "id": "wp-exp3-4",
@@ -1382,8 +1235,10 @@
             "lat": -71.6,
             "lng": 12.32,
             "elevationM": 1820,
+            "distanceFromPrevKm": 30,
             "passed": false,
-            "distanceFromPrevKm": 30
+            "priority": "normal",
+            "isMandatory": false
           },
           {
             "id": "wp-exp3-5",
@@ -1391,8 +1246,10 @@
             "lat": -71.78,
             "lng": 12.58,
             "elevationM": 2240,
-            "passed": false,
             "distanceFromPrevKm": 25,
+            "passed": false,
+            "priority": "normal",
+            "isMandatory": false,
             "hazardNote": "Deep snow sastrugi drifts"
           },
           {
@@ -1401,8 +1258,10 @@
             "lat": -71.95,
             "lng": 12.9,
             "elevationM": 2680,
+            "distanceFromPrevKm": 24,
             "passed": false,
-            "distanceFromPrevKm": 24
+            "priority": "normal",
+            "isMandatory": false
           }
         ]
       },
@@ -1417,7 +1276,8 @@
         "status": "Completed",
         "manager": "PER-0004",
         "objectives": "Krill population assessment for fisheries research.",
-        "description": "Completed marine biology survey mission in the Southern Ocean."
+        "description": "Completed marine biology survey mission in the Southern Ocean.",
+        "waypoints": []
       },
       {
         "id": "EXP-0005",
@@ -1430,7 +1290,8 @@
         "status": "In Transit",
         "manager": "PER-0005",
         "objectives": "Winter ice-core sampling and permafrost temperature logging.",
-        "description": "Specialized winter research team en route to Himadri Station."
+        "description": "Specialized winter research team en route to Himadri Station.",
+        "waypoints": []
       }
     ],
     "personnel": [
@@ -1685,10 +1546,10 @@
         "location": "Maitri Station Traverse Depot",
         "expeditionId": "EXP-0001",
         "assignedPerson": "PER-0004",
-        "condition": "Fair",
-        "status": "Under Maintenance",
-        "lastMaintenance": "2026-03-10",
-        "nextMaintenance": "2026-09-08",
+        "condition": "Excellent",
+        "status": "Available",
+        "lastMaintenance": "2026-09-27",
+        "nextMaintenance": "2027-03-10",
         "warranty": "Under Warranty"
       },
       {
@@ -1985,10 +1846,10 @@
         "location": "Goa HQ Store",
         "expeditionId": "EXP-0004",
         "assignedPerson": "PER-0004",
-        "condition": "Good",
-        "status": "In Use",
-        "lastMaintenance": "2026-10-07",
-        "nextMaintenance": "2027-04-07",
+        "condition": "Excellent",
+        "status": "Available",
+        "lastMaintenance": "2026-09-27",
+        "nextMaintenance": "2027-03-10",
         "warranty": "Under Warranty"
       },
       {
@@ -2432,7 +2293,7 @@
         "id": "INV-0001",
         "name": "Heavy-Duty Serpentine Engine Belts",
         "category": "Spare Parts",
-        "quantity": 8,
+        "quantity": 7,
         "unit": "units",
         "minStock": 3,
         "location": "Maitri Store",
@@ -2480,7 +2341,7 @@
         "id": "INV-0004",
         "name": "Heavy-Duty Serpentine Belts",
         "category": "Spare Parts",
-        "quantity": 30,
+        "quantity": 29,
         "unit": "units",
         "minStock": 50,
         "location": "Goa Warehouse",
@@ -3093,9 +2954,9 @@
         "technician": "PER-0007",
         "cost": 450,
         "downtimeHours": 4,
-        "status": "Reported",
+        "status": "Completed",
         "dueDate": "2026-09-08",
-        "notes": "Needs Repair: Engine belt high wear flagged by telemetry. Severe -50°C temperature warning."
+        "notes": "[PREVENTIVE AI SUCCESS] Serpentine belt replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500. Technician: Manoj Joshi (PER-0007)."
       },
       {
         "id": "MNT-0002",
@@ -3145,9 +3006,9 @@
         "technician": "PER-0011",
         "cost": 3200,
         "downtimeHours": 14,
-        "status": "Cancelled",
+        "status": "Completed",
         "dueDate": "2026-06-15",
-        "notes": "Corrosion inspection due to salt exposure"
+        "notes": "[PREVENTIVE AI SUCCESS] Serpentine belt replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500. Technician: Manoj Joshi (PER-0007)."
       },
       {
         "id": "MNT-0006",
@@ -3906,36 +3767,140 @@
     ],
     "auditLog": [
       {
-        "id": "AUD-AUTH-9728",
-        "timestamp": "2026-09-28T08:04:09.728Z",
+        "id": "AUD-AUTH-1960",
+        "timestamp": "2026-09-28T12:46:01.960Z",
         "user": "Dr. Elena Rostova",
         "action": "USER_AUTHENTICATED",
         "entity": "Authentication",
         "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
       },
       {
-        "id": "AUD-AUTH-5556",
-        "timestamp": "2026-09-28T06:34:25.556Z",
-        "user": "Marcus Vance",
+        "id": "AUD-AUTH-0910",
+        "timestamp": "2026-09-28T12:21:00.910Z",
+        "user": "Dr. Elena Rostova",
         "action": "USER_AUTHENTICATED",
         "entity": "Authentication",
-        "details": "Signed in as Logistics Officer via Polar Ops Console [transport portal]. Device remember: true. Target route: transportation."
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: false. Target route: dashboard."
       },
       {
-        "id": "AUD-2169",
-        "timestamp": "2026-09-28T06:31:02.169Z",
+        "id": "AUD-AUTH-1131",
+        "timestamp": "2026-09-28T09:50:31.131Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-8695",
+        "timestamp": "2026-09-28T09:37:08.695Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-0836",
+        "timestamp": "2026-09-28T09:32:20.836Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-7364",
+        "timestamp": "2026-09-28T08:59:07.364Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-9291",
+        "timestamp": "2026-09-28T08:55:29.291Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-5525",
+        "timestamp": "2026-09-28T08:55:25.525Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-AUTH-9818",
+        "timestamp": "2026-09-28T08:29:49.818Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-SAR-1731",
+        "timestamp": "2026-09-28T05:11:51.731Z",
+        "user": "AI-AUTONOMOUS-SAR-ENGINE",
+        "action": "ZERO_CLICK_SAR_DISPATCH",
+        "entity": "Emergency / SAR",
+        "details": "Distress beacon [Crevasse Fall / Structural Ice Breach] at Leverett Glacier Approach (85.2°S, 151.1°E). Nearest base: Amundsen-Scott South Pole Station (530.1km). Evaluated weather (-54°C, 20kt wind). Drone Falcon-X and P300 Rescue Crawler deployed automatically without human click."
+      },
+      {
+        "id": "AUD-0687",
+        "timestamp": "2026-09-27T14:55:10.687Z",
+        "user": "POLAR-ROUTE-ENGINE",
+        "action": "DETERMINISTIC_FALLBACK_ROUTING",
+        "entity": "Waypoints / Traverses",
+        "details": "Deterministic geodesic fallback engaged (No Gemini API Key supplied. Running deterministic polar pathfinder.). Preserved all 0 mandatory waypoints across 4 total candidates."
+      },
+      {
+        "id": "AUD-9134",
+        "timestamp": "2026-09-27T14:34:39.134Z",
         "user": "POLAR-ROUTE-ENGINE",
         "action": "DETERMINISTIC_FALLBACK_ROUTING",
         "entity": "Waypoints / Traverses",
         "details": "Deterministic geodesic fallback engaged (No Gemini API Key supplied. Running deterministic polar pathfinder.). Preserved all 0 mandatory waypoints across 6 total candidates."
       },
       {
-        "id": "AUD-1613",
-        "timestamp": "2026-09-28T06:29:11.613Z",
+        "id": "AUD-6259",
+        "timestamp": "2026-09-27T14:16:06.259Z",
+        "user": "Manoj Joshi (PER-0007)",
+        "action": "PREDICTIVE_MAINTENANCE_EXECUTED",
+        "entity": "Asset / Maintenance",
+        "details": "Preventive belt replacement executed on Snowcat Tractor. Pre-failure intercept averted 48h field downtime and $18,500 repair recovery expense."
+      },
+      {
+        "id": "AUD-AUTH-2977",
+        "timestamp": "2026-09-27T14:13:22.977Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
+      },
+      {
+        "id": "AUD-SAR-4817",
+        "timestamp": "2026-09-23T15:09:54.817Z",
+        "user": "AI-AUTONOMOUS-SAR-ENGINE",
+        "action": "ZERO_CLICK_SAR_DISPATCH",
+        "entity": "Emergency / SAR",
+        "details": "Distress beacon [Crevasse Fall / Structural Ice Breach] at Leverett Glacier Approach (85.2°S, 151.1°E). Nearest base: Amundsen-Scott South Pole Station (530.1km). Evaluated weather (-54°C, 20kt wind). Drone Falcon-X and P300 Rescue Crawler deployed automatically without human click."
+      },
+      {
+        "id": "AUD-6600",
+        "timestamp": "2026-09-23T15:00:06.600Z",
         "user": "POLAR-ROUTE-ENGINE",
         "action": "DETERMINISTIC_FALLBACK_ROUTING",
         "entity": "Waypoints / Traverses",
-        "details": "Deterministic geodesic fallback engaged (No Gemini API Key supplied. Running deterministic polar pathfinder.). Preserved all 2 mandatory waypoints across 6 total candidates."
+        "details": "Deterministic geodesic fallback engaged (No Gemini API Key supplied. Running deterministic polar pathfinder.). Preserved all 0 mandatory waypoints across 6 total candidates."
+      },
+      {
+        "id": "AUD-AUTH-2916",
+        "timestamp": "2026-09-23T14:54:12.916Z",
+        "user": "Dr. Elena Rostova",
+        "action": "USER_AUTHENTICATED",
+        "entity": "Authentication",
+        "details": "Signed in as Scientist / Team Member via Polar Ops Console [researcher portal]. Device remember: true. Target route: dashboard."
       },
       {
         "id": "AUD-AUTH-6957",
@@ -4243,7 +4208,12 @@
         "avertedImpactOrSavings": "Restored 99.8% continuous scientific telemetry.",
         "status": "Archived & Verified"
       }
-    ]
+    ],
+    "customWaypoints": []
   },
-  "lastUpdated": "2026-09-28T08:04:09.984Z"
+<<<<<<< Updated upstream
+  "lastUpdated": "2026-09-28T12:46:02.211Z"
+=======
+  "lastUpdated": "2026-09-28T11:37:39.875Z"
+>>>>>>> Stashed changes
 }
