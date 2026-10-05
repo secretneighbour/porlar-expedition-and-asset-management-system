@@ -46,11 +46,13 @@ import {
   RealtimeWeatherReading,
   Waypoint,
   WaypointOptimizationResult,
+} from '../types';
+import {
   AStarOptimizationResult,
   AStarNode,
   AStarEnvironment,
   AStarAsset,
-} from '../types';
+} from '../utils/polarRouteAStar';
 import { getSubZeroDangerZones, SubZeroDangerZone } from '../utils/dangerZones';
 import { evaluateWaypointProgress, formatDistanceKm, DEFAULT_WAYPOINT_ARRIVAL_RADIUS_KM } from '../utils/waypointTracing';
 import { emitAiActionBroadcast } from '../data/polarisData';
