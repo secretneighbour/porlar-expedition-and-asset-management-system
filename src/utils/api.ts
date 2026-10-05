@@ -1,54 +1,23 @@
 /**
  * Polar Operations Unified API & Telemetry Client
- * Automatically connects multiple client PCs and mobile units to the shared backend.
+ * Re-exports centralized API configuration and provides authenticated fetch utilities.
  */
 
-export function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined' && (window as any).__POLAR_API_BASE_URL__) {
-    return String((window as any).__POLAR_API_BASE_URL__).replace(/\/+$/, '');
-  }
+export {
+  getApiBaseUrl,
+  apiUrl,
+  wsUrl,
+  isLocalhost,
+  isNgrokUrl,
+  validateApiBaseUrl,
+  setCustomApiBaseUrl,
+  clearCustomApiBaseUrl,
+  API_BASE_URL,
+  DEFAULT_BACKEND_URL,
+  API_BASE_STORAGE_KEY,
+} from '../config/api';
 
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    return envUrl.trim().replace(/\/+$/, '');
-  }
-
-  return '';
-}
-
-/**
- * Resolves an API endpoint path to a complete URL
- */
-export function apiUrl(endpoint: string): string {
-  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const base = getApiBaseUrl();
-  return base ? `${base}${cleanPath}` : cleanPath;
-}
-
-/**
- * Resolves a WebSocket URL based on base URL or current window host
- */
-export function wsUrl(path: string = '/ws'): string {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const base = getApiBaseUrl();
-
-  if (base) {
-    try {
-      const parsed = new URL(base);
-      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${wsProtocol}//${parsed.host}${cleanPath}`;
-    } catch {
-      // ignore parse error and fallback
-    }
-  }
-
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${cleanPath}`;
-  }
-
-  return `ws://localhost:3000${cleanPath}`;
-}
+import { apiUrl, getApiBaseUrl } from '../config/api';
 
 /**
  * Authenticated fetch helper with automatic Authorization header injection
@@ -78,7 +47,8 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
 }
 
 /**
- * Fast diagnostics check to verify backend and database status
+ * Fast diagnostics check to verify backend and database status.
+ * Directly calls <BACKEND_URL>/api/health and reports authentic status.
  */
 export async function checkBackendConnection(): Promise<{
   online: boolean;
@@ -87,28 +57,34 @@ export async function checkBackendConnection(): Promise<{
   usersCount?: number;
   origin: string;
 }> {
+  const targetOrigin = getApiBaseUrl();
   try {
     const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store' });
     if (res.ok) {
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON payload
+      }
       return {
         online: true,
         statusText: 'ONLINE',
         databaseStatus: data.database?.status || 'connected',
         usersCount: data.database?.usersCount || 0,
-        origin: getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'localhost:3000'),
+        origin: targetOrigin,
       };
     }
     return {
       online: false,
       statusText: `DEGRADED (${res.status})`,
-      origin: getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'unknown'),
+      origin: targetOrigin,
     };
   } catch (err: any) {
     return {
       online: false,
       statusText: 'UNREACHABLE',
-      origin: getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'unknown'),
+      origin: targetOrigin,
     };
   }
 }

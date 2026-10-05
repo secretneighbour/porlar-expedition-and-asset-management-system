@@ -6,3 +6,15 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.production
+
+# Android & Keystore files
+*.keystore
+*.jks
+local.properties
+keystore.properties
+key.properties
+!keystore.properties.example
+*.apk
+*.aab
+*.dm

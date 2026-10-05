@@ -18,12 +18,12 @@ export default defineConfig(() => {
       // Reverse proxy for seamless multi-PC and standalone Vite dev server execution
       proxy: {
         '/api': {
-          target: process.env.VITE_BACKEND_URL || 'http://localhost:3000',
+          target: process.env.VITE_BACKEND_URL || process.env.VITE_API_BASE_URL || 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app',
           changeOrigin: true,
           secure: false,
         },
         '/ws': {
-          target: process.env.VITE_BACKEND_URL || 'http://localhost:3000',
+          target: process.env.VITE_BACKEND_URL || process.env.VITE_API_BASE_URL || 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app',
           ws: true,
           changeOrigin: true,
         },

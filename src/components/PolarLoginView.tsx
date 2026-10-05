@@ -124,7 +124,7 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
     } catch (err: any) {
       console.error('[PolarLoginView] Backend authentication failure:', err.message);
       const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
-      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify server is running on port 3000 and shared database is reachable.`);
+      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify your network connection and backend service status.`);
       setStatusType('error');
       verifyBackend();
     } finally {

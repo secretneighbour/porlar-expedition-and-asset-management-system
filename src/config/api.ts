@@ -8,10 +8,40 @@ import { isMobile, isTauri } from '../platform';
 export const API_BASE_STORAGE_KEY = 'polar_api_base_url';
 
 /**
- * Raw build-time environment variable injected by Vite.
- * Configure this in .env or via VITE_API_BASE_URL=https://<your-subdomain>.ngrok-free.app before building.
+ * Authoritative default backend gateway URL.
+ * Centralized Single Source of Truth for production mobile and web deployments.
  */
-export const API_BASE_URL: string = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+export const DEFAULT_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+
+/**
+ * Normalizes backend URLs:
+ * - Trims whitespace
+ * - Automatically prepends https:// (or http:// for localhost/IPs) if scheme is missing
+ * - Strips trailing slashes
+ */
+export function normalizeBackendUrl(rawUrl?: string | null): string {
+  if (!rawUrl) return '';
+  let url = rawUrl.trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) {
+    if (isLocalhost(url)) {
+      url = `http://${url}`;
+    } else {
+      url = `https://${url}`;
+    }
+  }
+  return url.replace(/\/+$/, '');
+}
+
+/**
+ * Raw build-time environment variable injected by Vite.
+ * Falls back automatically to DEFAULT_BACKEND_URL if unset.
+ */
+export const API_BASE_URL: string = normalizeBackendUrl(
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_BACKEND_URL ||
+  DEFAULT_BACKEND_URL
+);
 
 /**
  * Helper to check if a target URL points to loopback/localhost
@@ -41,7 +71,7 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
       return {
         valid: false,
         error:
-          '[POLAR API CONFIG ERROR] Critical: VITE_API_BASE_URL is not configured for Android / Mobile! A physical Android phone cannot reach localhost or a blank relative origin. Please set VITE_API_BASE_URL=https://<your-subdomain>.ngrok-free.app before running `npm run build` or `npx tauri android build`.',
+          `[POLAR API CONFIG ERROR] Critical: VITE_API_BASE_URL is not configured for Android / Mobile! Falling back to ${DEFAULT_BACKEND_URL}.`,
       };
     }
     return { valid: true };
@@ -53,7 +83,7 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
     if (isAndroidOrMobile) {
       return {
         valid: false,
-        error: `[POLAR API CONFIG ERROR] Critical: Android application is configured with loopback '${clean}'. A physical Android phone cannot reach localhost on your development computer! You must set VITE_API_BASE_URL=https://<your-subdomain>.ngrok-free.app in your .env before building the APK.`,
+        error: `[POLAR API CONFIG ERROR] Critical: Android application is configured with loopback '${clean}'. A physical Android phone cannot reach localhost on your development computer!`,
       };
     }
     if (isProduction && isTauri()) {
@@ -72,15 +102,12 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
  * 1. Window runtime override (window.__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
  * 3. Build-time environment variable (API_BASE_URL / VITE_API_BASE_URL)
- * 4. Safe platform fallbacks:
- *    - In Android / Mobile: NEVER silently fall back to localhost!
- *    - In Tauri Desktop DEV: 'http://localhost:3000'
- *    - In Web Browser DEV/PROD: relative '' (Vite proxy forwards /api to backend)
+ * 4. Authoritative fallback (DEFAULT_BACKEND_URL)
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit window runtime override (e.g. injected by test harnesses)
   if (typeof window !== 'undefined' && (window as any).__POLAR_API_BASE_URL__) {
-    const override = String((window as any).__POLAR_API_BASE_URL__).trim().replace(/\/+$/, '');
+    const override = normalizeBackendUrl(String((window as any).__POLAR_API_BASE_URL__));
     if (override) return override;
   }
 
@@ -89,7 +116,7 @@ export function getApiBaseUrl(): string {
     try {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
       if (stored && stored.trim()) {
-        const cleanStored = stored.trim().replace(/\/+$/, '');
+        const cleanStored = normalizeBackendUrl(stored);
         // On mobile, if stored value is accidentally localhost, ignore it with warning
         if (isMobile() && isLocalhost(cleanStored)) {
           console.warn(`[POLAR API] Discarding stale localhost override on mobile device: ${cleanStored}`);
@@ -102,54 +129,41 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  // 3. Vite build-time environment variable
+  // 3. Build-time environment variable or default
   if (API_BASE_URL) {
     if (isMobile() && isLocalhost(API_BASE_URL)) {
-      console.error(
-        `[POLAR API CONFIG ERROR] Critical: VITE_API_BASE_URL is set to localhost ('${API_BASE_URL}') on Android/Mobile! Backend requests will fail. Please set VITE_API_BASE_URL to your HTTPS ngrok tunnel URL.`
+      console.warn(
+        `[POLAR API CONFIG] Localhost URL detected on mobile ('${API_BASE_URL}'); automatically falling back to central gateway: ${DEFAULT_BACKEND_URL}`
       );
-      // Do not return localhost on mobile
-      return '';
+      return DEFAULT_BACKEND_URL;
     }
     return API_BASE_URL;
   }
 
-  // 4. Platform-specific fallbacks:
-  // In Android/Mobile: NEVER silently fall back to localhost!
-  if (isMobile()) {
-    console.error(
-      '[POLAR API CONFIG ERROR] No remote API Base URL configured on mobile! Physical phones cannot reach localhost:3000. Set VITE_API_BASE_URL=https://<your-subdomain>.ngrok-free.app before building.'
-    );
-    return '';
-  }
-
-  // In Tauri Desktop DEV: allow localhost:3000
-  if (isTauri()) {
-    if (import.meta.env.DEV) {
-      return 'http://localhost:3000';
-    }
-    return '';
-  }
-
-  // In standard browser: return empty string (relative paths utilize Vite dev proxy / same-origin)
-  return '';
+  return DEFAULT_BACKEND_URL;
 }
 
 /**
  * Resolves an API endpoint path to a complete URL
+ * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api
  */
 export function apiUrl(endpoint: string): string {
-  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const base = getApiBaseUrl();
+  const base = getApiBaseUrl().replace(/\/+$/, '');
+  let path = (endpoint || '').trim();
 
-  if (isMobile() && !base) {
-    console.error(`[POLAR API] Request to '${endpoint}' attempted with no remote base URL configured on mobile device!`);
+  // Ensure path starts with /
+  if (!path.startsWith('/')) {
+    path = `/${path}`;
   }
 
-  let fullUrl = base ? `${base}${cleanPath}` : cleanPath;
+  // Deduplicate /api prefix if base already ends with /api
+  if (base.endsWith('/api') && path.startsWith('/api/')) {
+    path = path.substring(4);
+  }
+
+  let fullUrl = base ? `${base}${path}` : path;
 
   // For ngrok endpoints, append ngrok-skip-browser-warning=true as query parameter.
-  // This bypasses ngrok's free-tier HTML warning page without triggering a CORS preflight on GET requests!
   if (fullUrl.includes('ngrok') && !fullUrl.includes('ngrok-skip-browser-warning')) {
     const separator = fullUrl.includes('?') ? '&' : '?';
     fullUrl = `${fullUrl}${separator}ngrok-skip-browser-warning=true`;
@@ -159,13 +173,15 @@ export function apiUrl(endpoint: string): string {
 }
 
 /**
- * Resolves a WebSocket URL based on configured base URL or current window host
+ * Resolves a WebSocket URL based on configured base URL.
+ * Automatically derives wss:// for https and ws:// for http.
+ * NEVER returns localhost in mobile or production builds.
  */
 export function wsUrl(path: string = '/ws'): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const base = getApiBaseUrl();
+  const base = getApiBaseUrl() || DEFAULT_BACKEND_URL;
 
-  if (base) {
+  if (base && !isLocalhost(base)) {
     try {
       const parsed = new URL(base);
       const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -175,18 +191,27 @@ export function wsUrl(path: string = '/ws'): string {
     }
   }
 
-  // On mobile without a base URL, do NOT connect to ws://localhost:3000
-  if (isMobile()) {
-    console.error('[POLAR API] Cannot initialize WebSocket on mobile device without configured remote API Base URL.');
-    return '';
+  // If base was localhost or empty on mobile/prod, always use DEFAULT_BACKEND_URL
+  if (isMobile() || import.meta.env.PROD || (base && isLocalhost(base))) {
+    try {
+      const parsed = new URL(DEFAULT_BACKEND_URL);
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${parsed.host}${cleanPath}`;
+    } catch {}
   }
 
-  if (typeof window !== 'undefined' && window.location.host) {
+  if (typeof window !== 'undefined' && window.location.host && !isMobile()) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${cleanPath}`;
   }
 
-  return `ws://localhost:3000${cleanPath}`;
+  try {
+    const parsed = new URL(DEFAULT_BACKEND_URL);
+    const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${parsed.host}${cleanPath}`;
+  } catch {
+    return `wss://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app${cleanPath}`;
+  }
 }
 
 /**
@@ -194,7 +219,7 @@ export function wsUrl(path: string = '/ws'): string {
  */
 export function setCustomApiBaseUrl(url: string): void {
   if (typeof window !== 'undefined') {
-    const clean = url.trim().replace(/\/+$/, '');
+    const clean = normalizeBackendUrl(url);
     if (clean) {
       localStorage.setItem(API_BASE_STORAGE_KEY, clean);
     } else {

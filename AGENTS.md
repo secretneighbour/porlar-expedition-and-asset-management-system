@@ -1,4 +1,4 @@
-# Project Guidelines & Persistent Agent Rules
+z# Project Guidelines & Persistent Agent Rules
 
 ## Documentation Mandate
 - **README Synchronization**: Always update `README.md` whenever new features, modules, or capabilities are added to the system. Keep the Table of Contents, Feature Matrix, and operational guides in sync with code updates.

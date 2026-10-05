@@ -924,6 +924,248 @@
     }
   ],
   "activeDistress": null,
+  "personnel": [
+    {
+      "id": "PER-0001",
+      "name": "Meera Chatterjee",
+      "role": "Expedition Manager",
+      "department": "Administration",
+      "qualification": "B.Tech",
+      "contact": "+91-910000013",
+      "emergencyContact": "+91-820000021",
+      "expeditionId": "EXP-0002",
+      "location": "In Transit",
+      "status": "On Expedition"
+    },
+    {
+      "id": "PER-0002",
+      "name": "Varun Singh",
+      "role": "Asset Manager",
+      "department": "Communications",
+      "qualification": "M.B.B.S.",
+      "contact": "+91-910000027",
+      "emergencyContact": "+91-820000042",
+      "expeditionId": "EXP-0003",
+      "location": "Bharati",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0003",
+      "name": "Anil Kapoor",
+      "role": "Support Staff",
+      "department": "Communications",
+      "qualification": "B.Tech",
+      "contact": "+91-910000041",
+      "emergencyContact": "+91-820000063",
+      "expeditionId": "EXP-0004",
+      "location": "Himadri",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0004",
+      "name": "Nikhil Rao",
+      "role": "Support Staff",
+      "department": "Medical",
+      "qualification": "M.Sc.",
+      "contact": "+91-910000054",
+      "emergencyContact": "+91-820000084",
+      "expeditionId": "EXP-0005",
+      "location": "Goa HQ",
+      "status": "Unavailable"
+    },
+    {
+      "id": "PER-0005",
+      "name": "Manoj Reddy",
+      "role": "Asset Manager",
+      "department": "Administration",
+      "qualification": "Diploma",
+      "contact": "+91-910000068",
+      "emergencyContact": "+91-820000105",
+      "expeditionId": "EXP-0001",
+      "location": "In Transit",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0006",
+      "name": "Deepak Singh",
+      "role": "Support Staff",
+      "department": "Engineering",
+      "qualification": "Ph.D.",
+      "contact": "+91-910000082",
+      "emergencyContact": "+91-820000126",
+      "expeditionId": "EXP-0002",
+      "location": "Goa HQ",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0007",
+      "name": "Rohan Nair",
+      "role": "Asset Manager",
+      "department": "Logistics",
+      "qualification": "M.B.B.S.",
+      "contact": "+91-910000095",
+      "emergencyContact": "+91-820000147",
+      "expeditionId": "EXP-0003",
+      "location": "Bharati",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0008",
+      "name": "Manoj Iyer",
+      "role": "Medical Officer",
+      "department": "Science",
+      "qualification": "Ph.D.",
+      "contact": "+91-910000109",
+      "emergencyContact": "+91-820000168",
+      "expeditionId": "EXP-0004",
+      "location": "Maitri",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0009",
+      "name": "Ritika Menon",
+      "role": "Logistics Officer",
+      "department": "Medical",
+      "qualification": "M.Sc.",
+      "contact": "+91-910000123",
+      "emergencyContact": "+91-820000189",
+      "expeditionId": "EXP-0005",
+      "location": "Maitri",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0010",
+      "name": "Meera Joshi",
+      "role": "Support Staff",
+      "department": "Administration",
+      "qualification": "M.Tech",
+      "contact": "+91-910000137",
+      "emergencyContact": "+91-820000211",
+      "expeditionId": "EXP-0001",
+      "location": "Bharati",
+      "status": "On Expedition"
+    },
+    {
+      "id": "PER-0011",
+      "name": "Anil Reddy",
+      "role": "Asset Manager",
+      "department": "Medical",
+      "qualification": "B.Tech",
+      "contact": "+91-910000150",
+      "emergencyContact": "+91-820000232",
+      "expeditionId": "EXP-0002",
+      "location": "Goa HQ",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0012",
+      "name": "Divya Iyer",
+      "role": "Maintenance Technician",
+      "department": "Logistics",
+      "qualification": "M.Sc.",
+      "contact": "+91-910000164",
+      "emergencyContact": "+91-820000253",
+      "expeditionId": "EXP-0003",
+      "location": "Bharati",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0013",
+      "name": "Vikram Menon",
+      "role": "Asset Manager",
+      "department": "Logistics",
+      "qualification": "Diploma",
+      "contact": "+91-910000178",
+      "emergencyContact": "+91-820000274",
+      "expeditionId": null,
+      "location": "Himadri",
+      "status": "On Expedition"
+    },
+    {
+      "id": "PER-0014",
+      "name": "Aditya Kapoor",
+      "role": "Logistics Officer",
+      "department": "Medical",
+      "qualification": "B.Tech",
+      "contact": "+91-910000191",
+      "emergencyContact": "+91-820000295",
+      "expeditionId": null,
+      "location": "Maitri",
+      "status": "On Expedition"
+    },
+    {
+      "id": "PER-0015",
+      "name": "Shreya Chatterjee",
+      "role": "Meteorologist",
+      "department": "Science",
+      "qualification": "B.Tech",
+      "contact": "+91-910000205",
+      "emergencyContact": "+91-820000316",
+      "expeditionId": null,
+      "location": "In Transit",
+      "status": "Available"
+    },
+    {
+      "id": "PER-0016",
+      "name": "Vikram Verma",
+      "role": "Maintenance Technician",
+      "department": "Logistics",
+      "qualification": "B.Tech",
+      "contact": "+91-910000219",
+      "emergencyContact": "+91-820000337",
+      "expeditionId": null,
+      "location": "Himadri",
+      "status": "Unavailable"
+    },
+    {
+      "id": "PER-0017",
+      "name": "Meera Iyer",
+      "role": "Expedition Manager",
+      "department": "Engineering",
+      "qualification": "B.Tech",
+      "contact": "+91-910000232",
+      "emergencyContact": "+91-820000358",
+      "expeditionId": null,
+      "location": "In Transit",
+      "status": "On Expedition"
+    },
+    {
+      "id": "PER-0018",
+      "name": "Pooja Iyer",
+      "role": "Support Staff",
+      "department": "Logistics",
+      "qualification": "M.Tech",
+      "contact": "+91-910000246",
+      "emergencyContact": "+91-820000379",
+      "expeditionId": null,
+      "location": "In Transit",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0019",
+      "name": "Priya Sharma",
+      "role": "Maintenance Technician",
+      "department": "Medical",
+      "qualification": "B.Tech",
+      "contact": "+91-910000260",
+      "emergencyContact": "+91-820000400",
+      "expeditionId": null,
+      "location": "Goa HQ",
+      "status": "Assigned"
+    },
+    {
+      "id": "PER-0020",
+      "name": "Anil Kulkarni",
+      "role": "Support Staff",
+      "department": "Medical",
+      "qualification": "M.Tech",
+      "contact": "+91-910000274",
+      "emergencyContact": "+91-820000422",
+      "expeditionId": null,
+      "location": "Himadri",
+      "status": "On Expedition"
+    }
+  ],
   "stations": [
     {
       "id": "st-amundsen-scott",
@@ -4211,5 +4453,5 @@
     ],
     "customWaypoints": []
   },
-  "lastUpdated": "2026-09-28T12:46:02.211Z"
+  "lastUpdated": "2026-10-05T14:52:47.311Z"
 }

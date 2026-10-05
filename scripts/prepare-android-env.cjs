@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+
+/**
+ * Android Environment Auto-Detection and Configuration Engine
+ * Detects Android SDK & NDK across Linux, macOS, and Windows.
+ * Automatically generates `local.properties` without overwriting existing valid developer settings.
+ * Ensures reproducible, zero-configuration builds across any development workstation or CI runner.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const projectRoot = path.resolve(__dirname, '..');
+const androidDir = path.join(projectRoot, 'src-tauri', 'gen', 'android');
+const localPropertiesPath = path.join(androidDir, 'local.properties');
+const appBuildGradlePath = path.join(androidDir, 'app', 'build.gradle.kts');
+
+function normalizePropertiesPath(dirPath) {
+  if (!dirPath) return '';
+  return dirPath.replace(/\\/g, '/');
+}
+
+/**
+ * Read sdk.dir from existing local.properties if present and valid
+ */
+function getExistingLocalSdk() {
+  if (!fs.existsSync(localPropertiesPath)) return null;
+
+  try {
+    const content = fs.readFileSync(localPropertiesPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('sdk.dir=')) {
+        const sdkVal = trimmed.substring('sdk.dir='.length).trim();
+        // Remove trailing quotes or escaped slashes if any
+        const cleaned = sdkVal.replace(/^["']|["']$/g, '').replace(/\\\\/g, '\\');
+        if (fs.existsSync(cleaned)) {
+          return cleaned;
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore read errors
+  }
+  return null;
+}
+
+/**
+ * Scan standard operating system directories for Android SDK
+ */
+function findSystemSdk() {
+  const candidates = [];
+
+  // 1. Check environment variables
+  if (process.env.ANDROID_HOME) candidates.push(process.env.ANDROID_HOME);
+  if (process.env.ANDROID_SDK_ROOT) candidates.push(process.env.ANDROID_SDK_ROOT);
+
+  // 2. Check existing local.properties
+  const existingLocal = getExistingLocalSdk();
+  if (existingLocal) candidates.push(existingLocal);
+
+  // 3. Platform-specific default paths
+  const home = os.homedir();
+  if (process.platform === 'linux') {
+    candidates.push(path.join(home, 'Android', 'Sdk'));
+    candidates.push(path.join(home, 'android-sdk'));
+    candidates.push('/usr/lib/android-sdk');
+    candidates.push('/opt/android-sdk');
+  } else if (process.platform === 'darwin') {
+    candidates.push(path.join(home, 'Library', 'Android', 'sdk'));
+    candidates.push('/opt/homebrew/share/android-commandlinetools');
+  } else if (process.platform === 'win32') {
+    if (process.env.LOCALAPPDATA) {
+      candidates.push(path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk'));
+    }
+    candidates.push(path.join(home, 'AppData', 'Local', 'Android', 'Sdk'));
+    candidates.push('C:\\Android\\Sdk');
+  }
+
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      try {
+        const stats = fs.statSync(candidate);
+        if (stats.isDirectory()) {
+          return path.resolve(candidate);
+        }
+      } catch (e) {
+        // Skip unreadable
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Locate highest installed NDK version under SDK or environment
+ */
+function findSystemNdk(sdkPath) {
+  // 1. Environment variables
+  const envNdk = process.env.NDK_HOME || process.env.ANDROID_NDK_ROOT || process.env.ANDROID_NDK_HOME;
+  if (envNdk && fs.existsSync(envNdk)) {
+    return path.resolve(envNdk);
+  }
+
+  // 2. Look under SDK/ndk/
+  if (sdkPath) {
+    const ndkBase = path.join(sdkPath, 'ndk');
+    if (fs.existsSync(ndkBase)) {
+      try {
+        const entries = fs.readdirSync(ndkBase)
+          .map(entry => ({ name: entry, fullPath: path.join(ndkBase, entry) }))
+          .filter(item => {
+            try {
+              return fs.statSync(item.fullPath).isDirectory();
+            } catch {
+              return false;
+            }
+          });
+
+        if (entries.length > 0) {
+          // Sort by version (descending)
+          entries.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' }));
+          return entries[0].fullPath;
+        }
+      } catch (err) {
+        // Skip
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Setup or verify local.properties without overwriting valid existing configurations
+ */
+function ensureLocalProperties(sdkPath, ndkPath) {
+  if (!fs.existsSync(androidDir)) {
+    fs.mkdirSync(androidDir, { recursive: true });
+  }
+
+  const existingLocal = fs.existsSync(localPropertiesPath)
+    ? fs.readFileSync(localPropertiesPath, 'utf8')
+    : null;
+
+  let hasSdkDir = false;
+  let hasNdkDir = false;
+
+  if (existingLocal) {
+    hasSdkDir = /^\s*sdk\.dir\s*=/m.test(existingLocal);
+    hasNdkDir = /^\s*ndk\.dir\s*=/m.test(existingLocal);
+  }
+
+  if (hasSdkDir) {
+    // Valid sdk.dir already configured; do not overwrite
+    return;
+  }
+
+  if (!sdkPath) {
+    return;
+  }
+
+  const lines = [
+    '## Auto-generated by Polar Ops Android Environment Setup (scripts/prepare-android-env.cjs)',
+    '## Location is developer/machine-specific and must not be committed to Git.',
+    `sdk.dir=${normalizePropertiesPath(sdkPath)}`,
+  ];
+
+  if (ndkPath && !hasNdkDir) {
+    lines.push(`ndk.dir=${normalizePropertiesPath(ndkPath)}`);
+  }
+
+  lines.push('');
+  fs.writeFileSync(localPropertiesPath, lines.join('\n'), 'utf8');
+  console.log(`[POLAR-OPS-ANDROID] Generated ${path.relative(projectRoot, localPropertiesPath)} -> ${sdkPath}`);
+}
+
+/**
+ * Ensure app/build.gradle.kts retains the resilient, flexible signing configuration
+ * even if tauri android init was recently executed.
+ */
+function ensureAppBuildGradle() {
+  if (!fs.existsSync(appBuildGradlePath)) return;
+  try {
+    const current = fs.readFileSync(appBuildGradlePath, 'utf8');
+    if (!current.includes('isProductionSigningConfigured')) {
+      const templatePath = path.join(projectRoot, 'scripts', 'templates', 'app.build.gradle.kts');
+      if (fs.existsSync(templatePath)) {
+        fs.copyFileSync(templatePath, appBuildGradlePath);
+        console.log('[POLAR-OPS-ANDROID] Auto-applied resilient signing configuration to src-tauri/gen/android/app/build.gradle.kts');
+      }
+    }
+  } catch (err) {
+    // Ignore error
+  }
+}
+
+/**
+ * Prepare environment variables for child processes (Tauri CLI, Gradle, Rust compiler)
+ */
+function prepareEnvironment(options = { verbose: false }) {
+  ensureAppBuildGradle();
+  const sdk = findSystemSdk();
+  const ndk = findSystemNdk(sdk);
+
+  if (!sdk) {
+    console.error('\n================================================================================');
+    console.error('[POLAR-OPS-ANDROID] WARNING: Android SDK could not be automatically located!');
+    console.error('Please ensure the Android SDK is installed, and set the environment variable:');
+    console.error('  export ANDROID_HOME="/path/to/your/Android/Sdk"');
+    console.error('Or create `src-tauri/gen/android/local.properties` with:');
+    console.error('  sdk.dir=/path/to/your/Android/Sdk');
+    console.error('================================================================================\n');
+  } else {
+    process.env.ANDROID_HOME = sdk;
+    if (!process.env.ANDROID_SDK_ROOT) {
+      process.env.ANDROID_SDK_ROOT = sdk;
+    }
+    ensureLocalProperties(sdk, ndk);
+  }
+
+  if (ndk) {
+    process.env.NDK_HOME = ndk;
+    if (!process.env.ANDROID_NDK_ROOT) {
+      process.env.ANDROID_NDK_ROOT = ndk;
+    }
+  }
+
+  // Augment PATH with Android SDK tools if available
+  if (sdk) {
+    const platformTools = path.join(sdk, 'platform-tools');
+    const cmdlineTools = path.join(sdk, 'cmdline-tools', 'latest', 'bin');
+    const pathDelimiter = process.platform === 'win32' ? ';' : ':';
+    const pathParts = (process.env.PATH || '').split(pathDelimiter);
+
+    if (fs.existsSync(platformTools) && !pathParts.includes(platformTools)) {
+      pathParts.unshift(platformTools);
+    }
+    if (fs.existsSync(cmdlineTools) && !pathParts.includes(cmdlineTools)) {
+      pathParts.unshift(cmdlineTools);
+    }
+    process.env.PATH = pathParts.join(pathDelimiter);
+  }
+
+  if (options.verbose) {
+    console.log('[POLAR-OPS-ANDROID] Environment Summary:');
+    console.log(`  ANDROID_HOME: ${process.env.ANDROID_HOME || '(not set)'}`);
+    console.log(`  NDK_HOME:     ${process.env.NDK_HOME || '(not set)'}`);
+    console.log(`  local.props:  ${fs.existsSync(localPropertiesPath) ? 'present' : 'missing'}`);
+  }
+
+  // Ensure Android build uses the centralized backend URL rather than localhost
+  const CENTRAL_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+  if (!process.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')) {
+    process.env.VITE_API_BASE_URL = CENTRAL_BACKEND_URL;
+  }
+  if (!process.env.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL.includes('localhost') || process.env.VITE_BACKEND_URL.includes('127.0.0.1')) {
+    process.env.VITE_BACKEND_URL = CENTRAL_BACKEND_URL;
+  }
+
+  return {
+    sdkPath: sdk,
+    ndkPath: ndk,
+    env: { ...process.env },
+  };
+}
+
+if (require.main === module) {
+  prepareEnvironment({ verbose: true });
+}
+
+module.exports = {
+  findSystemSdk,
+  findSystemNdk,
+  ensureLocalProperties,
+  prepareEnvironment,
+};

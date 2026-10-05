@@ -44,6 +44,7 @@ A mission-critical tactical operations console and real-time telemetry workstati
   - [4. NMEA-over-IP & Satellite / Cellular Telemetry Streams](#4-nmea-over-ip--satellite--cellular-telemetry-streams)
 - [💻 Programmatic Integration (React)](#-programmatic-integration-react)
 - [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
+- [📱 Android Mobile Workstation Build (Tauri v2)](#-android-mobile-workstation-build-tauri-v2)
 - [🔑 Environment Configuration](#-environment-configuration)
 - [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
 - [📄 License](#-license)
@@ -233,7 +234,12 @@ In polar base operations, multiple laptops, command displays, and ruggedized fie
 * **Diagnostics & Health Endpoints**:
   - `GET /api/health`: Provides comprehensive health telemetry including database status (`connected`), active user count, and connected WebSocket terminals.
   - `GET /api/auth/diagnostics`: Developer & station admin endpoint verifying `backendStatus: "ONLINE"`, `database: "CONNECTED"`, and `authService: "READY"`.
-* **Configurable Frontend Base URL**: Set `VITE_API_BASE_URL` in `.env` if hosting the frontend statically or on a separate port/host, or use the built-in Vite dev proxy configured for `/api` and `/ws`.
+* **Centralized API & Backend Gateway (`src/config/api.ts`)**:
+  - **Single Source of Truth**: All REST API calls (`apiFetch`, `apiUrl`) and WebSockets (`wsUrl`) dynamically route through `src/config/api.ts`.
+  - **Configured Central Gateway**: Configured via `VITE_API_BASE_URL` in `.env` / `.env.production` (default: `https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app`).
+  - **Mobile Loopback Protection**: Automatically prevents Android APKs from attempting to call `localhost` or `127.0.0.1`, safely routing to the centralized HTTPS backend gateway.
+  - **Dynamic WebSocket Translation**: Automatically converts `https:` to `wss:` and `http:` to `ws:`, ensuring secure field communications on mobile and web without hardcoded URLs.
+  - **Clean Path Resolution**: Strips trailing slashes and deduplicates `/api/api` prefixes across all requests.
 
 ---
 
@@ -1359,10 +1365,87 @@ export function OperationsCenter() {
 | Command | Description |
 | :--- | :--- |
 | `npm run dev` | Starts Vite + Express server with hot reloads at `http://localhost:3000` |
-| `npm run build` | Bundles frontend React assets and compiles server entry point into `dist/` |
+| `npm run build` | Bundles frontend React assets, checks Android env, and compiles server into `dist/` |
 | `npm run start` | Boots the compiled production server (`node dist/server.cjs`) |
 | `npm run lint` | Performs strict TypeScript type checks (`tsc --noEmit`) |
 | `npm run pack:check` | Previews files included in the published NPM package tarball |
+| `npm run android:build` | Self-configuring Tauri v2 Android build (auto-detects SDK/NDK and outputs APK) |
+| `npm run android:build:debug` | Builds an Android debug APK (`app-universal-debug.apk`) |
+| `npm run android:build:release` | Builds an Android release APK with production key or safe local test fallback |
+| `npm run android:dev` | Runs Tauri v2 Android live developer session on connected device / emulator |
+
+---
+
+## 📱 Android Mobile Workstation Build (Tauri v2)
+
+POLAR-OS includes a native Android client powered by **Tauri v2**. The build system is fully self-configuring, reproducible, and requires zero manual editing of Gradle files.
+
+### 1. Prerequisites (One-Time Setup)
+1. **Node.js**: v18+ (Node v20+ recommended)
+2. **Android SDK & NDK**:
+   - Install **Android Studio** or Android command-line tools.
+   - Recommended SDK platform: API 34+ (compileSdk: 37, minSdk: 24).
+   - NDK: Version 26+ or 29+ (install via Android Studio *SDK Manager > SDK Tools > NDK (Side by side)*).
+3. **Rust Android Targets** (one-time setup via `rustup`):
+   ```bash
+   rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+   ```
+
+### 2. Automatic SDK/NDK Detection & Self-Configuration
+You do **not** need to manually edit Gradle files or manually create `local.properties`.
+When you run any Android build script:
+- The runner automatically detects `ANDROID_HOME` / `ANDROID_SDK_ROOT`, or scans standard system directories (`~/Android/Sdk` on Linux, `~/Library/Android/sdk` on macOS, `%LOCALAPPDATA%\Android\Sdk` on Windows).
+- Automatically discovers the highest installed NDK version.
+- Safely generates `src-tauri/gen/android/local.properties` if missing (without overwriting existing valid developer settings).
+- Automatically protects and persists Gradle configurations against Tauri re-initializations.
+
+### 3. Developer Build Commands
+
+#### **Debug APK (Fastest for local testing)**:
+```bash
+npm run android:build:debug
+```
+*Generated APK Output:*
+`src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
+
+#### **Release APK (Local Testing Fallback)**:
+```bash
+npm run android:build
+# or
+npm run android:build:release
+```
+*Generated APK Output:*
+`src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`
+
+*If no production keystore is configured, the build automatically uses a safe developer fallback for local testing without breaking.*
+
+#### **Production Release Signing**:
+For production releases, configure signing credentials without committing secrets:
+
+**Option A: Environment Variables (Recommended for CI/CD)**:
+```bash
+export ANDROID_KEYSTORE_PATH="/path/to/my-release-key.jks"
+export ANDROID_KEYSTORE_PASSWORD="your-keystore-password"
+export ANDROID_KEY_ALIAS="your-key-alias"
+export ANDROID_KEY_PASSWORD="your-key-password"
+
+npm run android:build:release
+```
+
+**Option B: Local `keystore.properties` (Recommended for Local Dev)**:
+Copy the template `src-tauri/keystore.properties.example` to `src-tauri/keystore.properties`:
+```properties
+storeFile=/path/to/my-release-key.jks
+storePassword=your-keystore-password
+keyAlias=your-key-alias
+keyPassword=your-key-password
+```
+*(All `*.keystore`, `*.jks`, and `keystore.properties` files are strictly ignored by `.gitignore` to prevent secret leaks).*
+
+To enforce strict production signing and fail if no credentials exist:
+```bash
+REQUIRE_PRODUCTION_SIGNING=true npm run android:build:release
+```
 
 ---
 
@@ -1412,8 +1495,8 @@ When importing this repository into Vercel:
 
 | Deployment Mode | Configuration | Capabilities |
 | :--- | :--- | :--- |
-| **Standalone / Offline Mode** *(Default)* | Leave `VITE_API_BASE_URL` blank. | Client-side simulation, full SCAR ADD v7.4 cartography, tactical waypoints, danger zone heatmaps, local auth fallback (`RSC-0142` / `polar2026`), and local storage persistence. |
-| **Connected Expedition Hub** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Real-time multi-PC WebSocket telemetry synchronization, authoritative database persistence, and automated SAR dispatch. |
+| **Connected Gateway Mode** *(Centralized)* | `VITE_API_BASE_URL="https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"` | Real-time multi-terminal WebSocket synchronization, authenticated operations console, dynamic station telemetry, and automated SAR dispatch. |
+| **Custom Remote Server Mode** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Remote Node/Express backend (`server.ts`) hosted on Railway, Render, Fly.io, or VPS. |
 
 ### 3. Vercel Environment Variables
 
@@ -1421,7 +1504,7 @@ Configure these in **Vercel Project Settings > Environment Variables**:
 
 | Variable | Required? | Description |
 | :--- | :---: | :--- |
-| `VITE_API_BASE_URL` | *Optional* | Remote base URL for the backend server (`server.ts`). If omitted, POLAR-OS operates in standalone offline mode. |
+| `VITE_API_BASE_URL` | *Optional* | Centralized backend gateway URL. Defaults automatically to `https://porlar-expedition-and-asset-management-system-4cmpww9cj.vercel.app`. |
 | `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
 | `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
 
