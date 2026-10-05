@@ -6,7 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-
-# Android signing credentials
-src-tauri/gen/android/keystore.properties
-.idea/ 

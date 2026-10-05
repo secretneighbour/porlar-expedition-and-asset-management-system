@@ -15,12 +15,6 @@ export default defineConfig(() => {
       allowedHosts: true as const,
       // Hot Module Replacement (HMR) configuration
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Inject ngrok-skip-browser-warning header on ALL responses (HTML, JS, CSS, WS)
-      // This prevents the ngrok browser warning page from appearing on initial load.
-      headers: {
-        'ngrok-skip-browser-warning': '69420',
-        'Access-Control-Allow-Origin': '*',
-      },
       // Reverse proxy for seamless multi-PC and standalone Vite dev server execution
       proxy: {
         '/api': {

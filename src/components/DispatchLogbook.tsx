@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { DispatchLog } from '../types';
 import { apiFetch } from '../utils/api';
-import { formatError, safeDisplayValue } from '../utils/safeFormat';
 
 interface DispatchLogbookProps {
   logs: DispatchLog[];
@@ -64,12 +63,12 @@ export const DispatchLogbook: React.FC<DispatchLogbookProps> = ({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(formatError(data?.error || data?.message, 'AI Evaluation request failed.'));
+        throw new Error(data.error || 'AI Evaluation request failed.');
       }
 
       setAiAnalysis(data.analysis || 'Analysis complete.');
     } catch (err: any) {
-      setAiError(formatError(err, 'Failed to generate AI tactical evaluation.'));
+      setAiError(err.message || 'Failed to generate AI tactical evaluation.');
     } finally {
       setAiLoading(false);
     }
@@ -204,7 +203,7 @@ export const DispatchLogbook: React.FC<DispatchLogbookProps> = ({
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
                 <span>AI Intelligence Notice:</span>
               </div>
-              <p className="text-[11px]">{safeDisplayValue(aiError)}</p>
+              <p className="text-[11px]">{aiError}</p>
               {onOpenApiKeyModal && (
                 <button
                   type="button"

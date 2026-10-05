@@ -22,7 +22,7 @@ import {
   INITIAL_AUDIT_LOG,
   INITIAL_COMPLETED_WORK_LOGS,
 } from '../data/polarisData.js';
-import { PolarSystemState, PolarisDb, PolarUser, normalizeExpeditions } from '../types.js';
+import { PolarSystemState, PolarisDb, PolarUser } from '../types.js';
 
 export interface DatabaseHealthInfo {
   status: 'connected' | 'initializing' | 'degraded';
@@ -67,7 +67,7 @@ export class PolarDatabaseManager {
 
   private createDefaultPolarisDb(): PolarisDb {
     return {
-      expeditions: normalizeExpeditions(INITIAL_POLARIS_EXPEDITIONS),
+      expeditions: INITIAL_POLARIS_EXPEDITIONS,
       personnel: INITIAL_PERSONNEL,
       assets: INITIAL_POLARIS_ASSETS,
       inventory: INITIAL_INVENTORY,
@@ -88,10 +88,11 @@ export class PolarDatabaseManager {
       region: 'antarctica',
       conditionLevel: 'COND-2_CAUTION',
       assets: INITIAL_ASSETS,
-      expeditions: normalizeExpeditions(INITIAL_EXPEDITIONS),
+      expeditions: INITIAL_EXPEDITIONS,
       supplies: INITIAL_SUPPLIES,
       dispatchLogs: INITIAL_DISPATCH_LOGS,
       activeDistress: null,
+      personnel: INITIAL_PERSONNEL,
       stations: INITIAL_STATIONS,
       customWaypoints: [],
       polarisDb: this.createDefaultPolarisDb(),
@@ -234,10 +235,11 @@ export class PolarDatabaseManager {
           region: loadedData.region || 'antarctica',
           conditionLevel: loadedData.conditionLevel || 'COND-2_CAUTION',
           assets: Array.isArray(loadedData.assets) && loadedData.assets.length > 0 ? loadedData.assets : INITIAL_ASSETS,
-          expeditions: normalizeExpeditions(Array.isArray(loadedData.expeditions) && loadedData.expeditions.length > 0 ? loadedData.expeditions : INITIAL_EXPEDITIONS),
+          expeditions: Array.isArray(loadedData.expeditions) && loadedData.expeditions.length > 0 ? loadedData.expeditions : INITIAL_EXPEDITIONS,
           supplies: Array.isArray(loadedData.supplies) ? loadedData.supplies : INITIAL_SUPPLIES,
           dispatchLogs: Array.isArray(loadedData.dispatchLogs) ? loadedData.dispatchLogs : INITIAL_DISPATCH_LOGS,
           activeDistress: loadedData.activeDistress || null,
+          personnel: Array.isArray(loadedData.personnel) && loadedData.personnel.length > 0 ? loadedData.personnel : INITIAL_PERSONNEL,
           stations: Array.isArray(loadedData.stations) && loadedData.stations.length > 0 ? loadedData.stations : INITIAL_STATIONS,
           customWaypoints: Array.isArray(loadedData.customWaypoints) ? loadedData.customWaypoints : [],
           polarisDb: loadedData.polarisDb && typeof loadedData.polarisDb === 'object' ? loadedData.polarisDb : this.createDefaultPolarisDb(),
@@ -245,7 +247,7 @@ export class PolarDatabaseManager {
         };
 
         // Guarantee all polarisDb tables
-        state.polarisDb.expeditions = normalizeExpeditions(Array.isArray(state.polarisDb.expeditions) ? state.polarisDb.expeditions : INITIAL_POLARIS_EXPEDITIONS);
+        if (!Array.isArray(state.polarisDb.expeditions)) state.polarisDb.expeditions = INITIAL_POLARIS_EXPEDITIONS;
         if (!Array.isArray(state.polarisDb.personnel)) state.polarisDb.personnel = INITIAL_PERSONNEL;
         if (!Array.isArray(state.polarisDb.assets)) state.polarisDb.assets = INITIAL_POLARIS_ASSETS;
         if (!Array.isArray(state.polarisDb.inventory)) state.polarisDb.inventory = INITIAL_INVENTORY;
@@ -290,10 +292,16 @@ export class PolarDatabaseManager {
     try {
       this.state.lastUpdated = new Date().toISOString();
       const payload = JSON.stringify(this.state, null, 2);
-      fs.writeFileSync(this.dbPath, payload, 'utf-8');
+      const tempPath = this.dbPath + '.tmp';
+      fs.writeFileSync(tempPath, payload, 'utf-8');
+      fs.renameSync(tempPath, this.dbPath);
       this.lastPersistedTime = this.state.lastUpdated;
     } catch (err: any) {
       console.error('[POLAR-DB] Failed to persist database synchronously:', err.message);
+      const tempPath = this.dbPath + '.tmp';
+      if (fs.existsSync(tempPath)) {
+        try { fs.unlinkSync(tempPath); } catch (e) {}
+      }
     }
   }
 
@@ -306,10 +314,16 @@ export class PolarDatabaseManager {
       try {
         this.state.lastUpdated = new Date().toISOString();
         const payload = JSON.stringify(this.state, null, 2);
-        fs.writeFileSync(this.dbPath, payload, 'utf-8');
+        const tempPath = this.dbPath + '.tmp';
+        fs.writeFileSync(tempPath, payload, 'utf-8');
+        fs.renameSync(tempPath, this.dbPath);
         this.lastPersistedTime = this.state.lastUpdated;
       } catch (err: any) {
         console.error('[POLAR-DB] Failed to persist database to disk:', err.message);
+        const tempPath = this.dbPath + '.tmp';
+        if (fs.existsSync(tempPath)) {
+          try { fs.unlinkSync(tempPath); } catch (e) {}
+        }
       }
     }, 250);
   }

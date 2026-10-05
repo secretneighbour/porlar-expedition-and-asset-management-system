@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import {
   Compass, Users, Boxes, Wrench, Package, Ship, AlertTriangle, Sparkles,
-  CheckCircle2, TrendingDown, DollarSign, Clock, ArrowRight, Cpu, Zap
+  CheckCircle2, TrendingDown, DollarSign, Clock, ArrowRight, Cpu, Zap,
+  CloudSnow, Route, Activity
 } from 'lucide-react';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend
+  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend, AreaChart, Area
 } from 'recharts';
 import {
   FONT_HEAD, FONT_BODY, STATIONS, EXP_STATUSES, computeReadiness, currency
@@ -284,7 +286,7 @@ export function DashboardView({
       <PageHeader t={t} title={`Welcome back, ${user.name.split(" ")[0]}`} subtitle="Unified command center for Arctic & Antarctic expedition operations." />
       
       {/* Top Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-3.5">
+      <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <StatCard t={t} icon={Compass} label="Active Expeditions" value={activeExp} sub={`${upcomingExp} upcoming`} accent />
         <StatCard t={t} icon={Users} label="Total Personnel" value={db.personnel.length} sub={`${db.personnel.filter((p: any) => p.status === "On Expedition").length} on expedition`} />
         <StatCard t={t} icon={Boxes} label="Assets In Use" value={inUse} sub={`of ${db.assets.length} total assets`} />
@@ -294,42 +296,33 @@ export function DashboardView({
         <StatCard t={t} icon={AlertTriangle} label="Critical Alerts" value={critical} sub={`${db.alerts.length} alerts total`} accent />
       </div>
 
-      {/* =========================================================================
-          HERO PREDICTIVE MAINTENANCE OPERATIONAL DIRECTIVE
-         ========================================================================= */}
+      {/* Predictive Maintenance Alert Module */}
       <div
         style={{
-          background: maintainedToday
-            ? `linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(16, 185, 129, 0.16) 100%)`
-            : `linear-gradient(135deg, rgba(30, 18, 64, 0.78) 0%, rgba(239, 68, 68, 0.14) 100%)`,
-          border: maintainedToday ? `1px solid rgba(16, 185, 129, 0.5)` : `1px solid rgba(239, 68, 68, 0.45)`,
-          boxShadow: maintainedToday ? '0 10px 30px rgba(16, 185, 129, 0.16)' : '0 10px 30px rgba(124, 58, 237, 0.25)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)'
+          background: maintainedToday ? t.panel : t.panelAlt,
+          border: maintainedToday ? `1px solid ${t.border}` : `1px solid rgba(239, 68, 68, 0.35)`,
         }}
-        className="mt-4 rounded-2xl p-5 transition-all duration-300 relative overflow-hidden"
+        className="mt-4 rounded-xl p-4 transition-all duration-300"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-2 max-w-3xl">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-red-500/15 text-red-300 border border-red-500/30 flex items-center gap-1.5 font-mono">
-                <Cpu size={12} />
-                <span>AI Predictive Maintenance Alert</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5 ${maintainedToday ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-red-500/15 text-red-300 border border-red-500/30'}`}>
+                <AlertTriangle size={11} />
+                <span>Predictive Maintenance Action Required</span>
               </span>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 font-mono">
-                ML COLD-SOAK ENGINE (-50°C)
-              </span>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-mono text-emerald-300 bg-emerald-500/15 border border-emerald-500/25">
-                Vitrification Horizon: 24h
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/20">
+                -50°C Cold-Soak Alert
               </span>
             </div>
 
             <div>
-              <h2 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-base sm:text-lg font-bold tracking-tight">
-                "Snowcat Tractor AST-0001: Pre-failure wear detected on primary serpentine drive belt."
+              <h2 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold tracking-tight">
+                Snowcat Tractor: Pre-failure detected in Engine Serpentine Belt
               </h2>
               <p style={{ color: t.textDim }} className="text-xs mt-1 leading-relaxed">
-                <strong className="text-slate-200">Operational Directive:</strong> Machine Learning FFT harmonic sensors identified micro-fissure strain under severe -50°C cold-soak. Performing proactive belt replacement in the Maitri heated garage bay today averts catastrophic in-field traverse failure.
+                Telemetry indicates chloroprene vitrification risk due to -50°C prolonged exposure.
+                Forecast model indicates failure likely within 24h if not serviced.
               </p>
             </div>
 
@@ -344,7 +337,7 @@ export function DashboardView({
                 <span>+$18,500 Recovery Cost Saved</span>
               </span>
               <span className="text-slate-400 text-[11px]">
-                Required Part: Heavy-Duty Serpentine Engine Belt (8 units in stock at Maitri Depot)
+                Part: Heavy-Duty Serpentine Engine Belt (8 in stock at Maitri)
               </span>
             </div>
           </div>
@@ -352,7 +345,7 @@ export function DashboardView({
           {/* Quick Actions */}
           <div className="flex flex-row lg:flex-col items-center lg:items-stretch gap-2 shrink-0">
             {maintainedToday ? (
-              <div className="px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 shadow-lg font-mono">
+              <div className="px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 shadow-lg">
                 <CheckCircle2 size={16} />
                 <span>Preventive Service Done Today!</span>
               </div>
@@ -361,7 +354,7 @@ export function DashboardView({
                 onClick={handleQuickMaintainToday}
                 disabled={executing}
                 style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#FFFFFF', boxShadow: '0 8px 22px rgba(16, 185, 129, 0.35)' }}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 transition-all flex items-center justify-center gap-1.5 font-mono"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:opacity-90 transition-all flex items-center justify-center gap-1.5 font-sans"
               >
                 {executing ? (
                   <>
@@ -379,9 +372,9 @@ export function DashboardView({
 
             {setActive && (
               <button
-                onClick={() => setActive('predictive-maintenance')}
+                onClick={() => setActive('maintenance')}
                 style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(196, 181, 253, 0.22)', color: t.text }}
-                className="px-3.5 py-2 rounded-xl text-xs font-medium cursor-pointer hover:border-purple-300/50 hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5 font-mono"
+                className="px-3.5 py-2 rounded-xl text-xs font-medium cursor-pointer hover:border-purple-300/50 hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
               >
                 <Cpu size={13} className="text-purple-300" />
                 <span>Open Predictive Studio</span>
@@ -392,189 +385,106 @@ export function DashboardView({
         </div>
       </div>
 
-      {/* AI ACTION LOGS STREAMING TICKER */}
+      {/* AI ACTION LOGS STREAMING TICKER PANEL */}
       <div className="mt-4">
-        <AiActionLogsPanel t={t} maxHeight={160} />
+        <AiActionLogsPanel t={t} maxHeight={175} />
       </div>
 
-      {/* OPERATIONAL SUMMARY CARDS: DYNAMIC FUEL & SMART ROUTE CV (PHASE 4 & 5) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 font-mono">
-        {/* Dynamic Weather Fuel Model Operational Summary */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(10, 17, 40, 0.9) 100%)',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-          }}
-          className="rounded-2xl p-4.5 backdrop-blur-md flex flex-col justify-between space-y-3 shadow-lg"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                <Sparkles size={14} />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Dynamic Weather Fuel Reserve</h3>
-                <span className="text-[10px] text-cyan-300">Blizzard Surge Heating Model</span>
-              </div>
-            </div>
-            <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[10px] font-bold">
-              3-DAY BLIZZARD ACTIVE
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Current Reserve</span>
-              <span className="text-base font-bold text-white">15,000 L</span>
-              <span className="text-[9px] text-slate-500 block">Polar Diesel F-34</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Burn Rate</span>
-              <span className="text-base font-bold text-amber-400">1,450 L/d</span>
-              <span className="text-[9px] text-amber-400/80 block">+190% Heating Load</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Dynamic Min Buffer</span>
-              <span className="text-base font-bold text-emerald-400">8,500 L</span>
-              <span className="text-[9px] text-emerald-400/80 block">Elevated Safety Line</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Ship Resupply</span>
-              <span className="text-base font-bold text-cyan-300">ORDERED</span>
-              <span className="text-[9px] text-cyan-300/80 block">MV Vasiliy Golovnin</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1 border-t border-white/5">
-            <span className="text-[11px] text-slate-400">Automated pre-freeze fuel replenishment active.</span>
-            {setActive && (
-              <button
-                onClick={() => setActive('weather-inventory')}
-                className="text-xs font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
-              >
-                <span>Open Fuel Engine</span>
-                <ArrowRight size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Smart Route Satellite CV Operational Summary */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(10, 17, 40, 0.9) 100%)',
-            border: '1px solid rgba(167, 139, 250, 0.3)',
-          }}
-          className="rounded-2xl p-4.5 backdrop-blur-md flex flex-col justify-between space-y-3 shadow-lg"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                <Compass size={14} />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Satellite CV Route Pathfinding</h3>
-                <span className="text-[10px] text-purple-300">Ice Shelf Fracture Radar</span>
-              </div>
-            </div>
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-              CONVOY CLEARED
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Sector Monitored</span>
-              <span className="text-base font-bold text-white">Leverett 85°S</span>
-              <span className="text-[9px] text-slate-500 block">SAR Radar Scan</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Crevasse Rift</span>
-              <span className="text-base font-bold text-emerald-400">0 Breaches</span>
-              <span className="text-[9px] text-emerald-400/80 block">Active Bypass In Use</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">Max Tonnage</span>
-              <span className="text-base font-bold text-cyan-300">28.0 Tonnes</span>
-              <span className="text-[9px] text-cyan-300/80 block">Heavy Crawler Safe</span>
-            </div>
-            <div className="p-2 rounded bg-black/40 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block uppercase">GPS Waypoints</span>
-              <span className="text-base font-bold text-purple-300">8 Synced</span>
-              <span className="text-[9px] text-purple-300/80 block">Direct Terminal Push</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1 border-t border-white/5">
-            <span className="text-[11px] text-slate-400">Daily dynamic bypass corridor computed for Queen Maud convoy.</span>
-            {setActive && (
-              <button
-                onClick={() => setActive('routes')}
-                className="text-xs font-bold text-purple-300 hover:text-purple-200 flex items-center gap-1 cursor-pointer"
-              >
-                <span>Open Route Studio</span>
-                <ArrowRight size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* EXPEDITION STATUS DISTRIBUTION & ACTIVE READINESS BREAKDOWN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold flex items-center gap-2">
-              <Compass size={15} className="text-cyan-400" />
-              <span>Active Expedition Mission Readiness</span>
-            </h3>
-            {setActive && (
-              <button onClick={() => setActive('expeditions')} className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer">
-                View All Missions &rarr;
-              </button>
-            )}
-          </div>
-          <div className="space-y-3 font-mono text-xs">
-            {db.expeditions.slice(0, 3).map((exp: any) => {
-              const r = computeReadiness(exp, db);
-              return (
-                <div key={exp.id} className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-white text-xs">{exp.name}</span>
-                      <span className="text-slate-400 text-[10px] ml-2 font-sans">({exp.base} Base)</span>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      exp.status === 'Active' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-slate-800 text-slate-300'
-                    }`}>
-                      {exp.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-300">
-                    <span>Overall Readiness Score:</span>
-                    <span className="font-bold text-cyan-300">{r.overall}%</span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${r.overall >= 80 ? 'bg-emerald-400' : r.overall >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
-                      style={{ width: `${r.overall}%` }}
-                    />
-                  </div>
+      {/* OPERATIONAL QUICK ACCESS CARDS */}
+      <div className="grid gap-3 mt-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+        {/* Weather Fuel Model */}
+        {setActive && (
+          <button
+            onClick={() => setActive('weather-inventory')}
+            style={{
+              background: t.panel,
+              border: `1px solid ${t.border}`,
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+            }}
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div style={{ background: 'rgba(56, 189, 248, 0.15)' }} className="p-1.5 rounded-lg">
+                  <CloudSnow size={15} className="text-sky-400" />
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Weather Fuel Model</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/25">AI</span>
+            </div>
+            <p style={{ color: t.textDim }} className="text-xs leading-relaxed">Dynamic blizzard burn-rate projections, threshold adjustments, and supply ship coordination.</p>
+            <div className="flex items-center gap-1 mt-2 text-[11px] font-mono" style={{ color: t.accent }}>
+              <span>Open Weather Inventory Engine</span>
+              <ArrowRight size={11} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+        )}
 
+        {/* Smart Route AI */}
+        {setActive && (
+          <button
+            onClick={() => setActive('routes')}
+            style={{
+              background: t.panel,
+              border: `1px solid ${t.border}`,
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+            }}
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div style={{ background: 'rgba(167, 139, 250, 0.15)' }} className="p-1.5 rounded-lg">
+                  <Route size={15} className="text-purple-400" />
+                </div>
+                <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Smart Route AI</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono bg-purple-500/15 text-purple-300 border border-purple-500/25">CV</span>
+            </div>
+            <p style={{ color: t.textDim }} className="text-xs leading-relaxed">Satellite crevasse detection, route safety scoring, and convoy sync management.</p>
+            <div className="flex items-center gap-1 mt-2 text-[11px] font-mono" style={{ color: t.accent }}>
+              <span>Open Route Optimizer</span>
+              <ArrowRight size={11} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+        )}
+
+        {/* Fleet Telemetry */}
+        {setActive && (
+          <button
+            onClick={() => setActive('assets')}
+            style={{
+              background: t.panel,
+              border: `1px solid ${t.border}`,
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+            }}
+            className="rounded-2xl p-4 text-left cursor-pointer hover:border-cyan-400/40 transition-all group shadow-lg"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div style={{ background: 'rgba(16, 185, 129, 0.15)' }} className="p-1.5 rounded-lg">
+                  <Activity size={15} className="text-emerald-400" />
+                </div>
+                <span style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold">Fleet Telemetry</span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 font-semibold">{inUse}/{db.assets.length}</span>
+            </div>
+            <p style={{ color: t.textDim }} className="text-xs leading-relaxed">Asset health, condition analytics, vehicle tracking, and fleet performance monitoring.</p>
+            <div className="flex items-center gap-1 mt-2 text-[11px] font-mono" style={{ color: t.accent }}>
+              <span>Open Fleet Dashboard</span>
+              <ArrowRight size={11} className="group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+        )}
+      </div>
+
+      {/* EXPEDITION STATUS & AI ASSISTANT */}
+      <div className="grid gap-4 mt-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
         <div style={{ background: t.panel, border: `1px solid ${t.border}`, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }} className="rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold flex items-center gap-2">
-              <Boxes size={15} className="text-purple-400" />
-              <span>Expedition Status Distribution</span>
-            </h3>
-            <span className="text-[10px] font-mono text-slate-400">{db.expeditions.length} Total Registered</span>
-          </div>
-          <ResponsiveContainer width="100%" height={210}>
+          <h3 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-sm font-semibold mb-3">Expedition Status Distribution</h3>
+          <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={statusDist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={4}>
                 {statusDist.map((d, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(255,255,255,0.1)" />)}
@@ -584,9 +494,7 @@ export function DashboardView({
             </PieChart>
           </ResponsiveContainer>
         </div>
-      </div>
 
-      <div className="mt-4">
         <AIWidget t={t} db={db} geminiApiKey={geminiApiKey} />
       </div>
 

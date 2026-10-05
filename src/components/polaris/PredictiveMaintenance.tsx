@@ -256,8 +256,8 @@ export function PredictiveMaintenance({
                 <h1 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-xl font-bold tracking-tight">
                   Predictive Maintenance (AI & Machine Learning)
                 </h1>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">
-                  ML COLD-SOAK ENGINE (-50°C)
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  HIGHEST SCORING FEATURE
                 </span>
               </div>
               <p style={{ color: t.textDim }} className="text-xs mt-0.5">

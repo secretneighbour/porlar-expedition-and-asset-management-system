@@ -1,26 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  HardDrive,
-  ShieldCheck,
-  CheckCircle2,
-  RefreshCw,
-  Download,
-  Database,
-  Cpu,
-  AlertTriangle,
-  X,
-  Server,
-  Globe,
-  Radio,
-  Wifi,
-  WifiOff,
-  Check,
-  RotateCcw
-} from 'lucide-react';
-import { getApiBaseUrl, setCustomApiBaseUrl, clearCustomApiBaseUrl, checkBackendConnection } from '../utils/api';
-import { isLocalhost } from '../config/api';
-import { getPlatformMetadata, PlatformMetadata } from '../platform';
-import { safeDisplayValue } from '../utils/safeFormat';
+import React, { useState } from 'react';
+import { HardDrive, ShieldCheck, CheckCircle2, RefreshCw, Download, Database, Cpu, AlertTriangle, X } from 'lucide-react';
 
 interface OfflineCacheModalProps {
   isOpen: boolean;
@@ -42,55 +21,6 @@ export function OfflineCacheModal({
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-
-  // Backend Gateway configuration state
-  const [backendUrlInput, setBackendUrlInput] = useState<string>(getApiBaseUrl());
-  const [pingStatus, setPingStatus] = useState<'idle' | 'testing' | 'online' | 'error'>('idle');
-  const [pingDetails, setPingDetails] = useState<string>('');
-  const [saveFeedback, setSaveFeedback] = useState<string>('');
-  const [platformInfo, setPlatformInfo] = useState<PlatformMetadata | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      setBackendUrlInput(getApiBaseUrl());
-      getPlatformMetadata().then(setPlatformInfo);
-    }
-  }, [isOpen]);
-
-  const handleTestBackend = async () => {
-    setPingStatus('testing');
-    setPingDetails('Pinging expedition server endpoint...');
-    const startTime = performance.now();
-    try {
-      const res = await checkBackendConnection();
-      const latency = Math.round(performance.now() - startTime);
-      if (res.online) {
-        setPingStatus('online');
-        setPingDetails(`ONLINE (${latency}ms) — Database: ${res.databaseStatus || 'healthy'}`);
-      } else {
-        setPingStatus('error');
-        setPingDetails(`UNREACHABLE — Server returned ${res.statusText}`);
-      }
-    } catch (err: any) {
-      setPingStatus('error');
-      setPingDetails(`FAILED — ${err?.message || 'Network error'}`);
-    }
-  };
-
-  const handleSaveBackendUrl = () => {
-    setCustomApiBaseUrl(backendUrlInput);
-    setSaveFeedback('Gateway URL updated and persisted to local client storage.');
-    setTimeout(() => setSaveFeedback(''), 3500);
-    handleTestBackend();
-  };
-
-  const handleResetBackendUrl = () => {
-    clearCustomApiBaseUrl();
-    setBackendUrlInput(getApiBaseUrl());
-    setSaveFeedback('Reset to default gateway URL.');
-    setTimeout(() => setSaveFeedback(''), 3000);
-    handleTestBackend();
-  };
 
   if (!isOpen) return null;
 
@@ -190,98 +120,6 @@ export function OfflineCacheModal({
               <span>Checksum integrity verification passed successfully! All 6 core datastores verified without corruption.</span>
             </div>
           )}
-
-          {/* Operations Backend Gateway Configuration */}
-          <div style={{ background: t.bgAlt, borderColor: t.border }} className="p-4 rounded-xl border space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-cyan-400" />
-                <span className="font-bold text-slate-200">Expedition Operations Gateway (API &amp; Telemetry URL)</span>
-              </div>
-              {platformInfo && (
-                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 border border-slate-700 text-slate-300 font-mono">
-                  {platformInfo.isTauri ? `Tauri Native (${platformInfo.os} ${platformInfo.arch})` : 'Web Browser Client'}
-                </span>
-              )}
-            </div>
-
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Connect this client terminal to your shared expedition base station, HQ cluster, or field satellite tunnel.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={backendUrlInput}
-                  onChange={(e) => setBackendUrlInput(e.target.value)}
-                  placeholder="https://YOUR-SUBDOMAIN.ngrok-free.app or http://192.168.1.100:3000"
-                  className="w-full px-3 py-2 bg-slate-950/70 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 font-mono text-xs focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleTestBackend}
-                  disabled={pingStatus === 'testing'}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Test connection to backend"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${pingStatus === 'testing' ? 'animate-spin' : ''}`} />
-                  <span>Test Link</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSaveBackendUrl}
-                  className="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Save and set active gateway URL"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Apply</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetBackendUrl}
-                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  title="Reset to default local URL"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {platformInfo?.isMobile && isLocalhost(backendUrlInput) && (
-              <div className="p-2 rounded-lg bg-amber-950/60 border border-amber-500/50 text-amber-300 text-[11px] font-mono flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>
-                  <strong>Mobile Notice:</strong> Physical Android phones cannot reach &apos;localhost&apos;. Set your HTTPS ngrok tunnel URL (e.g. https://your-subdomain.ngrok-free.app).
-                </span>
-              </div>
-            )}
-
-            {/* Ping Feedback */}
-            {pingDetails && (
-              <div className={`p-2 rounded-lg text-[11px] font-mono flex items-center gap-2 ${
-                pingStatus === 'online'
-                  ? 'bg-emerald-950/60 border border-emerald-500/50 text-emerald-300'
-                  : pingStatus === 'error'
-                  ? 'bg-red-950/60 border border-red-500/50 text-red-300'
-                  : 'bg-slate-900 border border-slate-700 text-slate-300'
-              }`}>
-                {pingStatus === 'online' ? <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                <span>{safeDisplayValue(pingDetails)}</span>
-              </div>
-            )}
-
-            {saveFeedback && (
-              <p className="text-[11px] text-cyan-400 font-medium animate-fade-in">
-                {saveFeedback}
-              </p>
-            )}
-          </div>
 
           {/* Storage Details Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

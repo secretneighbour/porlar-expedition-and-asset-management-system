@@ -7,6 +7,7 @@ import {
   Crosshair, 
   CheckCircle2, 
   ShieldAlert,
+  ShieldCheck,
   Send,
   Truck,
   Zap,
@@ -38,6 +39,8 @@ export interface ActiveDistressBannerProps {
   onLocateOnMap?: (lat: number, lng: number) => void;
   onTriggerCrevasseFall?: () => void;
   onToggleAutoSar?: () => void;
+  isMarkedSafe?: boolean;
+  onMarkSafe?: () => void;
 }
 
 export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
@@ -53,6 +56,8 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
   onLocateOnMap,
   onTriggerCrevasseFall,
   onToggleAutoSar,
+  isMarkedSafe = false,
+  onMarkSafe,
 }) => {
   const [showAcknowledgeForm, setShowAcknowledgeForm] = useState(false);
   const [dispatcherName, setDispatcherName] = useState('Operations Desk Lead');
@@ -171,8 +176,9 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
               className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1 transition-colors shadow-sm"
               title="Re-simulate Crevasse Fall Mayday beacon with autonomous zero-click dispatch"
             >
-              <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>Re-Test Crevasse Fall</span>
+              <RefreshCw className="w-3 h-3" />
+              <span className="opacity-90 font-mono">[SIM DRILL]</span>
+              <span>Re-Test Fall</span>
             </button>
           )}
         </div>
@@ -295,14 +301,31 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={onResolve}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs shadow transition-colors border border-emerald-400 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>FIELD PARTY SAFE (STAND DOWN)</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {!isMarkedSafe ? (
+                  <button
+                    type="button"
+                    onClick={onMarkSafe}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition-colors border border-emerald-400 cursor-pointer animate-pulse"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>MARK FIELD PARTY SAFE</span>
+                  </button>
+                ) : (
+                  <>
+                    <span className="text-emerald-400 font-bold text-xs px-2 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" /> SAFE CONFIRMED
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onResolve}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-[10px] shadow transition-colors border border-slate-500 cursor-pointer"
+                    >
+                      <span>ARCHIVE & RESOLVE</span>
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

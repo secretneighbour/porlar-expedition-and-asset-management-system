@@ -22,7 +22,6 @@ import {
 import { PolarRegion, PolarAsset, Expedition, ResearchStation, HazardZone, Waypoint, ActiveDistressAlert, RealtimeWeatherReading } from '../types';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { RealMapView } from './RealMapView';
-import { safeDisplayValue } from '../utils/safeFormat';
 
 interface PolarMapProps {
   region: PolarRegion;
@@ -747,9 +746,8 @@ export const PolarMap: React.FC<PolarMapProps> = ({
           {showTraverses && (
             <g id="traverse-routes">
               {regionalExpeditions.map((exp) => {
-                const waypoints = Array.isArray(exp.waypoints) ? exp.waypoints : [];
-                if (waypoints.length === 0) return null;
-                const points = waypoints.map((wp) => projectCoordinates(wp.lat, wp.lng));
+                if (!exp.waypoints || exp.waypoints.length === 0) return null;
+                const points = exp.waypoints.map((wp) => projectCoordinates(wp.lat, wp.lng));
                 const pathD = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`, '');
                 const isSelected = selectedExpeditionId === exp.id;
 
@@ -770,7 +768,7 @@ export const PolarMap: React.FC<PolarMapProps> = ({
                     />
 
                     {/* Waypoint Nodes */}
-                    {waypoints.map((wp, idx) => {
+                    {exp.waypoints.map((wp, idx) => {
                       const pt = points[idx];
                       return (
                         <g
@@ -1414,7 +1412,7 @@ export const PolarMap: React.FC<PolarMapProps> = ({
         <div className="px-4 py-1.5 bg-rose-950/80 border-t border-rose-800 text-[11px] font-mono text-rose-300 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span>{safeDisplayValue(geoError)}</span>
+            <span>{geoError}</span>
           </div>
           <button
             type="button"

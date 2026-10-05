@@ -5,43 +5,18 @@
 
 A mission-critical tactical operations console and real-time telemetry workstation engineered for Antarctic and Arctic expeditions, high-latitude research outposts, heavy traverse crawlers, extreme-cold aviation, and field Mayday distress coordination.
 
-The system runs seamlessly across all expedition targets using **Tauri 2**:
-* 🌐 **Web Application**: High-availability multi-operator station hub served via Express and Vite.
-* 🐧 **Linux Desktop**: Native 60 FPS workstation binary, portable AppImage, and distribution packaging for **Arch Linux** (`makepkg -si`) and **Debian / Ubuntu** (`.deb`).
-* 🪟 **Windows Desktop**: Native x86_64 installer (`.msi` / NSIS) for field Toughbooks and command centers.
-* 🍎 **macOS Desktop**: Native DMG / `.app` bundle for research lab workstations (Apple Silicon & Intel).
-* 📱 **Android Handhelds & Tablets**: Independent native APK / AAB deployment for field researchers and crawler operators.
-* 🍏 **iOS Handhelds**: Native deployment when compiled in an Apple development environment.
-
-> [!IMPORTANT]
-> **React Frontend as Single Source of Truth**: The existing tactical React/Vite/Tailwind frontend remains the single source of truth across all platforms. Tauri 2 provides a lightweight native application shell with Rust OS bridges (offline state caching, secure storage, native notifications, and pre-boot POST diagnostics) without modifying or fragmenting the operational UI.
-
 ---
 
 ## 📋 Table of Contents
 
 - [🚀 Quick Start](#-quick-start)
   - [🛠️ Troubleshooting NPM `EALLOWSCRIPTS` / `--allow-scripts` Error](#️-troubleshooting-npm-eallowscripts---allow-scripts-error)
-- [📱 Cross-Platform Architecture (Tauri 2 Native Shell)](#-cross-platform-architecture-tauri-2-native-shell)
-  - [🖥️ Linux Desktop Packaging (Arch Linux & Debian / Ubuntu)](#️-linux-desktop-packaging-arch-linux--debian--ubuntu)
-  - [📱 Android & iOS Mobile Deployment](#-android--ios-mobile-deployment)
-  - [🪟 Windows & 🍎 macOS Desktop Builds](#-windows---macos-desktop-builds)
-- [🌐 Multi-Device Expedition Network Topology](#-multi-device-expedition-network-topology)
-- [💾 Offline-First Operation & Telemetry Distinction](#-offline-first-operation--telemetry-distinction)
-- [🛰️ Operations Gateway & Backend URL Configuration](#️-operations-gateway--backend-url-configuration)
 - [🎨 Unified Polar Operations Design System & Frontend Architecture](#-unified-polar-operations-design-system--frontend-architecture)
-  - [Motion & Responsive Console Polish](#motion--responsive-console-polish)
 - [🔐 Polar Ops Console Authentication & Role-Based Access Control](#-polar-ops-console-authentication--role-based-access-control)
 - [✨ Key Operational Views & Features](#-key-operational-views--features)
-- [🗺️ Polar GIS Command Workstation (SCAR ADD v7.4 & 100% Google-Free Cartography)](#️-polar-gis-command-workstation-scar-add-v74--100-google-free-cartography)
-  - [🌍 Scientific Antarctic Digital Database (ADD v7.4) Integration](#1--scientific-antarctic-digital-database-add-v74-integration)
-  - [🛰️ Polar GNSS Satellite Geometry & Dilution of Precision Compensation](#2-️-polar-gnss-satellite-geometry--dilution-of-precision-compensation)
-  - [📍 Waypoint Progressive Disclosure & Dynamic 60 FPS Asset Tracking](#3--waypoint-progressive-disclosure--dynamic-60-fps-asset-tracking)
-  - [💾 Client-Side Caching & Offline Vector Resilience](#4--client-side-caching--offline-vector-resilience)
 - [🔥 Sub-Zero Danger Zone Heatmap & Polar GIS](#-sub-zero-danger-zone-heatmap--polar-gis)
 - [🛠️ AI Predictive Maintenance System (-50°C Cold-Soak Modeling)](#️-ai-predictive-maintenance-system--50c-cold-soak-modeling)
 - [⚡ Automated S.A.R. (Search and Rescue) Dispatch (Zero-Click AI Response)](#-automated-sar-search-and-rescue-dispatch-zero-click-ai-response)
-  - [🚨 1-Tap Instant Mayday SOS Broadcast & Emergency Triage](#-1-tap-instant-mayday-sos-broadcast--emergency-triage)
 - [❄️ Dynamic Weather-Based Inventory Consumption (Blizzard Heating Model)](#️-dynamic-weather-based-inventory-consumption-blizzard-heating-model)
 - [🛰️ Smart Route Optimization (Satellite Computer Vision Pathfinding)](#️-smart-route-optimization-satellite-computer-vision-pathfinding)
 - [⚡ API Key Optimization & Resource Conservation Engine](#-api-key-optimization--resource-conservation-engine)
@@ -49,20 +24,27 @@ The system runs seamlessly across all expedition targets using **Tauri 2**:
 - [⚡ Auto-Resolved by AI Alert System (Self-Healing Autonomous Operations)](#-auto-resolved-by-ai-alert-system-self-healing-autonomous-operations)
 - [🧹 AI Automated Work Clearing & Forensic Action Logging](#-ai-automated-work-clearing--forensic-action-logging)
 - [🖥️ Pre-Boot System Check (Terminal-Style Hardware & Telemetry POST)](#️-pre-boot-system-check-terminal-style-hardware--telemetry-post)
-  - [🚨 Zero-Scroll Active Sensor Fault & Cryo-Remediation Banner](#-zero-scroll-active-sensor-fault--cryo-remediation-banner)
-- [🚛 Fleet Telemetry & Detailed Operational Analytics](#-fleet-telemetry--detailed-operational-analytics)
 - [🎮 Mission Simulation & Operator Training Mode](#-mission-simulation--operator-training-mode)
 - [📍 Waypoint Tracing & Live Route Telemetry on Map](#-waypoint-tracing--live-route-telemetry-on-map)
-  - [🛡️ Defensive Waypoint Normalization & Robustness Architecture](#️-8-defensive-waypoint-normalization--robustness-architecture)
 - [🤖 Gemini-Powered Waypoint Route Optimization](#-gemini-powered-waypoint-route-optimization)
-  - [🧭 Polar A* Tactical Route Engine (Weighted Cost Function + Gemini 3.8 Flash)](#-polar-a-tactical-route-engine-weighted-cost-function--gemini-38-flash)
 - [🧩 Comprehensive Modules & Dependencies Reference](#-comprehensive-modules--dependencies-reference)
+  - [Production NPM Dependencies](#production-npm-dependencies)
+  - [Development Dependencies](#development-dependencies)
+  - [Frontend Component Modules](#frontend-component-modules)
+  - [Custom React Hooks & Telemetry Services](#custom-react-hooks--telemetry-services)
+  - [Server-Side Backend & API Modules](#server-side-backend--api-modules)
 - [📱 Connecting Mobile Phones & Field Devices](#-connecting-mobile-phones--field-devices)
 - [🌐 Exposing Field Consoles over Public Internet (ngrok Usage)](#-exposing-field-consoles-over-public-internet-ngrok-usage)
+  - [Step-by-Step ngrok Guide](#step-by-step-ngrok-guide)
+  - [🛠️ Troubleshooting ngrok Permission Issues](#️-troubleshooting-ngrok-permission-issues)
 - [📡 Connecting External Hardware GPS Modules](#-connecting-external-hardware-gps-modules)
-- [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
+  - [1. Mobile Device On-Board GPS](#1-mobile-device-on-board-gps)
+  - [2. External Bluetooth GPS Receivers](#2-external-bluetooth-gps-receivers-android--ios)
+  - [3. USB/Serial Hardware GPS Modules (Web Serial API)](#3-usbserial-hardware-gps-modules-web-serial-api)
+  - [4. NMEA-over-IP & Satellite / Cellular Telemetry Streams](#4-nmea-over-ip--satellite--cellular-telemetry-streams)
+- [💻 Programmatic Integration (React)](#-programmatic-integration-react)
+- [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
 - [🔑 Environment Configuration](#-environment-configuration)
-- [🚨 Troubleshooting & Diagnostics Guide](#-troubleshooting--diagnostics-guide)
 - [📄 License](#-license)
 
 ---
@@ -113,457 +95,30 @@ In modern versions of NPM (NPM v10+ / Node.js v22+), `--allow-scripts` is no lon
 
 ---
 
-## 📱 Cross-Platform Architecture (Tauri 2 Native Shell)
-
-The Polar Expedition & Asset Management System has been architected to run seamlessly as a native application across all tactical platforms without compromising the existing web deployment:
-
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│             Tactical React 18 + TypeScript + Tailwind Frontend         │
-│          (Single Source of Truth: GIS Map, Telemetry, SAR, AI)         │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                               Vite 6                                   │
-│           (Dual Target: Static Web Asset Bundle & Server Build)        │
-└──────────────┬────────────────────────────────────────────┬────────────┘
-               │ Web Deployment                             │ Native Shell
-               ▼                                            ▼
-┌───────────────────────────────┐           ┌────────────────────────────┐
-│      Express Web Server       │           │          Tauri 2           │
-│   (Host: 0.0.0.0, Port 3000)  │           │   (IPC & Window Manager)   │
-└───────────────────────────────┘           └──────────────┬─────────────┘
-                                                           │
-                                                           ▼
-                                            ┌────────────────────────────┐
-                                            │      Rust Native Layer     │
-                                            │ (Storage, OS, Diags, POST) │
-                                            └──────────────┬─────────────┘
-                                                           │
-               ┌─────────────────────┬─────────────────────┼─────────────────────┐
-               ▼                     ▼                     ▼                     ▼
-        🐧 Linux Desktop      🪟 Windows Desktop    🍎 macOS Desktop      📱 Android / iOS
-        • Arch Linux          • x86_64 Installer    • Apple Silicon/Intel • Android APK/AAB
-        • Debian / Ubuntu     • NSIS / MSI          • DMG / .app          • iOS App (Xcode)
-        • Portable AppImage
-```
-
-### 🧩 Separation of Responsibilities
-
-| Subsystem | Responsibility | Runtime Environment |
-| :--- | :--- | :--- |
-| **React Frontend** | UI rendering, Leaflet Polar GIS cartography, dynamic state management, Waypoint Studio, SAR dispatch controls, and audio telemetry synthesizer. | Web Browser / WebView |
-| **Tauri & Rust Native Layer** | Native local storage snapshots (`save_offline_snapshot`), secure local offline cache dir (`get_offline_cache_dir`), system POST diagnostics (`run_native_diagnostics`), native OS metadata (`get_native_platform_info`), and desktop window management. | Client Native OS (C/Rust) |
-| **Express Backend** | Authoritative multi-user authentication (`/api/auth/login`), shared expedition & asset records (`polar-database.json`), real-time WebSocket telemetry distribution, and server-side Gemini 3.8 Flash execution (`/api/ai/analyze-recon`). | Expedition Base Station / Server |
-| **Shared Database Layer** | ACID persistence of mission logs, fleet telemetry, station headcounts, inventory reserves, and emergency distress beacons. Remote clients NEVER run isolated local database instances. | Backend Server Host |
-
----
-
-## 🖥️ Linux Desktop Packaging (Arch Linux & Debian / Ubuntu)
-
-The Linux desktop application is fully configured and packaged for both **Arch-based** and **Debian/Ubuntu-based** Linux ecosystems, as well as a universal distribution-independent **AppImage**.
-
-### 1. 🏹 Arch Linux Support (Native Binary & PKGBUILD)
-
-Arch-based distributions (Arch Linux, EndeavourOS, Manjaro) are first-class targets:
-
-#### **Build Prerequisites for Arch Linux:**
-```bash
-sudo pacman -S --needed base-devel rust cargo webkit2gtk-4.1 gtk3 libayatana-appindicator openssl
-```
-
-#### **Building & Running on Arch Linux:**
-```bash
-# Clone the repository
-git clone https://github.com/secretneighbour/porlar-expedition-and-asset-management-system.git
-cd porlar-expedition-and-asset-management-system
-
-# Install NPM dependencies
-npm install
-
-# Run native desktop app in development with live hot-reload
-npm run tauri:dev
-
-# Build optimized production native binary
-npm run tauri:build
-```
-The compiled 60 FPS native ELF executable is generated at:
-`src-tauri/target/release/polaris-ops`
-
-#### **Arch Linux Native Package Installation via `PKGBUILD`:**
-A fully compliant Arch Linux [`PKGBUILD`](./PKGBUILD) and XDG desktop entry [`polaris-ops.desktop`](./polaris-ops.desktop) are provided in the repository root:
-
-```bash
-# Build and install the system-wide Arch package
-makepkg -si
-```
-This installs:
-- Executable to `/usr/bin/polaris-ops`
-- Desktop launcher to `/usr/share/applications/polaris-ops.desktop`
-- Tactical app icons to `/usr/share/icons/hicolor/...`
-- Clean uninstallation via: `sudo pacman -R polaris-ops`
-
----
-
-### 2. 🍥 Debian & Ubuntu Linux Support (`.deb` Package)
-
-Debian-based distributions (Debian 12+, Ubuntu 22.04+, Linux Mint, Pop!_OS) can install the official Debian package.
-
-#### **Build Prerequisites for Debian / Ubuntu:**
-```bash
-sudo apt update
-sudo apt install -y build-essential curl wget file libssl-dev libgtk-3-dev \
-  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
-```
-
-#### **Building the Debian Package:**
-```bash
-npm run tauri:build:deb
-```
-The Debian package is output to:
-`src-tauri/target/release/bundle/deb/polaris-ops_1.0.0_amd64.deb`
-
-#### **Installing on Debian / Ubuntu:**
-```bash
-sudo apt install ./src-tauri/target/release/bundle/deb/polaris-ops_1.0.0_amd64.deb
-```
-This registers the application in the system desktop application menu, provides high-resolution icons, and enables clean removal via:
-```bash
-sudo apt remove polaris-ops
-```
-
----
-
-### 3. 📦 Universal Linux AppImage
-
-For portable, distribution-independent execution on any modern Linux distribution without installation:
-
-#### **Building the AppImage:**
-```bash
-npm run tauri:build:appimage
-```
-The portable AppImage is generated at:
-`src-tauri/target/release/bundle/appimage/polaris-ops_1.0.0_amd64.AppImage`
-
-#### **Running the AppImage:**
-```bash
-chmod +x src-tauri/target/release/bundle/appimage/polaris-ops_1.0.0_amd64.AppImage
-./src-tauri/target/release/bundle/appimage/polaris-ops_1.0.0_amd64.AppImage
-```
-
----
-
-### 4. ⚙️ Linux CPU Architecture
-
-- **x86_64 / amd64**: Fully tested and supported natively on modern 64-bit Intel/AMD processors.
-- **aarch64 / ARM64** (e.g., Raspberry Pi 5, ARM Linux Toughbooks): Supported by compiling natively on an ARM64 Linux host or using cross-compilation with `cargo build --target aarch64-unknown-linux-gnu`.
-
----
-
-## 📱 Android & iOS Mobile Deployment
-
-The system incorporates native mobile viewports and touch interactions without sacrificing tactical capabilities or splitting the React UI codebase.
-
-```text
-       Tactical Mobile Architecture
-┌───────────────────────────────────────┐
-│     Responsive Touch Viewport         │
-│   (Collapsible Menus, Pinned HUD)     │
-└──────────────────┬────────────────────┘
-                   │
-                   ▼
-┌───────────────────────────────────────┐
-│          Tauri 2 Mobile Shell         │
-│    (Android Activity / iOS AppView)   │
-└──────────────────┬────────────────────┘
-                   │
-                   ▼
-┌───────────────────────────────────────┐
-│  Mobile Native Capabilities Bridge    │
-│  • High-Precision A-GPS / GNSS        │
-│  • Haptic Distress & Klaxon Feedback  │
-│  • App Lifecycle & Deep Offline Cache │
-│  • Secure Session Credential Vault    │
-└───────────────────────────────────────┘
-```
-
-### 1. 🤖 Android Deployment (APK & AAB)
-
-#### **Android Build Prerequisites:**
-1. **Java Development Kit (JDK 17+)**: Ensure `JAVA_HOME` is set.
-2. **Android Studio & SDK**:
-   - Android SDK Platform 34 (Android 14) or newer
-   - Android SDK Build-Tools 34.0.0+
-   - Android NDK 26.1.10909125 or newer
-   - Set environment variables:
-     ```bash
-     export ANDROID_HOME="$HOME/Android/Sdk"
-     export NDK_HOME="$ANDROID_HOME/ndk/<version>"
-     ```
-3. **Rust Android Targets**:
-   ```bash
-   rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-   ```
-
-#### **Android Development & Build Commands:**
-```bash
-# Initialize Android project structure in src-tauri/gen/android
-npm run tauri:android:init
-
-# Launch in Android Emulator or attached USB Debugging device
-npm run tauri:android:dev
-
-# Pre-requisite for physical Android devices:
-# Ensure VITE_API_BASE_URL=https://<your-subdomain>.ngrok-free.app is set in .env!
-npm run build
-
-# Build standalone signed/unsigned Release APK for ARM64 (modern phones)
-npx tauri android build --apk --target aarch64
-
-# Or build universal APK containing all architectures:
-npm run tauri:android:build
-
-# Build Google Play App Bundle (AAB) for distribution
-npm run tauri:android:build -- --split-per-abi
-```
-
-#### **Output Artifacts:**
-- **Debug APK**: `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
-- **Release APK**: `src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk`
-- **App Bundle (AAB)**: `src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab`
-
-#### **Release Signing Best Practices:**
-Release keystores are **NEVER committed to git**. Configure your release keystore via environment variables or a local `keystore.properties` referenced in your local Gradle build:
-```properties
-storePassword=ENV_RELEASE_KEYSTORE_PASSWORD
-keyPassword=ENV_RELEASE_KEY_PASSWORD
-keyAlias=ENV_RELEASE_KEY_ALIAS
-storeFile=/path/to/secure/field-release.keystore
-```
-
----
-
-### 2. 🍏 iOS Deployment (iPhone & iPad)
-
-#### **iOS Build Prerequisites:**
-- **macOS Host Machine**: Required by Apple Xcode toolchain.
-- **Xcode 15+** with iOS 17+ SDK and Command Line Tools (`xcode-select --install`).
-- **Rust iOS Targets**:
-  ```bash
-  rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
-  ```
-
-#### **iOS Development & Build Commands:**
-```bash
-# Initialize iOS Xcode workspace in src-tauri/gen/ios
-npm run tauri:ios:init
-
-# Run in iOS Simulator or attached iPhone/iPad
-npm run tauri:ios:dev
-
-# Build production iOS IPA bundle
-npm run tauri:ios:build
-```
-
----
-
-## 🪟 Windows & 🍎 macOS Desktop Builds
-
-### 1. 🪟 Windows Desktop Build
-- **Prerequisites**: Windows 10/11, Visual Studio 2022 with C++ Build Tools ("Desktop development with C++"), and the WebView2 Evergreen Bootstrapper / Runtime.
-- **Build Command**:
-  ```powershell
-  npm run tauri:build
-  ```
-- **Generated Artifacts**:
-  - `src-tauri/target/release/bundle/msi/polaris-ops_1.0.0_x64_en-US.msi`
-  - `src-tauri/target/release/bundle/nsis/polaris-ops_1.0.0_x64-setup.exe`
-
-### 2. 🍎 macOS Desktop Build
-- **Prerequisites**: macOS 13+ (Ventura, Sonoma, Sequoia), Xcode Command Line Tools, Rust with `x86_64-apple-darwin` and `aarch64-apple-darwin` targets.
-- **Build Command**:
-  ```bash
-  npm run tauri:build
-  ```
-- **Generated Artifacts**:
-  - `src-tauri/target/release/bundle/dmg/polaris-ops_1.0.0_x64.dmg` (Intel)
-  - `src-tauri/target/release/bundle/dmg/polaris-ops_1.0.0_aarch64.dmg` (Apple Silicon M1/M2/M3/M4)
-
----
-
-## 🌐 Multi-Device Expedition Network Topology
-
-In an active polar expedition, workstations and handheld field terminals connect concurrently to the authoritative operations backend:
-
-```text
-              ┌── 🪟 Windows Field Toughbook (Commander Console)
-              │
-              ├── 🐧 Linux Workstation (Logistics & AWOS GIS Station)
-              │
-📱 Android ───┤
-Tablet/Phone  │
-              ├── 📱 Android / iOS Mobile (Field Traverse Operator)
-              │
-              └── 🌐 Chrome / Firefox Web Browser (Outpost Terminals)
-                       │
-                       ▼  HTTPS / WSS (Configurable API Base Gateway)
-                ┌──────────────┐
-                │ Polar Server │  (Host: 0.0.0.0:3000)
-                │ Express + WS │  (Server-side Gemini AI & RBAC)
-                └──────┬───────┘
-                       │
-                       ▼  ACID Storage Transactions
-                ┌──────────────┐
-                │ Shared DB    │  (data/polar-database.json)
-                └──────────────┘
-```
-
-> [!WARNING]
-> **No Distributed Database Fragmentation**: Installed mobile and desktop applications do **not** run their own local SQL/JSON database instances. All operational records (active waypoints, Mayday signals, inventory burn, rover telemetry) are synchronized centrally via the backend. Local client storage is used strictly for **offline-first snapshot caching**.
-
----
-
-## 💾 Offline-First Operation & Telemetry Distinction
-
-When conducting traverses deep across the Antarctic polar plateau, SATCOM links may experience extreme katabatic attenuation, solar flares, or total loss of signal.
-
-The Polaris Ops Console maintains mission continuity with an **Offline-First Resilience Architecture**:
-
-### 🛡️ State Classification & Distinct HUD Badges
-
-The top navigation HUD features an active telemetry pill that explicitly reports operational state:
-
-| Status Badge | Indicator Color | Meaning |
-| :--- | :--- | :--- |
-| **`LIVE TELEMETRY`** | 🟢 Emerald Glow | Active two-way WebSocket connection with authoritative backend; sub-second real-time telemetry streaming. |
-| **`CACHED / OFFLINE`** | 🟠 Amber Warning | Network connection dropped; displaying cached operational snapshot. Local waypoint and mission edits are queued safely. |
-| **`SIMULATED (ISOLATED)`** | 🟡 Pulsing Amber | Operator Training Mode enabled. Synthetic telemetry and manual crisis injects are strictly isolated from real database records. |
-| **`RECONNECTING`** | 🟡 Fast Pulse Yellow | Network link re-establishing; exponential backoff handshake underway with operations gateway. |
-
-### 📦 Offline Capabilities
-- **Local Snapshot Cache**: Automatically snapshots the latest mission progress, waypoint coordinates, fleet positions, AWOS weather readings, and danger zones to local persistent storage (`save_offline_snapshot` in Tauri / `localStorage` in browser).
-- **Offline Waypoint Studio**: Plan, edit, and step through sequential waypoints while offline.
-- **Offline GIS Map**: Basemap vector tiles and Antarctic coastline features remain fully navigable from client cache.
-- **Deterministic Route Fallback**: If Gemini AI is unreachable due to network loss, the system automatically falls back to the deterministic A* Polar routing algorithm without crashing or fabricating hallucinations.
-
----
-
-## 🛰️ Operations Gateway & Backend URL Configuration
-
-To eliminate hardcoded `localhost:3000` assumptions across deployed Tauri mobile APKs, desktop executables, and web clients, the application utilizes a centralized **Operations Gateway Configuration Engine** (`src/config/api.ts`):
-
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                        src/config/api.ts                               │
-│              (Single Source of Truth for API & WS Base)                │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-       ┌────────────────────────────┼────────────────────────────┐
-       ▼                            ▼                            ▼
-📱 Android / iOS            🐧 Linux / 🪟 Windows        🌐 Web Browser
-VITE_API_BASE_URL           VITE_API_BASE_URL            Relative /api or proxy
-(HTTPS ngrok / Gateway)     (LAN / Remote / Localhost)   (.env.development)
-```
-
-### 1. Centralized Configuration (`src/config/api.ts`)
-The application defines a single, validated API base URL:
-```typescript
-export const API_BASE_URL: string = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
-```
-- **Automatic ngrok Interstitial Bypass**: API requests through ngrok tunnels automatically inject the `ngrok-skip-browser-warning: 69420` (and `true`) header and persistent cookie across all fetch requests (`apiFetch` and global `window.fetch` interceptor) to bypass ngrok's free-tier HTML warning page (`ERR_NGROK_6024`).
-- **Resolving 502 Bad Gateway**: If ngrok outputs `502 Bad Gateway`, the backend server (`npm run dev`) is not running on port 3000. Ensure `npm run dev` is active alongside ngrok.
-
-### 2. Android Phone Connectivity via ngrok HTTPS Tunnel (Step-by-Step)
-
-When running the backend on your development computer and testing the native Android APK on a physical phone:
-
-#### **Step 1: Start your backend server**
-```bash
-npm run dev
-# Server listens on http://localhost:3000 (and 0.0.0.0:3000)
-```
-
-#### **Step 2: Start an ngrok HTTPS tunnel**
-```bash
-ngrok http 3000
-```
-ngrok will display an active HTTPS forwarding address, for example:
-```text
-Forwarding   https://a1b2-34-56-78-90.ngrok-free.app -> http://localhost:3000
-```
-
-#### **Step 3: Copy the HTTPS ngrok URL into `.env`**
-In the root `.env` file, set `VITE_API_BASE_URL`:
-```env
-VITE_API_BASE_URL=https://a1b2-34-56-78-90.ngrok-free.app
-```
-*(Or set it inline during the build command without modifying files)*.
-
-#### **Step 4: Build the Frontend & Compile the Android APK**
-Because Vite environment variables are injected at build time, compile the frontend assets before bundling the native APK:
-```bash
-# 1. Compile React assets with the ngrok base URL injected
-npm run build
-
-# 2. Build the Android release APK (for target architecture, e.g. aarch64)
-npx tauri android build --apk --target aarch64
-# Or build universal APK:
-npm run tauri:android:build
-```
-
-#### **Step 5: Install APK on Android Device**
-```bash
-adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
-```
-The application will launch on your phone and communicate directly over HTTPS and WSS with your computer's backend!
-
----
-
-### 3. Preserving Local Browser Development
-For normal machine-local browser development, `.env.development` provides:
-```env
-VITE_API_BASE_URL=http://localhost:3000
-VITE_BACKEND_URL=http://localhost:3000
-```
-Vite automatically loads `.env.development` when running `npm run dev`, allowing you to develop locally without changing your production `.env` ngrok setting.
-
----
-
-### 4. Runtime UI Configuration (Operations Gateway HUD Modal)
-If your ngrok URL changes while the app is already installed on a phone or desktop, you do **not** need to recompile immediately!
-1. Tap the **HardDrive / Gateway icon** in the top navigation bar.
-2. Enter the new ngrok HTTPS URL in the **Gateway Base URL** field.
-3. Tap **"Test Link"** to verify connection latency and database health.
-4. Tap **"Apply"** to persist the new URL to `localStorage` (`polar_api_base_url`). All REST and WebSocket connections will immediately rebind.
-
----
-
 ## ✨ Key Operational Views & Features
 
 | View | Capabilities |
 | :--- | :--- |
 | **🔐 Polar Ops Console Auth** | Glassmorphic tactical authentication portal with multi-radial lighting (`#7C3AED`, `#60A5FA`), role-based access for Researcher, Asset Management, and Transportation, server-side authorization enforcement, and forensic session auditing. |
-| **📊 Polar Operations Command Center** | Information-dense polar operations dashboard featuring live mission progress, environmental telemetry, crawler fleet readiness, active AI recommendations, and embedded real-time AI action logs. |
+| **📊 Polar Operations Command Center** | Streamlined, high-signal polar operations overview featuring high-level polar stat cards, station readiness status, active AI predictive maintenance alert banner, expedition status distribution chart, interactive AI assistant widget, and fast tactical links to Smart Route AI and Fleet Telemetry. |
 | **🌡️ Live Operations & Environmental Telemetry** | Dedicated AWOS meteorological workstation: ambient temperature, katabatic wind velocity, barometric pressure, wind chill indexes, and real-time frostbite hazard calculations. |
-| **🧭 Polar Map & Geospatial GIS** | Dual-projection cartography with Leaflet GIS and stereographic radar. Features progressive disclosure telemetry overlays, native spatial waypoint clustering (`⬡ N WPs`), real-time coordinate interpolation with cubic ease-out, dynamic rotating heading vector arrows, pulsing LETHAL auras, and dark glassmorphic HUD popups. |
+| **🧭 Polar Map & Geospatial GIS** | Dual-projection cartography with Leaflet GIS and stereographic radar. Real-time GPS device tracking, interactive coordinate pinning, danger zone overlays, and custom base commissioning. |
 | **🤖 AI Predictive Maintenance** | Pre-failure machine learning forecaster modeling severe polar cold-soak (-50°C) stress, elastomer vitrification curves, vibration harmonics (FFT), and parts pre-allocation to avert field breakdowns. |
 | **🔥 Danger Zone Heatmap** | Dynamic multi-ring gradient heatmap overlay visualizing sub-zero cold pools, katabatic shear funnels, human survival windows (<12m lethal threshold), and Arctic diesel fuel waxing perimeters. |
 | **📍 Waypoint Planner Studio** | Clean split-pane interface to pin, edit, and step sequential waypoints (+50km auto-advance). Features 1-click map pinning, instant card removals, and GPX navigation file exports. |
 | **🛰️ Smart Route Optimization (Satellite CV)** | High-resolution satellite computer vision engine detecting shifting ice shelves and active crevasse hazards; recalculates daily safe bypass corridors for 28-ton heavy supply trucks and pushes waypoints directly to crawler GPS terminals. |
 | **⚡ Automated S.A.R. Mission Console** | Autonomous Search & Rescue command workstation: upon distress beacon reception (e.g., Crevasse Fall), the engine automatically computes the nearest base, assesses weather flyability, and dispatches Drone Falcon-X and tracked extraction teams with zero human latency. |
 | **❄️ Dynamic Weather Inventory Engine** | AI weather forecasting reader: predicts 3-day severe blizzard impact (-48°C, 95 km/h winds), models exponential heater burn surge (500L/day → 1,450L/day), dynamically elevates minimum stock safety buffer (4,000L → 8,500L), and dispatches early supply ship orders to MV Vasiliy Golovnin. |
-| **🚨 Mayday Distress & Emergency Broadcast** | Streamlined emergency protocol featuring **1-Tap Instant SOS Broadcast** with zero-touch context packing (auto-injecting operator identity, node ID, station sector, live coordinates, active expedition, and ambient weather), live transmission status confirmation, resolve controls, and expandable SitRep filing. |
+| **🚨 Mayday Distress & Emergency Broadcast** | Bi-directionally synchronized Mayday alarm system with dual-mode operational support: 1-click RAPID MAYDAY broadcast for field emergencies (auto-populating telemetry, coordinates, and urgency) alongside an ADVANCED / DETAILED manual form with GPS lock acquisition and coordinate presets. Automatically triggers audible klaxons and Auto-SAR protocols. |
 | **📻 Tactical Dispatch Logbook & AI Recon** | Tactical field communications logbook with automated Gemini 3.8 Flash reconnaissance evaluation, severity-based filtering, callsign tracking, and sector monitoring. |
 | **⛺ Research Stations & Outposts Studio** | Comprehensive operational status, personnel headcounts, runway conditions, and emergency shelter capacities across McMurdo, Amundsen-Scott, Vostok, Concordia, Halley VI, Maitri, Bharati, Himadri, and custom outposts. |
-| **🚛 Fleet & Asset Telemetry Workstation** | Re-homed operational analytics workstation featuring live fleet condition distribution (BarChart), monthly logistics expenditure (AreaChart), mission readiness KPIs, cold-soak bay telemetry, and SATCOM sync status. |
-| **📦 Consumables & Depot Allocation** | Burn-rate tracking for Arctic diesel (F-34/JP-8), Jet-A1, rations, and medical kits, with re-homed Depot Consumption vs Safety Reserve Threshold analytics and automated resupply orders. |
+| **🚛 Fleet & Asset Telemetry** | Dedicated fleet telemetry and condition analytics suite featuring fleet deployment stats, asset condition distribution bar charts, per-category mission readiness ratings, and complete lifecycle asset tracking. |
+| **📦 Consumables & Depot Allocation** | Burn-rate tracking for Arctic diesel (F-34/JP-8), Jet-A1, rations, and medical hypothermia kits with automated resupply orders. |
 | **📜 AI Action Logs Stream** | Real-time continuously scrolling telemetry and autonomous event feed (`[10:45 AM] AI: Rerouting supply convoy...`, `[10:47 AM] AI: Optimizing generator fuel...`) across polar stations with category filters and pause/resume controls. |
 | **⚡ Auto-Resolved by AI Alerts** | Autonomous self-healing infrastructure giving historical and real-time alerts green `[⚡ Auto-Resolved by AI]` tags with complete forensic action logs and averted-impact explanations. |
 | **🧹 AI Cleared Work Logs Archive** | Automated forensic task clearing engine with dual `ACTIVE TASK QUEUE` and `⚡ AI CLEARED WORK LOGS` views, one-click `AI AUTO-CLEAR ALL DONE`, and immutable verification logs. |
-| **🖥️ Pre-Boot System Check (POST)** | Retro-tactical BIOS power-on self-test featuring a zero-scroll **Pinned Active Sensor Fault & Remediation Diagnostic Banner** that highlights affected sensors, subsystems, cold-soak vitrification risk, and AI auto-remediation state on fault injection. |
-| **🎮 Mission Simulation & Training Sandbox** | Integrated tactical training mode allowing operators to simulate extreme crises (blizzards, crawler tensioner failures, SATCOM blackouts, crevasse fall Maydays). Features 5 pre-built scenarios, 11 manual inject triggers, 1x-25x playback controls, moving convoy map interpolation, 3-tier AI safety classification (OBSERVE, ASSIST, AUTONOMOUS), AAR evaluation reports, and strict isolation from production data. |
-| **⚙️ Tactical Settings & Mission Configuration** | Dedicated operational preferences console: 4 calibrated sub-zero themes, hardware CRT cathodic scanlines emulation, tactical acoustic audio telemetry, SATCOM mesh node parameters, and direct POST / pairing launchers. |
+| **🎮 Mission Simulation & Training Sandbox** | Integrated tactical training mode allowing operators to simulate extreme crises (blizzards, crawler tensioner failures, SATCOM blackouts, crevasse fall Maydays) with clear `[SIM]` visual badges, 5 pre-built scenarios, 11 manual inject triggers, 1x-25x playback controls, moving convoy map interpolation, 3-tier AI safety classification (OBSERVE, ASSIST, AUTONOMOUS), AAR evaluation reports, and strict isolation from production data. |
+| **🎨 4 Tactical Themes & CRT Scanlines** | Complete customizable tactical visual identities: Cyan Polar, Phosphor Green (P300 CRT), Amber CRT, and Polar Daylight, accompanied by toggleable CRT cathode-beam scanlines and Web Audio acoustic feedback. |
 | **📱 Multi-Device Pairing & GPS Sync** | QR-code automated mobile pairing, mesh heartbeat synchronization, and Web Serial / Web Geolocation external hardware GPS integration. |
 
 ---
@@ -607,38 +162,6 @@ All child cards, panels, and sidebars utilize translucent glass (`rgba(255, 255,
 ### 🔤 Typography
 * **Headings & Metric Displays**: `Space Grotesk` (weights 500, 600, 700) for logos, top headers, KPI values, and section titles.
 * **Body, Forms & Controls**: `Inter` (weights 400, 500, 600, 700) for tables, forms, labels, status pills, and toolbars.
-
-### Motion & Responsive Console Polish
-
-The console shell uses the selected tactical theme consistently for its ambient grid, panels, borders, focus states, and primary actions. Workspace changes receive a short staged entrance and dashboard cards rise in sequence, making dense operational data easier to scan without delaying interaction. Motion automatically reduces to near-instant transitions when the operator enables an OS-level reduced-motion preference.
-
-#### 📱 Full Mobile & Tablet Responsive Design (v2.0)
-
-The entire application is now fully responsive across all device sizes, designed to feel like a native mobile app when used on Android handhelds via APK:
-
-| Breakpoint | Range | Layout Behaviour |
-|---|---|---|
-| Small Phone | 320–374px | 1-col grids, full-width modals, touch-optimized 44px targets |
-| Normal Phone | 375–430px | 2-col stat cards, collapsible sidebar drawer, compact topbar |
-| Large Phone | 431–600px | 2–3 col grids, touch scroll tables |
-| Tablet | 601–1024px | 2-col grids, slide-in sidebar (320px), tablet padding |
-| Desktop | 1024px+ | Full layout: sticky sidebar, 4+ col grids, all panels visible |
-
-**Key Responsive Features:**
-- **Mobile Sidebar Drawer**: Hamburger menu button on tablets/phones opens a slide-in navigation drawer with a full-height backdrop overlay and 44px touch targets for all nav items.
-- **Responsive Map**: Leaflet map height uses `clamp(300px, 55vh, 560px)` instead of fixed 560px — scales with viewport height on small screens.
-- **Responsive Popover Menus**: Map toolbar overlays use `min(320px, calc(100vw-2rem))` to stay within viewport.
-- **Route Panel**: AI route approval panel anchors `left: 0.5rem; right: 0.5rem` on phones instead of a fixed right-offset.
-- **Table Components**: SharedUI Table has a dual-mode rendering — full desktop table or stacked card view on mobile (triggered at `md:hidden`).
-- **Dashboard Stat Cards**: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7` instead of `auto-fit/minmax` to prevent sub-pixel columns on 320px screens.
-- **Form Inputs**: `font-size: 16px` on mobile prevents iOS/Android auto-zoom; `min-height: 44px` for all interactive elements.
-- **Safe Areas**: `env(safe-area-inset-*)` variables applied for notches, home bars, and rounded corners on modern Android devices.
-- **Login Page**: `clamp()` padding and border-radius adapt the login card to all screen sizes without losing the premium glassmorphic aesthetic.
-- **Landscape Support**: Compact topbar and reduced page-stage padding in landscape orientation on small screens.
-
-#### 🔧 ngrok Browser Warning Fix
-
-The Vite dev server now injects `ngrok-skip-browser-warning: 69420` as a response header on **all** assets (HTML, JS, CSS, WebSocket), bypassing the ngrok free-tier browser warning page on initial page load. The `apiFetch()` utility also injects this header on all API calls. The Express backend sets a persistent cookie (`ngrok-skip-browser-warning=69420; Max-Age=31536000`) for browser sessions.
 
 ### 🎛️ Tactical Themes, CRT Scanlines & Audio Feedback
 * **Cyan Polar (Default)**: Deep space navy background (`#060B18`), cyan highlights (`#00F2FE`), and sky-blue telemetry accents (`#38BDF8`).
@@ -710,86 +233,6 @@ In polar base operations, multiple laptops, command displays, and ruggedized fie
   - `GET /api/health`: Provides comprehensive health telemetry including database status (`connected`), active user count, and connected WebSocket terminals.
   - `GET /api/auth/diagnostics`: Developer & station admin endpoint verifying `backendStatus: "ONLINE"`, `database: "CONNECTED"`, and `authService: "READY"`.
 * **Configurable Frontend Base URL**: Set `VITE_API_BASE_URL` in `.env` if hosting the frontend statically or on a separate port/host, or use the built-in Vite dev proxy configured for `/api` and `/ws`.
-
----
-
-## 🗺️ Polar GIS Command Workstation (SCAR ADD v7.4 & Watermark-Free Tactical Cartography)
-
-The Polaris Ops Command Console features a refactored, military-grade **Polar GIS Tactical Cartography Engine** (`PolarGISMap.tsx` / `RealMapView.tsx`). Commercial watermarked tiles have been completely eliminated with **watermark-free Esri World Dark Gray Canvas** and **Esri Polar World Imagery**, combined with vector cartography from the **Antarctic Digital Database (ADD v7.4)** hosted by the British Antarctic Survey (BAS) / Scientific Committee on Antarctic Research (SCAR).
-
-The dashboard has been comprehensively transformed from a congested wall of toggles into a clean, scannable **Tactical Command HUD**:
-* **Logical Control Popovers**: Map styles, hazard overlays, and sector jump presets are grouped into compact dropdowns.
-* **Cohesive Tactical Dark Palette**: Neutral slate base (`#0B1120`, `#060B18`) with high-chroma red/amber reserved strictly for critical alerts and lethal sub-zero hazards.
-* **Primary Map Focal Area**: Secondary controls tucked into popover menus or an expandable tools drawer, maximizing map viewport.
-* **Rich Telemetry Empty State**: Replaced spinning placeholder with a stylized polar reticle, quick-inspect station cards, and active fleet summary.
-* **Segmented Navigation Tabs**: Clean tactical segmented controls for Interactive Map, Vector Radar, and Smart Route CV.
-
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│ 🗺️ POLARIS OPS COMMAND CONSOLE // TACTICAL COMMAND HUD                                │
-│ BASEMAP: ESRI DARK CANVAS [WATERMARK-FREE] // ADD VECTOR: [ONLINE - 12,631 FTS LOADED] │
-│                                                                                        │
-│ [🗺️ Map Style ▼] [📑 Overlays (4) ▼] [🧭 Jump ▼]  [🎯 Follow Asset] [✨ AI Route] [⚙️]  │
-│                                                                                        │
-│  ═══════ Cyan (#00ffff) Neon Polyline: SCAR ADD Medium-Res Coastline                   │
-│  - - - - Amber (#ffaa00) Dashed Line: Ice-Shelf Grounding Lines                        │
-│  ◆       Diamond Tactical Markers: Verified Scientific Outposts (McMurdo, Maitri...)   │
-│                                                                                        │
-│ ┌────────────────────────────────────────────────────────────────────────────────────┐ │
-│ │ ⚠ Polar GNSS: Vertical accuracy reduced; horizontal geometry dispersed             │ │
-│ │ HDOP: 1.4 | VDOP: 4.8 (Elevated) | Satellites: 8 Locked | Kalman 2D Filter: ACTIVE  │ │
-│ │ Contains data from the SCAR Antarctic Digital Database, accessed 2026 (CC BY 4.0)  │ │
-│ └────────────────────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 1. 🌍 Scientific Antarctic Digital Database (ADD v7.4) Integration
-* **ArcGIS REST FeatureServer Endpoint**: Direct integration with the medium-resolution coastline service:
-  `https://services.arcgis.com/b3fMqPOmotX6SV4k/arcgis/rest/services/add_coastline_medium_res_line_v7_4/FeatureServer/0/query`
-* **Query & Pagination Strategy**:
-  - Parametrized REST queries: `where=1=1`, `outFields=surface,FID`, `f=geojson`, `outSR=4326`, `resultRecordCount=2000`.
-  - Offset-based streaming pagination (`resultOffset`) seamlessly retrieves large multi-segment polyline feature collections without browser memory exhaustion.
-* **Vector Layer Visual Hierarchy**:
-  - **Coastline (`surface IN ('rock coastline', 'ice coastline', 'ice shelf and front')`)**: Thin neon cyan boundary (`color: '#00ffff'`, `weight: 1.5`, `opacity: 0.8`).
-  - **Ice-Shelf Grounding Lines (`surface = 'grounding line'`)**: High-contrast dashed amber lines (`color: '#ffaa00'`, `dashArray: '5, 5'`, `weight: 1.5`).
-  - **Research Stations**: Tactical diamond markers with glassmorphic metadata popups displaying national sovereignty, scientific callsign, elevation MSL, and winter/summer personnel quotas.
-* **Performance Gate**: ADD vector layers activate dynamically at zoom levels $> 2$, ensuring instantaneous initial canvas rendering.
-* **Persistent Licensing**: CC BY 4.0 attribution displayed persistently in the console corner:
-  > *"Contains data from the SCAR Antarctic Digital Database, accessed 2026 (CC BY 4.0)."*
-  > Disclaimer: *"ADD data accuracy varies; suitable for overview, not for navigation."*
-
-### 2. 🛰️ Polar GNSS Satellite Geometry & Dilution of Precision Compensation
-* **The High-Latitude Orbital Problem**:
-  GPS constellation orbits have an orbital inclination of approximately **55°**. In high polar latitudes (>65° to 90° S/N), satellites never traverse the zenith; they remain low on the horizon (**0° to 45° elevation**). This geometric clustering produces severe **Vertical Dilution of Precision (VDOP: 3.5 to 7.5+)** relative to Horizontal Dilution of Precision (HDOP: 1.2 to 2.4) and causes substantial point positioning horizontal jitter (40m–100m error in raw fixes).
-* **UI Geometry Disclaimer Badge**:
-  A dismissible, non-obtrusive amber warning badge alerts field commanders:
-  `⚠ Polar GNSS: Vertical accuracy reduced; horizontal geometry dispersed.`
-* **2D Kalman Filter Coordinate Smoothing**:
-  Polaris implements a continuous 2D Kalman filter (`PolarKalmanFilter` in `useDynamicTracking.ts`) that attenuates measurement variance scaled against live HDOP. Raw GPS coordinate jitter is smoothed into steady, continuous trajectories.
-* **Live Satellite Geometry Telemetry**:
-  Clicking the warning badge opens a detailed polar orbit telemetry drawer displaying:
-  - `GPS_QUALITY`: Good / Moderate / Poor based on satellite elevation and horizontal precision.
-  - `HDOP` vs. `VDOP` disparity meters.
-  - Locked satellite counts and average orbital elevation angles.
-
-### 3. 📍 Waypoint Progressive Disclosure & Dynamic 60 FPS Asset Tracking
-* **Progressive Disclosure Architecture**:
-  Replaces oversized, map-obscuring legacy data boxes with sleek, minimal 14px tactical pips. Critical telemetry (ambient temperature, katabatic wind, feels-like cryo-factor, surface elevation) reveals smoothly on hover or click inside glassmorphic HUD popups (`backdrop-filter: blur(14px)`, `background: rgba(8, 14, 28, 0.88)`).
-* **Spatial Waypoint Clustering**:
-  Waypoint clusters (`clusterTacticalWaypoints`) aggregate nearby points into a glowing cluster bubble with count badges and pulse effects (`tactical-cluster-glow`) at lower zoom levels, expanding dynamically as the operator zooms in.
-* **Pulsing Lethal Hazard Rings**:
-  Waypoints entering a `LETHAL` or cryogenic emergency state pulse with a high-intensity red danger beacon (`tactical-pulse-lethal`), eliminating text clutter while immediately drawing command attention.
-* **60 FPS Smooth Dynamic Marker Interpolation**:
-  Asset and vehicle coordinates are animated via `requestAnimationFrame` using cubic ease-out interpolation over a 500ms smoothing window. Markers rotate dynamically to display their geodesic forward azimuth bearing arrow, shifting color from tactical cyan (`#06b6d4`, stationary) to active emerald (`#10b981`, moving).
-
-### 4. 💾 Client-Side Caching & Offline Vector Resilience
-* **Multi-Tier Fallback Hierarchy**:
-  1. **In-Memory Cache**: Zero-latency runtime memory buffer.
-  2. **LocalStorage / IndexedDB Persistence**: Vector layers are cached under `polaris_add_geojson_v7_4` with a 7-day TTL.
-  3. **ArcGIS REST Live Query**: Fetches updated features when online.
-  4. **Bundled Offline Vector Snapshot**: If field expeditions lose satellite internet, Polaris falls back instantly to the built-in tactical offline dataset.
-* **Tactical "OFFLINE CACHE" Status**:
-  An indicator badge in the attribution drawer displays whether vector data is streaming live from ArcGIS REST (`ADD REST LIVE`), persisted locally (`OFFLINE CACHE`), or operating on the bundled offline dataset.
 
 ---
 
@@ -868,49 +311,6 @@ Polaris features an autonomous **Zero-Click Search and Rescue (S.A.R.) Decision 
 | `GET` | `/api/ai/sar/status` | Returns the current S.A.R. automation toggle state and recent emergency sorties. |
 | `POST` | `/api/ai/sar/toggle` | Toggles between AI Zero-Click Autonomous Dispatch and Legacy Manual Operator mode. |
 | `POST` | `/api/distress` | Standard distress beacon intake; executes zero-click S.A.R. automatically when enabled. |
-
----
-
-### 🚨 1-Tap Instant Mayday SOS Broadcast & Emergency Triage
-
-In extreme polar conditions (-50°C temperatures, whiteout blizzards, wind chills dropping below -65°C), field operators wearing thick thermal gloves facing rapid hypothermia cannot manually fill out multi-field forms, select dropdowns, or type text.
-
-Polaris implements an **Instant 1-Tap Mayday SOS Broadcast Protocol**:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ 🚨 MAYDAY DISTRESS BROADCAST PROTOCOL                                  │
-│                                                                        │
-│ [ ⚡ BROADCAST MAYDAY (1-TAP FAST SOS) ]                                │
-│ AUTO-PACKAGING: OPERATOR IDENTITY, NODE ORIGIN, GPS, AMBIENT AWOS...   │
-│                                                                        │
-│ ▼ [SitRep Form (Non-Immediate Detailed Incident Report)]               │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 🛡️ Autonomous Context Auto-Packaging
-A single click on **"BROADCAST MAYDAY (1-TAP FAST SOS)"** immediately packages:
-* **Operator Identity**: Authenticated user session (`user.name`, e.g. Dr. Solid).
-* **Origin Device Node**: Active hardware node ID (e.g. `NODE-01`).
-* **Assigned Polar Station**: Sector and station context (e.g. `Maitri Station (Sector ANT-GRID-7)`).
-* **Live GPS Coordinates**: Real-time GNSS latitude, longitude, elevation, and accuracy from hardware or browser telemetry.
-* **Active Traverse Context**: Current operational expedition name and active vehicle callsign.
-* **Ambient Cryo Telemetry**: Surface temperature (-48.2°C), katabatic wind (45kt SW), and pressure (978 hPa).
-
-#### 📡 Real-Time Transmission & Acknowledgement Feedback
-Once transmitted, the modal switches to a dedicated **Active Distress Status Console**:
-* **Transmission State**: Live visual confirmation (`COSPAS-SARSAT / Iridium Constellation Synchronized`).
-* **Source & Origin**: Shows transmitting operator and field hardware identifier.
-* **Pinpointed Coordinates**: Live decimal degree coordinates displayed with direct GIS lock.
-* **Time Elapsed**: Live counter since initial emergency burst transmission.
-* **De-escalation**: Prominent **"Stand Down / Resolve Distress"** button when field parties are confirmed safe.
-
-#### 📝 Expandable Situation Report (SitRep)
-For non-instant or staged emergency reports, an expandable accordion provides access to:
-* Severity triage selection (`Emergency Mayday`, `Urgent Pan-Pan`, `Advisory Security Alert`).
-* Casualty headcounts and hypothermia status.
-* Structural / vehicular damage summaries.
-* Custom narrative dispatch log generation.
 
 ---
 
@@ -1189,50 +589,6 @@ Prior to initializing the main operational dashboard upon login (or when trigger
    - **Playback Controls**: Pause, accelerate (5X Fast-Forward), re-run diagnostic, or export raw cryptographic `.log` reports.
    - **Fault Simulation**: Test artificial sub-zero sensor anomalies and watch the AI Autonomous Janitor immediately execute auto-remediation.
 
-### 🚨 Zero-Scroll Active Sensor Fault & Cryo-Remediation Banner
-
-When testing sensor faults in sub-zero environments, operators previously had to manually scroll through hundreds of lines of terminal logs to identify which sensor failed.
-
-Polaris pins an **Active Sensor Fault & Remediation Diagnostic Banner** directly above the terminal output the instant a fault is triggered:
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ ⚠️ CRITICAL SENSOR FAULT DETECTED: [FUEL-TRACE-SENS]                                     │
-│ SUBSYSTEM: ARCTIC DIESEL F-34 HEATING BLANKETS // SEVERITY: CRITICAL (-38.4°C COLD-SOAK)  │
-│ STATUS: CIRCUIT RESISTANCE DROP // AI STATUS: HEATER CIRCUIT ROUTING APPLIED             │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 🔍 Immediate Diagnostic Triage
-The banner instantly exposes:
-* **Target Sensor ID**: Exact failed hardware component (e.g. `FUEL-TRACE-SENS`).
-* **Critical Subsystem**: Sub-zero system at risk (e.g. `Arctic Diesel F-34 Heating Blanket Array`).
-* **Environmental Stress**: Real-time cold-soak severity (`-38.4°C Cold-Soak / Waxing Risk`).
-* **Autonomous Remediation**: Live status indicator of self-healing action (`AI JANITOR RESOLVED`).
-* **Dismiss / Acknowledge**: One-tap dismiss control once the operator has verified recovery.
-
----
-
-## 🚛 Fleet Telemetry & Detailed Operational Analytics
-
-To maintain a clean and uncluttered operational command center, in-depth analytical charts have been re-homed into the dedicated **Fleet Telemetry & Assets Workstation** (`src/components/polaris/Modules.tsx`):
-
-### 📊 Strategic Analytical Visualizations
-1. **Asset Physical Condition Distribution (`BarChart`)**:
-   - Visualizes asset health across status categories: `Nominal`, `Needs Inspection`, `Needs Repair`, `Decommissioned`.
-   - Real-time aggregation over heavy PistenBully 300 Polar crawlers, Twin Otter utility aircraft, drilling rigs, and autonomous drones.
-2. **Monthly Logistics Expenditure Trends (`AreaChart`)**:
-   - Tracks monthly spend across fuel, transport, maintenance, and supplies ($1.08M - $1.42M seasonal variations).
-   - Demonstrates budget allocation and cost trajectory throughout high-latitude summer resupply vs winter survival phases.
-3. **Operational Fleet Readiness KPIs**:
-   - Total Tracked Vehicles: Real-time inventory of all operational assets.
-   - Active on Traverse: Field party crawlers currently undertaking deep inland traverses.
-   - Cold-Soak Service Bay: Assets undergoing heated hangar maintenance.
-   - SATCOM Telemetry Sync: Live mesh beacon connection percentage.
-
-### 📦 Depot Consumption vs Safety Reserve Thresholds (`BarChart`)
-Re-homed directly into the **Consumables & Inventory** workstation, this chart compares active depot burn rates against critical winter safety buffers, providing instant visibility into fuel and ration reserves without cluttering the main mission overview.
-
 ---
 
 ## 🎮 Mission Simulation & Operator Training Mode
@@ -1464,20 +820,6 @@ The waypoint tracing engine is fully integrated with existing subsystems:
 
 ---
 
-### 🛡️ 8. Defensive Waypoint Normalization & Robustness Architecture
-
-To prevent runtime errors across diverse, legacy, or incomplete expedition manifests (e.g. `exp.waypoints is undefined` or null), the system enforces a strict canonical schema and multi-tier normalization boundary:
-
-* **Canonical Waypoint Schema**: Every expedition object is guaranteed to possess `waypoints: Waypoint[]` (canonical empty array `[]` when no waypoints exist).
-* **Multi-Tier Boundary Normalization**:
-  1. **Persistence & Database Tier (`src/server/database.ts`)**: Authoritative database initialization and disk load passes all raw expedition manifests through `normalizeExpeditions`, converting missing/null/undefined properties to `[]`.
-  2. **API & WebSocket Tier (`server.ts`)**: The `/api/state` endpoint and real-time state broadcasts sanitize both root expeditions and `polarisDb.expeditions` prior to dispatching state payloads. Handlers for `ADD_EXPEDITION`, `UPDATE_EXPEDITION`, and `UPDATE_POLARIS_DB` sanitize incoming payloads.
-  3. **Client State Tier (`src/hooks/usePolarSync.ts`)**: `applyServerState`, `syncPolDb`, `addWaypoint`, `deleteWaypoint`, and `advanceWaypoint` guard array mutations with `(Array.isArray(e.waypoints) ? e.waypoints : [])`.
-  4. **UI Studio Tier (`src/components/WaypointPlannerPage.tsx`)**: Inbound props are normalized with `normalizeExpeditions(expeditions || [])`. All local computations (total distance, cleared counters, hazard flags, GPX export, and sequence comparisons) operate safely on `activeWaypoints`, allowing expeditions with zero waypoints to render their natural empty-state UI without crashing into the system recovery ErrorBoundary.
-  5. **GIS Map Tier (`src/components/PolarMap.tsx`)**: Validates `Array.isArray(exp.waypoints)` and gracefully bypasses polyline rendering if `waypoints.length === 0`.
-
----
-
 ## 🤖 Gemini-Powered Waypoint Route Optimization
 
 The system integrates a **hybrid AI + deterministic polar pathfinding engine** that uses Gemini to analyze candidate waypoints and recommend an optimized safe routing sequence for expedition convoys.
@@ -1572,124 +914,11 @@ POST /api/ai/waypoints/optimize
 | Component | Role |
 |:---|:---|
 | [`src/components/polaris/SmartRouteOptimizer.tsx`](src/components/polaris/SmartRouteOptimizer.tsx) | Primary Gemini optimize button, proposal scorecard, and operator approval controls |
-| [`src/components/PolarGISMap.tsx`](src/components/PolarGISMap.tsx) | Tactical polar GIS map with A* glowing polyline, node pins, and glassmorphic AI recommendation HUD |
-| [`src/components/RealMapView.tsx`](src/components/RealMapView.tsx) | Renders proposed glowing cyan/emerald polyline and AI sequence badges on the Leaflet map |
+| [`src/components/RealMapView.tsx`](src/components/RealMapView.tsx) | Renders proposed violet polyline and AI sequence badges on the Leaflet map |
 | [`src/components/WaypointPlannerPage.tsx`](src/components/WaypointPlannerPage.tsx) | Waypoint planner with priority/mandatory flags and AI optimize modal |
-| [`src/utils/polarRouteAStar.ts`](src/utils/polarRouteAStar.ts) | A* pathfinding algorithm, 5-factor weighted edge cost function, DEM slope, and adaptive search mesh |
 | [`src/utils/deterministicRouteOptimizer.ts`](src/utils/deterministicRouteOptimizer.ts) | Deterministic fallback: nearest-neighbor + 2-opt, Haversine geodesic math, hazard penalty |
-| [`src/types.ts`](src/types.ts) | `AStarNode`, `AStarEnvironment`, `AStarAsset`, `AStarOptimizationResult` TypeScript interfaces |
-| [`server.ts`](server.ts) | `POST /api/ai/route-optimizer/astar` — backend A* pathfinding and Gemini 3.8 Flash decision layer |
-
----
-
-### 🧭 Polar A* Tactical Route Engine (Weighted Cost Function + Gemini 3.8 Flash)
-
-The **Polar A\* Tactical Route Engine** is an advanced polar pathfinding and AI tactical decision system engineered specifically for extreme sub-zero traverses across Antarctica and the Arctic. It replaces simplistic straight-line routing with a mathematically rigorous A* graph search that optimizes energy conservation, mechanical wear, and crew survival.
-
-```
-                          ┌────────────────────────┐
-                          │  Operator Triggers     │
-                          │  "AI ROUTE OPTIMIZER"  │
-                          └───────────┬────────────┘
-                                      │
-                                      ▼
-                      ┌────────────────────────────────┐
-                      │  POST /api/ai/route-optimizer  │
-                      │             /astar             │
-                      └───────────────┬────────────────┘
-                                      │
-       ┌──────────────────────────────┴──────────────────────────────┐
-       │                                                             │
-       ▼                                                             ▼
-┌──────────────────────────────┐              ┌──────────────────────────────┐
-│  A* Cost Function Matrix     │              │  Adaptive Search Lattice     │
-│  calculateEdgeCost(a, b, e)  │              │  Lateral offsets (±20km,     │
-│  - Distance: 1 pt/km         │              │  ±40km, ±70km) to discover   │
-│  - DEM Slope >5°: +50% cost  │              │  safe detours around hazards │
-│  - Temp < Min Rating: ∞      │              └──────────────┬───────────────┘
-│  - Wind: Headwind +25%       │                             │
-│          Tailwind -10%       │                             │
-│  - LETHAL Hazard: +500% cost │                             │
-└──────────────┬───────────────┘                             │
-               │                                             │
-               └──────────────────────┬──────────────────────┘
-                                      │
-                                      ▼
-                      ┌────────────────────────────────┐
-                      │   A* Lowest-Cost Traversal     │
-                      │   - Total Distance & Detour    │
-                      │   - Transit Time Estimate      │
-                      │   - Hazards Circumnavigated    │
-                      │   - Cost Savings vs Straight   │
-                      └───────────────┬────────────────┘
-                                      │
-                                      ▼
-                      ┌────────────────────────────────┐
-                      │   Gemini 3.8 Flash AI Layer    │
-                      │   2-Sentence Tactical Fleet    │
-                      │   Command Recommendation       │
-                      └───────────────┬────────────────┘
-                                      │
-                                      ▼
-                      ┌────────────────────────────────┐
-                      │   Tactical Glassmorphic HUD    │
-                      │   - Glowing Cyan/Emerald Line  │
-                      │   - Interactive Review Card    │
-                      │   - "Accept & Apply" Action    │
-                      └────────────────────────────────┘
-```
-
-#### 1. The Cost Function (Pathfinding Layer)
-
-The core traversal cost between any two spatial coordinates is evaluated via `calculateEdgeCost(nodeA, nodeB, environment, asset)`:
-
-$$\text{Cost}(A, B) = \text{Distance}(A, B) \times \prod (1 + \text{Penalties})$$
-
-* **Base Distance**: 1 point per kilometer computed via spherical Haversine geodesic math ($R = 6,371.0\text{ km}$).
-* **Digital Elevation Model (DEM) Slope**: Mock polar topographic elevation profile rising from coastal ice shelves ($0-150\text{ m}$) to the high continental plateau ($2,800-3,500\text{ m}$). If the elevation gradient between nodes exceeds **$5^\circ$ ($\approx 8.7\%$ grade)**, a **$+50\%$ cost penalty** is applied to penalize severe fuel burn and track slippage.
-* **Cold-Soak Operating Threshold**: If the local ambient temperature is below the asset's certified minimum operating temperature (e.g. $-50^\circ\text{C}$ for heavy Snowcats, $-40^\circ\text{C}$ for light transports), the edge cost evaluates to **$\infty$ (unroutable)** to reflect immediate hydraulic vitrification, seal shattering, and track seizure.
-* **Wind Vector Heading**: The algorithm computes the travel azimuth bearing relative to incoming meteorological wind:
-  * **Headwind** ($\Delta\theta < 60^\circ$): **$+25\%$ cost penalty** (aerodynamic drag and accelerated engine block thermal loss).
-  * **Tailwind** ($\Delta\theta > 120^\circ$): **$-10\%$ cost bonus** (kinetic tailwind boost and reduced sastrugi drift resistance).
-  * **Crosswind**: Neutral ($0\%$ cost delta).
-* **LETHAL Hazard Zones**: If the great-circle segment passes within the radial perimeter of any active SCAR/polar **LETHAL** red zone (unbridged crevasse swarms or active thermal fissures), a **$+500\%$ cost penalty** (6.0× multiplier) is enforced to ensure the pathfinder prioritizes lateral diversions over direct transit.
-
-#### 2. The Pathfinding Algorithm (A* Graph Search)
-
-* **Admissible Heuristic**: $h(n) = \text{HaversineDistance}(n, \text{Goal}) \times 0.90$. The $0.90$ multiplier guarantees admissibility across all tailwind-boosted segments, ensuring optimality and minimal search expansions.
-* **Adaptive Polar Search Lattice**: Rather than restricting paths to predefined waypoints, `buildAdaptiveSearchGraph` slices the great-circle corridor into 5 longitudinal layers with multi-tier lateral deviations ($\pm 20\text{ km}, \pm 40\text{ km}, \pm 70\text{ km}$). This empowers A* to discover smooth circumnavigation arcs around lethal hazard zones.
-* **Telemetry Metadata**: The resulting route outputs comprehensive mission metrics: total distance, straight-line distance, detour delta ($\text{km}$), estimated travel time ($\text{minutes}$), maximum slope encountered, wind cost factor, list of specific danger zones avoided, total cost score, and cost reduction percentage over straight-line.
-
-#### 3. Gemini Decision Layer (`gemini-3.8-flash`)
-
-Once A* calculates the optimal route, the backend transmits the route telemetry to Google's Gemini API:
-
-```text
-You are a polar operations AI. Given this route data:
-{
-  "startLocation": "McMurdo Logistics Hub",
-  "destination": "Amundsen-Scott South Pole Station",
-  "totalDistanceKm": 1420.5,
-  "straightLineDistanceKm": 1351.2,
-  "distanceDetourKm": 69.3,
-  "estimatedTravelTimeMinutes": 3550,
-  "maxTempEncounteredC": -35,
-  "windConditions": "20 kts HEADWIND (+25% cost)",
-  "maxSlopeDegrees": 3.8,
-  "hazardsAvoided": ["Beardmore Deep Crevasse Chasm"],
-  "costSavingsPercent": 38
-}
-
-Write a 2-sentence tactical recommendation for the fleet commander. Highlight the biggest risk and why this route was chosen over the straight-line path.
-```
-
-* **Deterministic Fallback**: If `GEMINI_API_KEY` is not configured or in offline field scenarios, a deterministic tactical engine synthesizes mission recommendations highlighting cold-soak vitrification, slope conservatism, and hazard evasion.
-
-#### 4. High-Tech Tactical UI & Glowing Polyline
-
-* **Glowing Dual Polyline**: The resulting route renders directly on the 100% Google-free Leaflet map with a neon cyan ambient glow (`#00f2fe`, weight 9, opacity 0.5, CSS `.tactical-route-glow`) and an inner emerald dashed trajectory (`#10b981`, weight 3.5, dashArray `'8, 6'`, CSS `.tactical-route-core`).
-* **Glassmorphic Recommendation Card (`.tactical-astar-glass`)**: Displays the 2-sentence Gemini tactical recommendation, mission distance breakdown, duration estimate, wind impact pill, avoided hazard tags, and one-click **"Accept Route"** and **"Recalculate"** buttons.
-* **Waypoint Node Pins**: Animated tactical pips mark the origin, destination, and lateral diversion waypoints along the route.
+| [`src/types.ts`](src/types.ts) | `WaypointOptimizationRequest` and `WaypointOptimizationResult` TypeScript interfaces |
+| [`server.ts`](server.ts) | `POST /api/ai/waypoints/optimize` — backend AI gateway with validation and caching |
 
 ---
 
@@ -1709,7 +938,8 @@ Below is the complete inventory of all production packages declared in `package.
 | **`express`** | `^4.21.2` | REST & HTTP Server | **Lightweight Node.js Backend Framework**. Chosen for its minimal memory footprint and high throughput. Handles REST endpoints (`/api/ai/*`, `/api/distress`), hosts the real-time WebSocket synchronization engine, and serves compiled static SPA assets in production. |
 | **`ws`** | `^8.21.3` | Real-Time WebSockets | **High-Performance WebSocket Client/Server**. Chosen for low-latency bi-directional state synchronization between field smartphones and base station HQ consoles. Powers real-time Mayday distress broadcasts, terminal heartbeats, and live action log streaming. |
 | **`leaflet`** | `^1.9.4` | GIS & Cartography | **Industry-Standard Open-Source Mapping Library**. Selected for rendering Antarctic & Arctic polar maps, custom expedition path polylines, interactive station shelter markers, and multi-tier sub-zero cold-soak heatmaps without external paid tile dependencies. |
-| **`SCAR ADD v7.4`** | `ArcGIS REST` | Polar Vector Layers | **Antarctic Digital Database Integration**. Replaced Google Maps dependencies with high-precision vector overlays (coastlines, grounding lines, and research stations) from the Scientific Committee on Antarctic Research (SCAR) ArcGIS REST FeatureServer with client-side caching. |
+| **`@types/leaflet`** | `^1.9.22` | Type Definitions | **TypeScript Declarations for Leaflet**. Ensures strict type checking and auto-completion when defining Leaflet layers, map instances, lat/lng bounds, and custom vector icons. |
+| **`@vis.gl/react-google-maps`** | `^1.10.0` | Satellite Maps | **Official Google Maps React Wrapper**. Used to integrate high-resolution Google Maps Platform satellite aerial imagery and terrain layers when an optional Google Maps API Key is entered in the console settings. |
 | **`react`** | `^19.0.1` | Core UI Library | **Declarative Frontend Framework**. Chosen for its component-driven architecture and optimized virtual DOM diffing, enabling rapid telemetry re-renders across multi-pane polar command dashboards. |
 | **`react-dom`** | `^19.0.1` | DOM Renderer | **React Rendering Engine**. Renders React component trees into browser DOM nodes. |
 | **`recharts`** | `^3.10.1` | Telemetry Charts | **SVG Data Visualization Library**. Chosen for responsive telemetry charts displaying FFT vibration harmonics, sub-zero elastomer temperature stress curves, fuel burn trajectories, and battery discharge rates. |
@@ -1748,12 +978,7 @@ Located under `/src/components/`, these modular components encapsulate specific 
 
 * **`Shell.tsx`**: Main application layout shell with topbar telemetry indicators, station status chips, quick action buttons, and side navigation menu.
 * **`DashboardView.tsx`**: Primary operational HUD consolidating active expedition progress, research station headcounts, live AWOS weather tickers, predictive maintenance alerts, and the embedded Smart Route Optimizer.
-* **`PolarGISMap.tsx` / `PolarGISMap.jsx`**: Core tactical GIS engine integrating SCAR Antarctic Digital Database (ADD v7.4) coastline and grounding line vector overlays, 100% Google-free polar basemaps (CartoDB Dark Matter, ESRI Polar, Tactical Deep `#060B18`), dynamic asset tracking, and progressive disclosure waypoints.
-* **`PolarAttributionFooter.tsx`**: Persistent CC BY 4.0 SCAR ADD attribution component, accuracy disclaimer tooltip, live offline cache indicator, and dismissible Polar GNSS geometry warning badge with expandable HDOP/VDOP orbital telemetry drawer.
-* **`RealMapView.tsx` / `PolarMap.tsx`**: Interactive Leaflet GIS cartography workstation with progressive disclosure telemetry, native spatial waypoint clustering, cubic coordinate interpolation, dynamic rotating heading vector vectors, station shelter markers, and multi-ring sub-zero cold pool heatmaps.
-* **`addFeatureService.ts`**: ArcGIS REST FeatureServer fetcher for ADD v7.4 (`add_coastline_medium_res_line_v7_4`), offset-based paged streaming (`resultOffset`), IndexedDB/localStorage offline persistence, and offline fallback datasets.
-* **`tacticalMapTracking.ts`**: Geodesic forward azimuth calculation (`calculateBearing`), screen-space spatial clustering (`clusterTacticalWaypoints`), and smooth `requestAnimationFrame` position interpolation controller (`SmoothMarkerTracker`).
-* **`useDynamicTracking.ts`**: Custom real-time tracking hook featuring a 2D Kalman filter for polar GPS jitter compensation, 60 FPS cubic ease-out marker interpolation, heading indicators, and polar GNSS geometry telemetry modeling (HDOP, VDOP, satellite elevation angles).
+* **`RealMapView.tsx` / `PolarMap.tsx`**: Interactive Leaflet GIS cartography workstation with stereographic projections, custom waypoint pinning, station shelter markers, and multi-ring sub-zero cold pool heatmaps.
 * **`SmartRouteOptimizer.tsx`**: Satellite computer vision pathfinder avoiding crevasse chasms and katabatic squall corridors. Dynamically computes safe blue-ice bypasses and pushes waypoints to crawler navigation units.
 * **`PredictiveMaintenance.tsx`**: Mechanical cold-soak stress simulator (-50°C) modeling elastomer rubber vitrification, belt failure risk, oil viscosity degradation, and 1-click preventive service execution.
 * **`DynamicWeatherInventory.tsx`**: Blizzard fuel consumption forecaster calculating exponential thermal heating surges, automatic safety buffer adjustments, and automated supply ship dispatches.
@@ -2130,241 +1355,32 @@ export function OperationsCenter() {
 
 ## 🛠️ NPM Scripts & CLI Usage
 
-All development, production, packaging, and mobile targets are mapped directly in [`package.json`](./package.json):
-
-| Command | Target / Layer | Description |
-| :--- | :--- | :--- |
-| `npm run dev` | Web & API | Starts Vite frontend dev server and Express/WebSocket backend at `http://localhost:3000` with hot module replacement (HMR). |
-| `npm run build` | Web & Backend | Builds the optimized frontend bundle into `dist/` and compiles `server.ts` into `dist/server.cjs`. |
-| `npm run start` | Web Server | Boots the compiled production Node.js Express server (`node dist/server.cjs`). |
-| `npm run lint` | TypeScript | Performs strict type verification across the entire project (`tsc --noEmit`). |
-| `npm run pack:check` | NPM Package | Verifies the published NPM package tarball payload. |
-| `npm run tauri` | Tauri CLI | Invokes the Tauri 2 CLI toolchain directly. |
-| `npm run tauri:dev` | Desktop Dev | Boots the native desktop application shell in development mode with live frontend reloading. |
-| `npm run tauri:build` | Desktop Build | Builds the optimized production native desktop executable (`src-tauri/target/release/polaris-ops`). |
-| `npm run tauri:build:deb` | Debian / Ubuntu | Packages the native desktop application into a Debian archive (`src-tauri/target/release/bundle/deb/polaris-ops_1.0.0_amd64.deb`). |
-| `npm run tauri:build:appimage`| Universal Linux | Packages the application into a distribution-independent portable AppImage (`src-tauri/target/release/bundle/appimage/polaris-ops_1.0.0_amd64.AppImage`). |
-| `npm run tauri:android:init` | Android Setup | Initializes the native Android Gradle project in `src-tauri/gen/android`. |
-| `npm run tauri:android:dev` | Android Dev | Boots the application in the Android Emulator or on a connected USB Debugging device. |
-| `npm run tauri:android:build` | Android Release | Compiles the standalone Release APK and Google Play App Bundle (AAB). |
-| `npm run tauri:ios:init` | iOS Setup | Initializes the Xcode workspace in `src-tauri/gen/ios` (macOS host required). |
-| `npm run tauri:ios:dev` | iOS Dev | Runs the mobile app in the iOS Simulator or on an attached iPhone/iPad (macOS host required). |
-| `npm run tauri:ios:build` | iOS Release | Compiles the production iOS application archive (macOS host required). |
-
----
-
-## 📡 Hardware Integration Matrix
-
-The Polar Expedition System provides tiered hardware communication across all supported targets:
-
-| Hardware Integration | Web Browser | Linux Desktop | Windows Desktop | macOS Desktop | Android Mobile | iOS Mobile | Notes |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **HTML5 Geolocation (A-GPS)** | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | High-precision position fix via OS location subsystem. |
-| **USB / Serial NMEA 0183** | ✅ Chrome/Edge | ✅ Supported | ✅ Supported | ✅ Supported | ⚠️ USB-OTG Host | ❌ Unsupported | Consumes raw `$GPGGA`, `$GPRMC`, and `$GPGLL` via Web Serial API. |
-| **Bluetooth GPS (Garmin/Dual)**| ⚠️ Web Bluetooth | ⚠️ OS Paired | ⚠️ OS Paired | ⚠️ OS Paired | ✅ Mock Provider | ✅ MFi System | Direct mock location bridge on Android; MFi system-wide fix on iOS. |
-| **NMEA-over-IP (SATCOM/UDP)** | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | Rest/JSON telemetry push to `POST /api/action` via Iridium/cellular. |
-| **Acoustic Audio Synthesizer** | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | Procedural Web Audio API sound generation (chirps, Mayday klaxons). |
-| **Haptic Feedback** | ❌ Unsupported | ❌ Unsupported | ❌ Unsupported | ❌ Unsupported | ✅ Supported | ✅ Supported | Tactile vibration alert triggers on Mayday distress broadcast. |
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts Vite + Express server with hot reloads at `http://localhost:3000` |
+| `npm run build` | Bundles frontend React assets and compiles server entry point into `dist/` |
+| `npm run start` | Boots the compiled production server (`node dist/server.cjs`) |
+| `npm run lint` | Performs strict TypeScript type checks (`tsc --noEmit`) |
+| `npm run pack:check` | Previews files included in the published NPM package tarball |
 
 ---
 
 ## 🔑 Environment Configuration
 
-The system maintains a strict separation between **Client-Safe Configuration** and **Server-Only Secrets**:
+Declare optional environment variables in `.env`:
 
-```text
-                     Configuration Boundary
-    Client / Public (.env)             Server-Only (.env / Secret Vault)
-┌─────────────────────────────┐       ┌─────────────────────────────────┐
-│ VITE_API_BASE_URL           │       │ GEMINI_API_KEY                  │
-│ PORT                        │       │ DATABASE_PATH                   │
-│ ALLOW_SIMULATION_MODE       │       │ SESSION_SIGNING_SECRET          │
-└─────────────────────────────┘       └─────────────────────────────────┘
-```
-
-### 1. Client-Safe Public Configuration
-These variables are safe to embed in compiled frontend and Tauri bundles:
 ```env
-# Centralized API Gateway URL
-# For Android APK / Remote Field Deployment: set to your active HTTPS ngrok URL
-VITE_API_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app
-
-# For Local Browser Development (.env.development automatically provides):
-# VITE_API_BASE_URL=http://localhost:3000
-
-# Backend Web Server Port (defaults to 3000)
+# Optional Port (defaults to 3000)
 PORT=3000
+
+# Optional Gemini API Key for AI Tactical Reconnaissance Advisor
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-### 2. Server-Only Secrets
-> [!CAUTION]
-> **NEVER BUNDLE SECRETS IN CLIENT EXECUTABLES**: Server-side secrets must reside strictly on the server host or backend container. They must never be checked into git or compiled into client JavaScript bundles.
-```env
-# Server-side Gemini 3.8 Flash API Key (for Recon & SAR analysis)
-GEMINI_API_KEY=AIzaSy...
-
-# Authoritative ACID Database Storage Path (defaults to ./data/polar-database.json)
-DATABASE_PATH=./data/polar-database.json
-```
-
----
-
-## 🚨 Troubleshooting & Diagnostics Guide
-
-The application incorporates built-in diagnostics (`src-tauri/src/lib.rs` and `src/utils/api.ts`). Use the following table to diagnose and resolve operational issues:
-
-### 1. Backend Unreachable / Connection Refused
-- **Symptoms**: HUD displays `CACHED / OFFLINE`, "Failed to fetch /api/health", red connection dot.
-- **Root Cause**: The Express backend is not running, firewall is blocking port 3000, or the Operations Gateway URL is incorrect.
-- **Remediation**:
-  1. Verify the backend process is running: `npm run dev` or `node dist/server.cjs`.
-  2. Open the **Operations Gateway HUD** (HardDrive icon in top nav) and tap **"Test Link"**.
-  3. Ensure the gateway URL matches your base station IP (e.g., `http://192.168.1.150:3000` or `https://server.domain`).
-  4. Ensure port 3000 is open in your host firewall: `sudo ufw allow 3000/tcp` (Ubuntu) or `sudo firewall-cmd --add-port=3000/tcp --permanent` (Fedora/RHEL).
-
-### 2. WebSocket Telemetry Disconnected
-- **Symptoms**: Live rover movement stops; HUD shows `RECONNECTING` with a yellow pulse.
-- **Root Cause**: Proxy blocking WebSocket upgrades, SATCOM link drop, or network interface transition.
-- **Remediation**:
-  - The client automatically executes exponential backoff reconnection attempts every 2-5 seconds.
-  - If using a reverse proxy (Nginx/Traefik), ensure `Upgrade: $http_upgrade` and `Connection: "upgrade"` headers are forwarded.
-
-### 3. Database Unavailable / Schema Corruption
-- **Symptoms**: Login returns `500 Internal Server Error`; server logs show `EACCES` or database parse failure.
-- **Root Cause**: Permissions on `./data` directory or truncated JSON file.
-- **Remediation**:
-  1. Ensure the backend process has write access to `./data`: `chmod 755 ./data && chmod 644 ./data/*.json`.
-  2. If the database file is corrupted, the server automatically creates a `.bak` backup and re-seeds clean demo accounts on restart.
-
-### 4. Gemini AI Unavailable / Over-Quota
-- **Symptoms**: Route optimization or SAR dispatch logs report "Gemini 3.8 Flash unavailable; fallback engaged".
-- **Root Cause**: Invalid `GEMINI_API_KEY`, quota exhaustion, or offline network state.
-- **Remediation**:
-  - The application automatically engages **Deterministic Route Fallback** (A* Polar heuristic) without failing or stalling.
-  - Station operators can update their API key at runtime via the **API Key Config** modal (`ApiKeyModal.tsx`).
-
-### 5. GPS Permission Denied or Unavailable
-- **Symptoms**: Map reports "Location acquisition error (code 1)"; asset marker does not center.
-- **Root Cause**: Browser/OS location permission declined or GPS hardware missing.
-- **Remediation**:
-  - In browser: Click the lock icon in the browser address bar ➔ Site Settings ➔ Location ➔ **Allow**.
-  - In Linux: Ensure geoclue is installed and running (`sudo systemctl start geoclue`).
-  - In Android: Settings ➔ Apps ➔ Polaris Ops ➔ Permissions ➔ Location ➔ **Allow while using app**.
-  - Alternatively, connect an external USB NMEA module or stream via NMEA-over-IP.
-
-### 6. Linux WebView2 / WebKitGTK Missing
-- **Symptoms**: `npm run tauri:dev` fails with `Package webkit2gtk-4.1 was not found in the pkg-config search path`.
-- **Remediation**:
-  - Arch Linux: `sudo pacman -S webkit2gtk-4.1`
-  - Debian / Ubuntu: `sudo apt install libwebkit2gtk-4.1-dev`
-
-### 7. Android Device Not Detected
-- **Symptoms**: `npm run tauri:android:dev` fails with `No target device found`.
-- **Remediation**:
-  1. Enable **Developer Options** and **USB Debugging** on the Android device.
-  2. Verify adb sees the device: `adb devices`.
-  3. Ensure USB udev rules are installed on Linux: `sudo pacman -S android-udev` (Arch) or `sudo apt install android-sdk-platform-tools-common` (Ubuntu).
-
-### 8. Stale Cached Application Data
-- **Symptoms**: UI reflects outdated mission state after reconnecting to a new expedition.
-- **Remediation**:
-  - Open the **Operations Gateway HUD** modal and click **"Clear Local Offline Cache"**.
-  - The client will flush IndexedDB/LocalStorage state and re-synchronize clean snapshots from the server.
-
----
-
-## 🏗️ Technical Development Architecture
-
-```text
-React 18 + TypeScript + Tailwind
-               │
-               ▼
-             Vite 6
-               │
-        ┌──────┴──────┐
-        ▼             ▼
-   Web Browser     Tauri 2 Shell
-   (SPA/PWA)          │
-                      ▼
-               Rust Native Layer (IPC)
-               ├── OS Metadata & Diags
-               ├── Offline Storage Snapshots
-               ├── Native Notifications
-               └── Secure Credential Vault
-                      │
-   ┌──────────────────┼──────────────────┐
-   ▼                  ▼                  ▼
-Linux (Arch/Deb)   Windows / macOS    Android / iOS
-Desktop Workstation Native Installers Mobile Terminals
-   │                  │                  │
-   └──────────────────┼──────────────────┘
-                      │ HTTPS & WSS (Configurable Operations Gateway)
-                      ▼
-             Express 4 Web Server
-             ├── Authoritative RBAC (/api/auth)
-             ├── Server-Side Gemini 3.8 Flash (/api/ai)
-             ├── WebSocket Real-Time Telemetry Hub (/ws)
-             └── Mission Action Logger (/api/action)
-                      │
-                      ▼
-             ACID Shared Database
-             (./data/polar-database.json)
-```
-
----
-
-## ☁️ Vercel Deployment & Cloud Hosting
-
-POLAR-OS is engineered for cloud hosting on **Vercel** as a high-performance single-page application (SPA) with automated offline resilience and hybrid gateway connectivity.
-
-### 1. Zero-Configuration Deployment
-When importing this repository into Vercel:
-* **Framework Preset**: `Vite`
-* **Build Command**: `vite build` (or `npm run build`)
-* **Output Directory**: `dist`
-* **Configuration File**: Automatically managed via [`vercel.json`](file:///home/solid/porlar-expedition-and-asset-management-system/vercel.json) with SPA clean rewrites:
-```json
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "buildCommand": "vite build",
-  "outputDirectory": "dist",
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-```
-
-### 2. Operational Modes on Vercel
-
-| Deployment Mode | Configuration | Capabilities |
-| :--- | :--- | :--- |
-| **Standalone / Offline Mode** *(Default)* | Leave `VITE_API_BASE_URL` blank. | Client-side simulation, full SCAR ADD v7.4 cartography, tactical waypoints, danger zone heatmaps, local auth fallback (`RSC-0142` / `polar2026`), and local storage persistence. |
-| **Connected Expedition Hub** | Set `VITE_API_BASE_URL="https://your-node-backend.app"` | Real-time multi-PC WebSocket telemetry synchronization, authoritative database persistence, and automated SAR dispatch. |
-
-### 3. Vercel Environment Variables
-
-Configure these in **Vercel Project Settings > Environment Variables**:
-
-| Variable | Required? | Description |
-| :--- | :---: | :--- |
-| `VITE_API_BASE_URL` | *Optional* | Remote base URL for the backend server (`server.ts`). If omitted, POLAR-OS operates in standalone offline mode. |
-| `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
-| `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
-
-### 4. React Production Error Protection (Anti-Error #31)
-Production builds on Vercel are protected by the centralized [`safeFormat.ts`](file:///home/solid/porlar-expedition-and-asset-management-system/src/utils/safeFormat.ts) suite:
-* `safeDisplayValue()`: Intercepts raw objects `{ code, message }`, telemetry records, and API errors, safely serializing them before JSX rendering.
-* `formatError()`: Extracts human-readable messages from HTTP, network, and Vercel serverless error objects.
-* `ErrorBoundary`: Automatically translates minified React errors (such as Error #31) into human-readable diagnostic messages with call stack previews and infinite reload protection.
+*Note: You can also enter your Gemini API key dynamically via the frontend **API Key Config** modal inside the application interface.*
 
 ---
 
 ## 📄 License
 
 MIT © International Polar Expedition Consortium
-

@@ -231,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-sky-950/80 hover:bg-sky-900/90 text-sky-200 border-sky-600/80 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
                     : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
                 }`}
-                title="Configure Mission AI & ADD Vector Cartography"
+                title="Configure Google Maps Platform & Gemini AI API Keys"
               >
                 <Key className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden md:inline">API KEYS</span>

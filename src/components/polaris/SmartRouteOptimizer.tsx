@@ -33,12 +33,11 @@ import {
 } from 'lucide-react';
 import { FONT_HEAD, FONT_BODY, emitAiActionBroadcast } from '../../data/polarisData';
 import { useGeolocation } from '../../hooks/useGeolocation';
-import { apiFetch } from '../../utils/api';
 import { useRealtimeWeather } from '../../hooks/useRealtimeWeather';
 import { evaluateLocationWeatherHazards, WeatherHazardEvaluation } from '../../utils/weatherHazards';
 import { INITIAL_STATIONS, INITIAL_EXPEDITIONS } from '../../data/polarData';
 import { Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest } from '../../types';
-import { formatError, safeDisplayValue } from '../../utils/safeFormat';
+import { apiFetch } from '../../utils/api';
 
 interface SmartRouteOptimizerProps {
   t: any;
@@ -172,13 +171,12 @@ export function SmartRouteOptimizer({
 
   // Available candidate waypoints based on active expedition or selected corridor
   const candidateWaypoints: Waypoint[] = useMemo(() => {
-    const activeWps = Array.isArray(db?.expeditions?.[0]?.waypoints) ? db.expeditions[0].waypoints : [];
-    if (activeWps.length >= 2) {
-      return activeWps.map((w: any, idx: number) => ({
+    if (db?.expeditions?.[0]?.waypoints && db.expeditions[0].waypoints.length >= 2) {
+      return db.expeditions[0].waypoints.map((w: any, idx: number) => ({
         ...w,
         sequence: w.sequence || idx + 1,
-        priority: w.priority || (idx === 0 || idx === activeWps.length - 1 ? 'mandatory' : 'normal'),
-        isMandatory: w.isMandatory !== undefined ? w.isMandatory : (idx === 0 || idx === activeWps.length - 1),
+        priority: w.priority || (idx === 0 || idx === db.expeditions[0].waypoints.length - 1 ? 'mandatory' : 'normal'),
+        isMandatory: w.isMandatory !== undefined ? w.isMandatory : (idx === 0 || idx === db.expeditions[0].waypoints.length - 1),
       }));
     }
 
@@ -289,11 +287,11 @@ export function SmartRouteOptimizer({
           impact: data.result.reasoning[0] || 'Safe polar waypoint sequence',
         });
       } else {
-        throw new Error(formatError(data?.error || data?.message, 'Optimization calculation failed.'));
+        throw new Error(data.error || 'Optimization calculation failed.');
       }
     } catch (err: any) {
       console.warn('Gemini route optimization error:', err);
-      setGeminiError(formatError(err, 'Route optimization error'));
+      setGeminiError(err.message || 'Route optimization error');
     } finally {
       setOptimizing(false);
     }
@@ -1011,7 +1009,7 @@ export function SmartRouteOptimizer({
             {geminiError && (
               <div className="mb-2 p-2 rounded-lg bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-start gap-1.5">
                 <AlertTriangle size={13} className="text-rose-400 shrink-0 mt-0.5" />
-                <span>{safeDisplayValue(geminiError)}</span>
+                <span>{geminiError}</span>
               </div>
             )}
 

@@ -9,7 +9,8 @@ import {
   PolarisDb,
   ConditionLevel,
   DispatchLog,
-  RealtimeWeatherReading
+  RealtimeWeatherReading,
+  ResearchStation
 } from '../types';
 import { SIMULATION_SCENARIOS, MANUAL_EVENT_TEMPLATES, ManualEventTemplate } from '../data/simulationScenarios';
 import { playTacticalChirp, playSuccessChime, startEmergencyAlarm, stopEmergencyAlarm } from '../utils/audioAlert';
@@ -35,12 +36,14 @@ export function useSimulation({
   liveAssets,
   liveDistress,
   liveConditionLevel,
+  liveStations,
   soundEnabled = true
 }: {
   liveDb: PolarisDb;
   liveAssets: PolarAsset[];
   liveDistress: ActiveDistressAlert | null;
   liveConditionLevel: ConditionLevel;
+  liveStations: ResearchStation[];
   soundEnabled?: boolean;
 }) {
   // Playback State
@@ -54,6 +57,7 @@ export function useSimulation({
   // Isolated Simulation State
   const [simDb, setSimDb] = useState<PolarisDb>(liveDb);
   const [simAssets, setSimAssets] = useState<PolarAsset[]>(liveAssets);
+  const [simStations, setSimStations] = useState<ResearchStation[]>(liveStations);
   const [simDistress, setSimDistress] = useState<ActiveDistressAlert | null>(null);
   const [simConditionLevel, setSimConditionLevel] = useState<ConditionLevel>('COND-2_CAUTION');
   const [simSyncStatus, setSimSyncStatus] = useState<'synced' | 'connecting' | 'offline'>('synced');
@@ -652,7 +656,7 @@ export function useSimulation({
               currentLat: Number(interpolatedLat.toFixed(4)),
               currentLng: Number(interpolatedLng.toFixed(4)),
               actualTrack: updatedTrack,
-              waypoints: updatedWps.length > 0 ? updatedWps : (Array.isArray(exp.waypoints) ? exp.waypoints : []),
+              waypoints: updatedWps.length > 0 ? updatedWps : exp.waypoints,
             };
           }
           return exp;
@@ -692,6 +696,99 @@ export function useSimulation({
     setInterventionsCount(c => c + 1);
   }, []);
 
+  // Local Waypoint Mutations for Simulation
+  const addWaypoint = useCallback((newWaypoint: any, expeditionId?: string) => {
+    setSimDb(prev => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      if (expeditionId) {
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => {
+          if (e.id !== expeditionId) return e;
+          const updatedWaypoints = [...(e.waypoints || []), newWaypoint];
+          const distAdd = Number(newWaypoint.distanceFromPrevKm) || 45;
+          return {
+            ...e,
+            waypoints: updatedWaypoints,
+            totalDistanceKm: (e.totalDistanceKm || 0) + distAdd,
+          };
+        });
+      } else {
+        cloned.customWaypoints = [newWaypoint, ...(cloned.customWaypoints || [])];
+      }
+      return cloned;
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const deleteWaypoint = useCallback((waypointId: string, expeditionId?: string) => {
+    setSimDb(prev => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      if (expeditionId) {
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => {
+          if (e.id !== expeditionId) return e;
+          return {
+            ...e,
+            waypoints: (e.waypoints || []).filter((w: any) => w.id !== waypointId),
+          };
+        });
+      } else {
+        cloned.customWaypoints = (cloned.customWaypoints || []).filter((w: any) => w.id !== waypointId);
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => ({
+          ...e,
+          waypoints: (e.waypoints || []).filter((w: any) => w.id !== waypointId),
+        }));
+      }
+      return cloned;
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const updateWaypoint = useCallback((updatedWaypoint: any, expeditionId?: string) => {
+    setSimDb(prev => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      if (expeditionId) {
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => {
+          if (e.id !== expeditionId) return e;
+          return {
+            ...e,
+            waypoints: (e.waypoints || []).map((w: any) => (w.id === updatedWaypoint.id ? updatedWaypoint : w)),
+          };
+        });
+      } else {
+        cloned.customWaypoints = (cloned.customWaypoints || []).map((w: any) => (w.id === updatedWaypoint.id ? updatedWaypoint : w));
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => ({
+          ...e,
+          waypoints: (e.waypoints || []).map((w: any) => (w.id === updatedWaypoint.id ? updatedWaypoint : w)),
+        }));
+      }
+      return cloned;
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const addAsset = useCallback((newAsset: PolarAsset) => {
+    setSimAssets((prev) => [newAsset, ...prev]);
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const addPersonnel = useCallback((newPerson: any) => {
+    setSimDb((prev) => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      cloned.personnel = [newPerson, ...(cloned.personnel || [])];
+      return cloned;
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const updateAssetStatus = useCallback((assetId: string, status: any) => {
+    setSimAssets((prev) => prev.map(a => a.id === assetId ? { ...a, status } : a));
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const addStation = useCallback((newStation: ResearchStation) => {
+    setSimStations((prev) => [newStation, ...prev]);
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
   return {
     // Playback state
     isActive,
@@ -713,6 +810,8 @@ export function useSimulation({
     setSimDb,
     simAssets,
     setSimAssets,
+    simStations,
+    setSimStations,
     simDistress,
     setSimDistress,
     simConditionLevel,
@@ -726,6 +825,15 @@ export function useSimulation({
     recordIntervention,
     simReport,
     isReportModalOpen,
-    setIsReportModalOpen
+    setIsReportModalOpen,
+    
+    // Granular Actions
+    addWaypoint,
+    deleteWaypoint,
+    updateWaypoint,
+    addPersonnel,
+    addAsset,
+    updateAssetStatus,
+    addStation
   };
 }

@@ -35,11 +35,8 @@ import {
   WaypointOptimizationRequest,
   WaypointOptimizationResult,
   Waypoint,
-  normalizeExpedition,
-  normalizeExpeditions,
 } from './src/types.js';
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
-import { findAStarPath, calculateEdgeCost } from './src/utils/polarRouteAStar.js';
 import os from 'os';
 import { GoogleGenAI } from '@google/genai';
 import { databaseManager } from './src/server/database.js';
@@ -417,69 +414,33 @@ async function startServer() {
 
   const app = express();
 
-  // Robust Cross-Origin Resource Sharing (CORS) for multi-PC, Tauri Android WebView, and remote field units
+  // Robust Cross-Origin Resource Sharing (CORS) for multi-PC and remote field units
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    const requestedHeaders = req.headers['access-control-request-headers'];
-
-    // List of explicitly allowed origins or wildcards
     const allowedEnvOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.APP_URL || '')
       .split(',')
       .map((o) => o.trim())
       .filter(Boolean);
 
-    // Matches:
-    // - Tauri Android / Desktop: tauri.localhost, tauri://*, capacitor://*, ionic://*
-    // - Localhost & LAN: localhost, 127.0.0.1, 10.*, 192.168.*, 172.16-31.*
-    // - Tunnels: *.ngrok-free.app, *.ngrok.app, *.ngrok.io, *.localtunnel.me, *.trycloudflare.com
-    // - String "null" (sent by some Android WebViews executing local bundles)
-    const isAllowedOrigin =
+    const isLocalOrLan =
       origin &&
-      (origin === 'null' ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|tauri\.localhost)(:\d+)?$/i.test(origin) ||
-        /^tauri:\/\/.*$/i.test(origin) ||
-        /^capacitor:\/\/.*$/i.test(origin) ||
-        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/i.test(origin) ||
-        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|ngrok\.app|ngrok\.io|localtunnel\.me|trycloudflare\.com)(:\d+)?$/i.test(origin));
+      (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com)(:\d+)?$/.test(origin));
 
-    if (origin) {
-      if (isAllowedOrigin || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      } else {
-        // Fallback for tunnel/proxy connections
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      }
+    if (origin && (isLocalOrLan || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else {
+    } else if (!origin) {
       res.setHeader('Access-Control-Allow-Origin', '*');
     }
 
-    res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
-    // Dynamically permit all requested headers and ensure ngrok-skip-browser-warning is explicitly allowed
-    const allowedHeadersList = requestedHeaders
-      ? `${requestedHeaders}, ngrok-skip-browser-warning`
-      : 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning, cache-control, pragma, *';
-    res.setHeader('Access-Control-Allow-Headers', allowedHeadersList);
-    res.setHeader('Access-Control-Expose-Headers', 'ngrok-skip-browser-warning');
-
-    // Set ngrok bypass cookie on responses to assist browser sessions
-    res.setHeader('Set-Cookie', 'ngrok-skip-browser-warning=69420; Path=/; Max-Age=31536000; SameSite=None; Secure');
-
-    // Cache preflight results for 24 hours to prevent spamming OPTIONS on every single request
-    res.setHeader('Access-Control-Max-Age', '86400');
-
-    // Safe debugging logs for CORS inspection
     if (req.method === 'OPTIONS') {
-      console.log(`[CORS PREFLIGHT 204] ${req.method} ${req.path} | Origin: ${origin || 'none'} | Req-Headers: ${requestedHeaders || 'none'}`);
       return res.sendStatus(204);
     }
-
-    if (req.path.startsWith('/api/')) {
-      console.log(`[API INCOMING] ${req.method} ${req.path} | Origin: ${origin || 'none'}`);
-    }
-
     next();
   });
 
@@ -530,6 +491,53 @@ async function startServer() {
   // ============================================================================
   // AUTHENTICATION & ROLE-BASED ACCESS CONTROL (POLAR OPS CONSOLE)
   // ============================================================================
+  
+  // Phase 2: Reusable Authentication Middleware
+  function requireAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+    const token = (authHeader && authHeader.startsWith('Bearer '))
+      ? authHeader.slice(7)
+      : req.query.token || (req.body && req.body.token);
+
+    if (!token || !authSessions.has(token)) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: Valid session required.' });
+    }
+
+    req.user = authSessions.get(token);
+    next();
+  }
+
+  // Phase 2: Reusable RBAC Middleware
+  function requireRole(allowedRoles) {
+    return (req, res, next) => {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Session required for role check.' });
+      }
+
+      const roleAuthorizationMap = {
+        researcher: ['Scientist / Team Member', 'Researcher', 'Super Admin'],
+        asset: ['Asset Manager', 'Asset Management', 'Maintenance Officer', 'Super Admin'],
+        transport: ['Logistics Officer', 'Transportation', 'Expedition Manager', 'Super Admin'],
+        admin: ['Super Admin']
+      };
+
+      let userHasPermission = false;
+      for (const requiredRole of allowedRoles) {
+        const allowed = roleAuthorizationMap[requiredRole] || ['Super Admin'];
+        if (allowed.some(r => r.toLowerCase() === (user.role || '').toLowerCase())) {
+          userHasPermission = true;
+          break;
+        }
+      }
+
+      if (!userHasPermission) {
+        return res.status(403).json({ ok: false, error: `Role authorization mismatch. Required: ${allowedRoles.join(', ')}` });
+      }
+      next();
+    };
+  }
+
   app.post('/api/auth/login', (req, res) => {
     const { role, userId, password, remember } = req.body || {};
 
@@ -626,7 +634,7 @@ async function startServer() {
     });
   });
 
-  app.get('/api/auth/session', (req, res) => {
+  app.get('/api/auth/session', requireAuth, (req, res) => {
     const authHeader = req.headers.authorization;
     const token = (authHeader && authHeader.startsWith('Bearer '))
       ? authHeader.slice(7)
@@ -657,20 +665,13 @@ async function startServer() {
   });
 
   // REST API Endpoints for State & Distress Actions
-  app.get('/api/state', (req, res) => {
+  app.get('/api/state', requireAuth, (req, res) => {
     const devices = getDeviceList();
     res.json({
       status: 'ok',
       connectedClients: devices.length,
       devices,
-      state: {
-        ...systemState,
-        expeditions: normalizeExpeditions(systemState.expeditions || []),
-        polarisDb: systemState.polarisDb ? {
-          ...systemState.polarisDb,
-          expeditions: normalizeExpeditions(systemState.polarisDb.expeditions || []),
-        } : systemState.polarisDb,
-      },
+      state: systemState,
     });
   });
 
@@ -733,7 +734,7 @@ async function startServer() {
   });
 
   // Mobile or field POST to trigger Mayday / Distress Beacon
-  app.post('/api/distress', (req, res) => {
+  app.post('/api/distress', requireAuth, (req, res) => {
     const {
       incidentType = 'General Emergency',
       location = 'Polar Field Sector',
@@ -809,7 +810,7 @@ async function startServer() {
   });
 
   // Toggle between Autonomous AI Dispatch (Zero-Click) vs Legacy Manual Operator Mode
-  app.post('/api/ai/sar/toggle', (req, res) => {
+  app.post('/api/ai/sar/toggle', requireAuth, requireRole(['transport']), (req, res) => {
     autoSarDispatchEnabled = !autoSarDispatchEnabled;
     console.log(`[POLAR-SERVER] 🔄 AI Autonomous S.A.R. Dispatch Mode toggled: ${autoSarDispatchEnabled ? 'ACTIVE (ZERO-CLICK)' : 'LEGACY MANUAL OPERATOR'}`);
     res.json({
@@ -822,7 +823,7 @@ async function startServer() {
   });
 
   // Quick scenario trigger: "Crevasse Fall" distress beacon with autonomous dispatch
-  app.post('/api/ai/sar/dispatch-crevasse-fall', (req, res) => {
+  app.post('/api/ai/sar/dispatch-crevasse-fall', requireAuth, (req, res) => {
     const crevassePayload = {
       incidentType: 'Crevasse Fall / Structural Ice Breach',
       location: 'Leverett Glacier Approach (85.2°S, 151.1°E)',
@@ -878,7 +879,7 @@ async function startServer() {
   });
 
   // HQ Manager acknowledges distress and dispatches SAR asset
-  app.post('/api/distress/acknowledge', (req, res) => {
+  app.post('/api/distress/acknowledge', requireAuth, requireRole(['transport']), (req, res) => {
     if (!systemState.activeDistress) {
       return res.status(404).json({ error: 'No active distress beacon to acknowledge' });
     }
@@ -929,7 +930,7 @@ async function startServer() {
   });
 
   // Stand down / resolve distress
-  app.post('/api/distress/resolve', (req, res) => {
+  app.post('/api/distress/resolve', requireAuth, requireRole(['transport']), (req, res) => {
     if (!systemState.activeDistress) {
       return res.status(404).json({ error: 'No active distress beacon' });
     }
@@ -966,7 +967,7 @@ async function startServer() {
   });
 
   // Reset entire simulation to master manifest
-  app.post('/api/reset', (req, res) => {
+  app.post('/api/reset', requireAuth, (req, res) => {
     systemState = databaseManager.resetToDefaults();
 
     broadcast({
@@ -979,7 +980,7 @@ async function startServer() {
   });
 
   // General state update handler
-  app.post('/api/action', (req, res) => {
+  app.post('/api/action', requireAuth, (req, res) => {
     const { action, payload } = req.body;
     handleClientAction(action, payload);
     res.json({ success: true, state: systemState });
@@ -995,7 +996,7 @@ async function startServer() {
   });
 
   // Purge AI Cache (Zero Key Consumption Maintenance)
-  app.post('/api/ai/cache/clear', (req, res) => {
+  app.post('/api/ai/cache/clear', requireAuth, (req, res) => {
     const result = aiOptimizer.clear();
     console.log(`[AI-OPTIMIZER] 🧹 Cache cleared manually (${result.clearedEntries} entries purged).`);
     res.json({
@@ -1008,7 +1009,7 @@ async function startServer() {
   });
 
   // Test Gemini API key validation
-  app.post('/api/ai/test-key', async (req, res) => {
+  app.post('/api/ai/test-key', requireAuth, async (req, res) => {
     const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
@@ -1261,7 +1262,7 @@ JSON STRUCTURE:
   });
 
   // Execute Predictive Maintenance Action (Dispatches technician, consumes belt, updates asset)
-  app.post('/api/ai/predictive-maintenance/execute', (req, res) => {
+  app.post('/api/ai/predictive-maintenance/execute', requireAuth, requireRole(['asset']), (req, res) => {
     const {
       assetId = 'AST-0001',
       technician = 'Manoj Joshi (PER-0007)',
@@ -1561,7 +1562,7 @@ JSON STRUCTURE:
   });
 
   // Early Supply Ship Dispatch Request Handler
-  app.post('/api/ai/weather-inventory/request-ship', (req, res) => {
+  app.post('/api/ai/weather-inventory/request-ship', requireAuth, requireRole(['transport']), (req, res) => {
     const {
       shipName = 'MV Vasiliy Golovnin (Polar Icebreaker & Tanker)',
       cargoVolumeLiters = 45000,
@@ -1854,7 +1855,7 @@ JSON STRUCTURE:
   });
 
   // Push Dynamic Safe Route to Supply Trucks
-  app.post('/api/ai/smart-route/push-to-trucks', (req, res) => {
+  app.post('/api/ai/smart-route/push-to-trucks', requireAuth, requireRole(['transport']), (req, res) => {
     const {
       routeId = 'RTE-OPT-SAFE',
       routeName = 'AI Dynamic Safe Blue-Ice Route (Daily CV Satellite Mapped)',
@@ -2215,186 +2216,6 @@ SCHEMA:
       });
     }
   });
-
-  // =========================================================================
-  // A* POLAR ROUTE OPTIMIZER & GEMINI DECISION LAYER
-  // Calculates lowest-cost path using calculateEdgeCost (Distance, Slope, Temp, Wind, Hazard)
-  // and generates a 2-sentence tactical recommendation using Gemini 3.8 Flash.
-  // =========================================================================
-  app.post('/api/ai/route-optimizer/astar', async (req, res) => {
-    const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
-    const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
-
-    const {
-      startNode: reqStartNode,
-      goalNode: reqGoalNode,
-      waypoints = [],
-      environment = {},
-      asset = {},
-    } = req.body || {};
-
-    // Determine start and goal nodes
-    let startNode = reqStartNode;
-    let goalNode = reqGoalNode;
-    let intermediateNodes: any[] = [];
-
-    if ((!startNode || !goalNode) && Array.isArray(waypoints) && waypoints.length >= 2) {
-      startNode = {
-        id: waypoints[0].id || 'start',
-        lat: waypoints[0].lat,
-        lng: waypoints[0].lng,
-        name: waypoints[0].name || 'Departure Waypoint',
-        elevationM: waypoints[0].elevationM,
-      };
-      goalNode = {
-        id: waypoints[waypoints.length - 1].id || 'goal',
-        lat: waypoints[waypoints.length - 1].lat,
-        lng: waypoints[waypoints.length - 1].lng,
-        name: waypoints[waypoints.length - 1].name || 'Destination Waypoint',
-        elevationM: waypoints[waypoints.length - 1].elevationM,
-      };
-      intermediateNodes = waypoints.slice(1, -1).map((w: any) => ({
-        id: w.id,
-        lat: w.lat,
-        lng: w.lng,
-        name: w.name,
-        elevationM: w.elevationM,
-      }));
-    }
-
-    // Default fallback to McMurdo Logistics Hub (-77.848, 166.666) -> Amundsen-Scott (-90.0, 0.0) if none supplied
-    if (!startNode || !goalNode) {
-      startNode = {
-        id: 'mcmurdo-base',
-        name: 'McMurdo Logistics Hub',
-        lat: -77.848,
-        lng: 166.666,
-        elevationM: 24,
-      };
-      goalNode = {
-        id: 'south-pole-station',
-        name: 'Amundsen-Scott South Pole Station',
-        lat: -90.0,
-        lng: 0.0,
-        elevationM: 2835,
-      };
-    }
-
-    // Run A* pathfinding with weighted cost function
-    const astarResult = findAStarPath(startNode, goalNode, environment, asset, intermediateNodes);
-    const metadata = astarResult.metadata;
-
-    const routeDataForGemini = {
-      startLocation: startNode.name || `${startNode.lat.toFixed(2)}, ${startNode.lng.toFixed(2)}`,
-      destination: goalNode.name || `${goalNode.lat.toFixed(2)}, ${goalNode.lng.toFixed(2)}`,
-      totalDistanceKm: metadata.totalDistanceKm,
-      straightLineDistanceKm: metadata.straightLineDistanceKm,
-      distanceDetourKm: metadata.distanceDeltaKm,
-      estimatedTravelTimeMinutes: metadata.estimatedTimeMinutes,
-      maxTempEncounteredC: metadata.maxTempEncountered,
-      windConditions: `${metadata.windConditions.speedKts} kts ${metadata.windConditions.headwindTailwind} (Cost impact: ${metadata.windConditions.costImpactPercent > 0 ? `+${metadata.windConditions.costImpactPercent}%` : `${metadata.windConditions.costImpactPercent}%`})`,
-      maxSlopeDegrees: metadata.maxSlopeDeg,
-      hazardsAvoided: metadata.hazardsAvoided.length > 0 ? metadata.hazardsAvoided : ['None in direct path'],
-      costCalculated: metadata.totalCost,
-      straightLineCost: metadata.straightLineCost,
-      costSavingsPercent: metadata.savingsVsStraightLinePercent,
-    };
-
-    // Deterministic tactical recommendation generator (fallback & zero-key guarantee)
-    const generateFallbackRecommendation = (): string => {
-      const avoidedText = metadata.hazardsAvoided.length > 0
-        ? `A* pathfinder routed around lethal danger zone '${metadata.hazardsAvoided[0]}' by diverting ${metadata.distanceDeltaKm > 0 ? `${metadata.distanceDeltaKm} km laterally` : 'outside the hazard boundary'} to eliminate catastrophic -50°C elastomer vitrification and crevasse shear.`
-        : `A* pathfinder selected the optimal low-gradient (<5° slope) blue-ice ridge, adding ${metadata.distanceDeltaKm} km over the straight line to minimize mechanical strain and conserve auxiliary fuel.`;
-
-      const actionText = metadata.windConditions.headwindTailwind === 'HEADWIND'
-        ? `Maintain crawler speed at ${asset.speedKmh || 24} km/h and engage auxiliary block heaters against active ${metadata.windConditions.speedKts}kt headwind.`
-        : `Proceed along the stabilized blue-ice corridor and monitor battery microgrid reserves at arrival.`;
-
-      return `${avoidedText} ${actionText}`;
-    };
-
-    // If no Gemini key, return deterministic result immediately
-    if (!keyToUse) {
-      const recommendation = generateFallbackRecommendation();
-      astarResult.tacticalRecommendation = recommendation;
-      astarResult.mode = 'deterministic_fallback';
-      astarResult.model = 'Polar A* Cost Matrix Engine';
-      astarResult.timestamp = new Date().toISOString();
-
-      if (systemState.polarisDb) {
-        systemState.polarisDb.auditLog.unshift({
-          id: `AUD-${Date.now().toString().slice(-4)}`,
-          timestamp: new Date().toISOString(),
-          user: 'A-STAR-ROUTER',
-          action: 'ASTAR_ROUTE_CALCULATED',
-          entity: 'Waypoints / A* Router',
-          details: `A* route calculated between ${startNode.name || 'Start'} and ${goalNode.name || 'Goal'}: ${metadata.totalDistanceKm} km (${metadata.estimatedTimeMinutes} min). Cost: ${metadata.totalCost} vs direct ${metadata.straightLineCost}.`,
-        });
-      }
-
-      return res.json({
-        status: 'ok',
-        ...astarResult,
-      });
-    }
-
-    // Call Gemini API (Decision Layer)
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: keyToUse,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-      });
-
-      const prompt = `You are a polar operations AI. Given this route data:
-${JSON.stringify(routeDataForGemini, null, 2)}
-
-Write a 2-sentence tactical recommendation for the fleet commander. Highlight the biggest risk and why this route was chosen over the straight-line path.`;
-
-      const aiResponse = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: {
-          temperature: 0.2,
-          maxOutputTokens: 200,
-        },
-      });
-
-      const recommendation = aiResponse.text?.trim() || generateFallbackRecommendation();
-      astarResult.tacticalRecommendation = recommendation;
-      astarResult.mode = 'gemini_ai_live';
-      astarResult.model = 'gemini-3.8-flash';
-      astarResult.timestamp = new Date().toISOString();
-
-      if (systemState.polarisDb) {
-        systemState.polarisDb.auditLog.unshift({
-          id: `AUD-${Date.now().toString().slice(-4)}`,
-          timestamp: new Date().toISOString(),
-          user: 'GEMINI-ASTAR-AI',
-          action: 'AI_ASTAR_ROUTE_RECOMMENDED',
-          entity: 'Waypoints / A* Router',
-          details: `Gemini 3.8 Flash provided tactical recommendation for ${metadata.totalDistanceKm}km A* route (${metadata.hazardsAvoided.length} hazards circumvented).`,
-        });
-      }
-
-      return res.json({
-        status: 'ok',
-        ...astarResult,
-      });
-    } catch (err: any) {
-      console.warn('[POLAR-AI] Gemini decision layer error, using deterministic recommendation:', err.message);
-      const recommendation = generateFallbackRecommendation();
-      astarResult.tacticalRecommendation = recommendation;
-      astarResult.mode = 'deterministic_fallback';
-      astarResult.model = 'Polar A* Cost Matrix (Gemini Fallback)';
-      astarResult.timestamp = new Date().toISOString();
-
-      return res.json({
-        status: 'ok',
-        ...astarResult,
-      });
-    }
-  });
-
   function handleClientAction(action: string, payload: any) {
     switch (action) {
       case 'UPDATE_REGION':
@@ -2410,10 +2231,17 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
         systemState.assets = [payload, ...systemState.assets];
         break;
       case 'UPDATE_EXPEDITION':
-        systemState.expeditions = systemState.expeditions.map((e) => (e.id === payload.id ? normalizeExpedition(payload) : e));
+        systemState.expeditions = systemState.expeditions.map((e) => (e.id === payload.id ? payload : e));
         break;
       case 'ADD_EXPEDITION':
-        systemState.expeditions = [normalizeExpedition(payload), ...systemState.expeditions];
+        systemState.expeditions = [payload, ...systemState.expeditions];
+        break;
+      case 'ADD_PERSONNEL':
+        if (!payload || !payload.id || !payload.name) {
+          console.warn('[SERVER] Invalid ADD_PERSONNEL payload received:', payload);
+          return;
+        }
+        systemState.personnel = [payload, ...(systemState.personnel || INITIAL_PERSONNEL)];
         break;
       case 'ADD_STATION':
         systemState.stations = [payload, ...(systemState.stations || INITIAL_STATIONS)];
@@ -2427,8 +2255,7 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
         if (expeditionId) {
           systemState.expeditions = systemState.expeditions.map((e) => {
             if (e.id !== expeditionId) return e;
-            const currentWps = Array.isArray(e.waypoints) ? e.waypoints : [];
-            const updatedWaypoints = [...currentWps, wp];
+            const updatedWaypoints = [...(e.waypoints || []), wp];
             const addedDist = Number(wp.distanceFromPrevKm) || 45;
             return {
               ...e,
@@ -2448,7 +2275,7 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
             if (e.id !== expeditionId) return e;
             return {
               ...e,
-              waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).filter((w) => w.id !== waypointId),
+              waypoints: (e.waypoints || []).filter((w) => w.id !== waypointId),
             };
           });
         } else {
@@ -2466,7 +2293,7 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
             if (e.id !== expeditionId) return e;
             return {
               ...e,
-              waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).map((w) => (w.id === waypoint.id ? waypoint : w)),
+              waypoints: (e.waypoints || []).map((w) => (w.id === waypoint.id ? waypoint : w)),
             };
           });
         } else {
@@ -2484,18 +2311,12 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
         break;
       case 'UPDATE_POLARIS_DB':
         if (payload && typeof payload === 'object') {
-          systemState.polarisDb = {
-            ...payload,
-            expeditions: normalizeExpeditions(payload.expeditions || []),
-          };
+          systemState.polarisDb = payload;
         }
         break;
       case 'UPDATE_POLARIS_COLLECTION':
         if (payload && payload.collectionName && Array.isArray(payload.data) && systemState.polarisDb) {
-          const collectionData = payload.collectionName === 'expeditions'
-            ? normalizeExpeditions(payload.data)
-            : payload.data;
-          (systemState.polarisDb as any)[payload.collectionName] = collectionData;
+          (systemState.polarisDb as any)[payload.collectionName] = payload.data;
         }
         break;
       default:
@@ -2511,6 +2332,20 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
 
   // WebSocket Server Handler
   wss.on('connection', (ws, req) => {
+    // Phase 2C: WebSocket Authentication
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+      const token = url.searchParams.get('token');
+      
+      if (!token || !authSessions.has(token)) {
+        console.log(`[POLAR-SERVER] Rejected unauthenticated WS connection from ${req.socket.remoteAddress}`);
+        ws.close(4001, 'Unauthorized');
+        return;
+      }
+    } catch (e) {
+      ws.close(4001, 'Unauthorized');
+      return;
+    }
     let clientDeviceId: string | null = null;
     console.log(`[POLAR-SERVER] WebSocket socket opened from ${req.socket.remoteAddress}. Active unique terminals: ${activeDevices.size}`);
 
@@ -2659,6 +2494,7 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
           case 'UPDATE_CONDITION':
           case 'UPDATE_ASSET':
           case 'UPDATE_EXPEDITION':
+          case 'ADD_PERSONNEL':
           case 'ADD_WAYPOINT':
           case 'DELETE_WAYPOINT':
           case 'UPDATE_WAYPOINT':
@@ -2689,6 +2525,24 @@ Write a 2-sentence tactical recommendation for the fleet commander. Highlight th
         }
       }
     });
+  });
+
+  // Phase 1: Explicit 404 for unknown API routes
+  app.use('/api', (req, res) => {
+    res.status(404).json({ ok: false, error: `API Route Not Found: ${req.method} ${req.path}` });
+  });
+
+  // Phase 1: Global API Error Handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith('/api') || req.originalUrl.startsWith('/api')) {
+      if (err instanceof SyntaxError && 'body' in err) {
+        console.error(`[API ERROR] Malformed JSON payload on ${req.method} ${req.url}`);
+        return res.status(400).json({ ok: false, error: 'Malformed JSON payload.' });
+      }
+      console.error(`[API ERROR] Unexpected error on ${req.method} ${req.url}:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Internal server error.' });
+    }
+    next(err);
   });
 
   // Integrate Vite for development or static files for production

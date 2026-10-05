@@ -81,8 +81,13 @@ export function DynamicWeatherInventory({
   const daysRemainingNormal = (currentStockL / normalBurnRate).toFixed(1);
   // In blizzard scenario: 3 days of blizzard burn (4,350L) + remaining days at normal burn
   const blizzard3DayTotalBurn = 3 * blizzardBurnRate;
-  const postBlizzardRemaining = Math.max(0, currentStockL - blizzard3DayTotalBurn);
-  const daysRemainingBlizzard = (3 + postBlizzardRemaining / normalBurnRate).toFixed(1);
+  let daysRemainingBlizzardNum = 0;
+  if (currentStockL <= blizzard3DayTotalBurn) {
+    daysRemainingBlizzardNum = currentStockL / blizzardBurnRate;
+  } else {
+    daysRemainingBlizzardNum = 3 + (currentStockL - blizzard3DayTotalBurn) / normalBurnRate;
+  }
+  const daysRemainingBlizzard = daysRemainingBlizzardNum.toFixed(1);
 
   // Chart projection data for next 14 days
   const projectionData = Array.from({ length: 14 }, (_, day) => {
@@ -252,10 +257,11 @@ export function DynamicWeatherInventory({
       {/* Core Transformation Headline */}
       <div className="mb-4">
         <h2 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-base sm:text-lg font-bold tracking-tight flex items-center gap-2">
-          <span>Dynamic Weather-Based Inventory Consumption</span>
+          <span>Weather-Adjusted Minimum Stock Target</span>
         </h2>
         <p style={{ color: t.textDim }} className="text-xs mt-1 leading-relaxed max-w-4xl">
-          <strong className="text-slate-200">Operational Directive:</strong> Meteorological sensors and AWOS forecasts project a severe <span className="text-cyan-300 font-semibold">-52°C blizzard over the next 3 days</span> (55kt winds, -68°C wind chill). Base habitat heaters run at 290% continuous duty, accelerating consumption from 500L/day to <span className="text-amber-400 font-bold font-mono">1,450L/day</span>. The AI engine dynamically elevates the depot minimum safety reserve to <span className="text-emerald-300 font-bold font-mono">8,500L</span> and schedules early maritime tanker resupply to avoid ice-lockout.
+          Forecast detects <span className="text-cyan-300 font-semibold">-52°C blizzard (3 days)</span>. Heating load increased to 290%.
+          Dynamic minimum stock threshold elevated to <span className="text-emerald-300 font-bold font-mono">8,500L</span> to preserve safety margins.
         </p>
       </div>
 

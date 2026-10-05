@@ -25,7 +25,6 @@ import { ActiveDistressBanner } from './components/ActiveDistressBanner';
 import { DevicePairingModal } from './components/DevicePairingModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { OfflineCacheModal } from './components/OfflineCacheModal';
 import { Footer } from './components/Footer';
 import { PreBootSystemCheck } from './components/polaris/PreBootSystemCheck';
 import { useSimulation } from './hooks/useSimulation';
@@ -38,7 +37,6 @@ import { useGeolocation } from './hooks/useGeolocation';
 import { useRealtimeWeather } from './hooks/useRealtimeWeather';
 import { playTacticalChirp, playSuccessChime, startEmergencyAlarm, stopEmergencyAlarm } from './utils/audioAlert';
 import { ShieldAlert, Radio, Key, Wifi, WifiOff, Bot, Sparkles, Terminal, QrCode, Target } from 'lucide-react';
-import { normalizeExpeditions } from './types';
 
 export default function App() {
   // Theme: 'cyan' (Polar default) | 'green' (Phosphor) | 'amber' (CRT) | 'light' (Daylight)
@@ -116,14 +114,12 @@ export default function App() {
   const [isPreBootModalOpen, setIsPreBootModalOpen] = useState(false);
   const [active, setActive] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expDetailId, setExpDetailId] = useState<string | null>(null);
 
   // Modals
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
 
   // API Keys state
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(() => {
@@ -192,6 +188,15 @@ export default function App() {
     region: 'antarctica',
   });
 
+  const sensorHealth = React.useMemo(() => {
+    // Only AWOS fault is globally exposed by the current codebase architecture via weather.error.
+    // The GPR simulated fault in PreBootSystemCheck is purely localized state and cannot be identified globally without refactoring.
+    if (weather.error) {
+      return { status: 'degraded' as const, affectedSensor: 'AWOS' };
+    }
+    return { status: 'nominal' as const };
+  }, [weather.error]);
+
   // Real-time WebSocket + State sync hook
   const {
     activeDistress,
@@ -211,14 +216,24 @@ export default function App() {
     toggleAutoSarMode,
     triggerCrevasseFallDistress,
     assets,
+    personnel,
+    stations,
     polarisDb: db,
     syncPolDb: setDb,
+    addWaypoint: syncAddWaypoint,
+    updateWaypoint: syncUpdateWaypoint,
+    deleteWaypoint: syncDeleteWaypoint,
+    addAsset: syncAddAsset,
+    addPersonnel: syncAddPersonnel,
+    updateAssetStatus: syncUpdateAssetStatus,
+    addStation: syncAddStation,
   } = usePolarSync();
 
   // Mission Simulation & Training Engine Hook
   const sim = useSimulation({
     liveDb: db,
     liveAssets: assets,
+    liveStations: stations,
     liveDistress: activeDistress,
     liveConditionLevel: 'COND-2_CAUTION',
     soundEnabled,
@@ -229,8 +244,19 @@ export default function App() {
   const activeDb = sim.isActive ? sim.simDb : db;
   const setActiveDb = sim.isActive ? sim.setSimDb : setDb;
   const activeAssets = sim.isActive ? sim.simAssets : assets;
+  const activeStations = sim.isActive ? sim.simStations : stations;
   const activeDistressAlert = sim.isActive ? sim.simDistress : activeDistress;
   const activeConditionLevel = sim.isActive ? sim.simConditionLevel : 'COND-2_CAUTION';
+  
+  const activeAddWaypoint = sim.isActive ? sim.addWaypoint : syncAddWaypoint;
+  const activeUpdateWaypoint = sim.isActive ? sim.updateWaypoint : syncUpdateWaypoint;
+  const activeDeleteWaypoint = sim.isActive ? sim.deleteWaypoint : syncDeleteWaypoint;
+  
+  const activeAddPersonnel = sim.isActive ? sim.addPersonnel : syncAddPersonnel;
+  const activeAddAsset = sim.isActive ? sim.addAsset : syncAddAsset;
+  const activeUpdateAssetStatus = sim.isActive ? sim.updateAssetStatus : syncUpdateAssetStatus;
+
+  const activeAddStation = sim.isActive ? sim.addStation : syncAddStation;
 
   // Trigger audio klaxon on new active distress if not muted
   useEffect(() => {
@@ -329,6 +355,9 @@ export default function App() {
         googleMapsApiKey={googleMapsApiKey}
         onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
         isSimulation={sim.isActive}
+        onAddWaypoint={activeAddWaypoint}
+        onUpdateWaypoint={activeUpdateWaypoint}
+        onDeleteWaypoint={activeDeleteWaypoint}
       />
     );
   } else if (active === 'expeditions') {
@@ -338,40 +367,10 @@ export default function App() {
   } else if (active === 'waypoints') {
     page = (
       <WaypointPlannerPage
-        expeditions={normalizeExpeditions(activeDb.expeditions || INITIAL_EXPEDITIONS)}
-        onAddWaypoint={(wp, expId) => {
-          setActiveDb((prev: any) => ({
-            ...prev,
-            expeditions: normalizeExpeditions(prev.expeditions || []).map((e: any) =>
-              e.id === (expId || prev.expeditions?.[0]?.id)
-                ? { ...e, waypoints: [...(Array.isArray(e.waypoints) ? e.waypoints : []), wp] }
-                : e
-            ),
-            customWaypoints: [...(prev.customWaypoints || []), wp]
-          }));
-        }}
-        onDeleteWaypoint={(wpId, expId) => {
-          setActiveDb((prev: any) => ({
-            ...prev,
-            expeditions: normalizeExpeditions(prev.expeditions || []).map((e: any) =>
-              e.id === (expId || prev.expeditions?.[0]?.id)
-                ? { ...e, waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).filter((w: any) => w.id !== wpId) }
-                : e
-            ),
-            customWaypoints: (prev.customWaypoints || []).filter((w: any) => w.id !== wpId)
-          }));
-        }}
-        onUpdateWaypoint={(wp, expId) => {
-          setActiveDb((prev: any) => ({
-            ...prev,
-            expeditions: normalizeExpeditions(prev.expeditions || []).map((e: any) =>
-              e.id === (expId || prev.expeditions?.[0]?.id)
-                ? { ...e, waypoints: (Array.isArray(e.waypoints) ? e.waypoints : []).map((w: any) => w.id === wp.id ? wp : w) }
-                : e
-            ),
-            customWaypoints: (prev.customWaypoints || []).map((w: any) => w.id === wp.id ? wp : w)
-          }));
-        }}
+        expeditions={activeDb.expeditions || INITIAL_EXPEDITIONS}
+        onAddWaypoint={(wp, expId) => activeAddWaypoint(wp, expId)}
+        onDeleteWaypoint={(wpId, expId) => activeDeleteWaypoint(wpId, expId)}
+        onUpdateWaypoint={(wp, expId) => activeUpdateWaypoint(wp, expId)}
         userLat={geo.latitude}
         userLng={geo.longitude}
       />
@@ -390,7 +389,7 @@ export default function App() {
   } else if (active === 'transportation') {
     page = <Transportation t={t} db={activeDb} />;
   } else if (active === 'assets') {
-    page = <Assets t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} />;
+    page = <Assets t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} assets={activeAssets} onAddAsset={activeAddAsset} onUpdateAssetStatus={activeUpdateAssetStatus} />;
   } else if (active === 'maintenance') {
     page = <Maintenance t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} geminiApiKey={geminiApiKey} />;
   } else if (active === 'predictive-maintenance') {
@@ -405,7 +404,7 @@ export default function App() {
       />
     );
   } else if (active === 'inventory') {
-    page = <Inventory t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} onNavigateWeatherFuel={() => handleSetActiveWithSound('weather-inventory')} />;
+    page = <Inventory t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} />;
   } else if (active === 'weather-inventory') {
     page = (
       <DynamicWeatherInventory
@@ -424,13 +423,22 @@ export default function App() {
         t={t}
         db={activeDb}
         setDb={setActiveDb}
+        stations={activeStations}
+        onAddStation={activeAddStation}
         onNavigateToMap={(coords) => {
           handleSetActiveWithSound('map');
         }}
       />
     );
   } else if (active === 'personnel') {
-    page = <Personnel t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} />;
+    const mergedPersonnel = [
+      ...(personnel || []),
+      ...(activeDb.personnel || [])
+    ].reduce((acc: any[], curr: any) => {
+      if (!acc.find(p => p.id === curr.id)) acc.push(curr);
+      return acc;
+    }, []);
+    page = <Personnel t={t} db={activeDb} setDb={setActiveDb} canEdit={canEdit} personnel={mergedPersonnel} onAddPersonnel={activeAddPersonnel} />;
   } else if (active === 'ai-action-logs') {
     page = (
       <div className="space-y-4">
@@ -589,7 +597,7 @@ export default function App() {
               API Key &amp; AI Autonomous Resource Configuration
             </h2>
             <p className="text-xs text-slate-400 font-mono">
-              Manage Gemini 3.8 Flash inference parameters, request coalescence caching, and SCAR Antarctic Digital Database (ADD v7.4) polar vector overlays.
+              Manage Gemini 3.8 Flash inference parameters, request coalescence caching, and Google Maps polar overlays.
             </p>
           </div>
           <button
@@ -643,16 +651,6 @@ export default function App() {
         setTheme={handleSetTheme}
         user={user}
         onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
-        crtEnabled={crtEnabled}
-        onToggleCrt={handleToggleCrt}
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
-        currentDeviceId={currentDeviceId}
-        connectedClients={connectedClients}
-        syncStatus={syncStatus}
-        selectedStation={selectedStation}
-        onOpenPairing={() => setIsPairingModalOpen(true)}
-        onOpenPreBoot={() => setIsPreBootModalOpen(true)}
       />
     );
   }
@@ -663,7 +661,7 @@ export default function App() {
         background: t.bg,
         minHeight: '100vh',
       }}
-      className={`app-shell theme-${theme} flex font-sans relative ${crtEnabled ? 'crt-scanlines' : ''}`}
+      className={`flex text-slate-100 font-sans relative ${crtEnabled ? 'crt-scanlines' : ''}`}
     >
       <Sidebar
         t={t}
@@ -675,8 +673,6 @@ export default function App() {
         setCollapsed={setCollapsed}
         unreadAlerts={unread}
         hasActiveDistress={Boolean(activeDistressAlert)}
-        mobileOpen={mobileMenuOpen}
-        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
       <div className="flex-1 min-w-0 flex flex-col min-h-screen">
@@ -691,7 +687,7 @@ export default function App() {
           onOpenPreBoot={() => setIsPreBootModalOpen(true)}
           onOpenPairing={() => setIsPairingModalOpen(true)}
           onOpenApiKey={() => setIsApiKeyModalOpen(true)}
-          onOpenOfflineCache={() => setIsOfflineModalOpen(true)}
+          onTriggerMayday={() => setIsDistressModalOpen(true)}
           syncStatus={syncStatus}
           connectedClients={connectedClients}
           currentDeviceId={currentDeviceId}
@@ -707,7 +703,8 @@ export default function App() {
           hasActiveDistress={Boolean(activeDistressAlert)}
           isSimulationActive={sim.isActive}
           onOpenSimulation={() => handleSetActiveWithSound('simulation')}
-          onToggleMobileMenu={() => setMobileMenuOpen(prev => !prev)}
+          stationWeather={weather.stationWeather}
+          sensorHealth={sensorHealth}
         />
 
         {/* Persistent Simulation HUD banner when Simulation Mode is running */}
@@ -727,37 +724,26 @@ export default function App() {
             WebkitBackdropFilter: 'blur(16px)',
             borderBottom: `1px solid ${t.border}`,
           }}
-          className="px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between text-xs gap-2 sm:gap-4 flex-wrap"
+          className="px-6 py-2.5 flex items-center justify-between text-xs gap-4 flex-wrap"
         >
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsOfflineModalOpen(true)}
-              className="flex items-center gap-2 font-mono hover:opacity-80 transition-opacity cursor-pointer text-left"
-              title="Click to view cache integrity and configure backend gateway URL"
-            >
+            <div className="flex items-center gap-2 font-mono">
               {sim.isActive ? (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold tracking-wider animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-amber-400" />
-                  SIMULATED (ISOLATED)
+                  SIMULATION RUNNING (ISOLATED)
                 </span>
               ) : syncStatus === 'synced' ? (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  LIVE TELEMETRY
-                </span>
-              ) : syncStatus === 'connecting' ? (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[11px] font-bold tracking-wider animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                  RECONNECTING
-                </span>
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
               ) : (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-amber-400" />
-                  CACHED / OFFLINE
+                <WifiOff className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              )}
+              {!sim.isActive && (
+                <span className={syncStatus === 'synced' ? 'text-emerald-400 font-bold tracking-wide' : 'text-amber-400 font-bold tracking-wide'}>
+                  {syncStatus === 'synced' ? 'LIVE SATCOM SYNC' : 'OFFLINE CACHE'}
                 </span>
               )}
-            </button>
+            </div>
             <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
             <span style={{ color: t.textDim }} className="font-mono">
               {sim.isActive ? (
@@ -773,7 +759,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Autonomous S.A.R. Dispatch Mode Toggle */}
+            {/* Auto-SAR Dispatch Toggle (unique operational control — not in sidebar) */}
             <button
               onClick={() => {
                 toggleAutoSarMode();
@@ -784,14 +770,14 @@ export default function App() {
                 border: `1px solid ${autoSarDispatchEnabled ? '#10B981' : 'rgba(255, 255, 255, 0.14)'}`,
                 color: autoSarDispatchEnabled ? '#10B981' : t.textDim,
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white/10 cursor-pointer text-xs font-mono font-semibold transition-all"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white/10 cursor-pointer text-xs font-mono font-semibold transition-all"
               title="Toggle between Autonomous S.A.R. Dispatch vs Manual Operator Mode"
             >
               <span className={`w-2 h-2 rounded-full ${autoSarDispatchEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
               <span>Auto-SAR: {autoSarDispatchEnabled ? 'ON' : 'OFF'}</span>
             </button>
 
-            {/* Tactical Drill: Crevasse Fall Scenario Injection */}
+            {/* Crevasse Fall Quick Test (unique contextual action for testing SAR pipeline) */}
             <button
               onClick={() => {
                 if (sim.isActive) {
@@ -802,19 +788,19 @@ export default function App() {
                 if (soundEnabled) playTacticalChirp();
               }}
               style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
                 color: '#FDA4AF',
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-rose-950/40 cursor-pointer font-mono font-semibold text-xs shadow-sm transition-all"
-              title="Tactical Emergency Drill: simulates Crevasse Fall distress beacon with AI Autonomous Zero-Click Dispatch"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-rose-950/40 cursor-pointer font-mono font-semibold text-xs transition-all"
+              title="Trigger simulated Crevasse Fall distress beacon to test Auto-SAR dispatch"
             >
               <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-              <span className="hidden sm:inline">DRILL: CREVASSE FALL (AUTO-SAR)</span>
-              <span className="sm:hidden">DRILL: S.A.R.</span>
+              <span className="px-1 py-0.2 rounded text-[9px] font-bold uppercase bg-rose-500/25 text-rose-300 border border-rose-500/35">SIM DRILL</span>
+              <span>Test Crevasse Fall</span>
             </button>
 
-            {/* Primary Distress SOS Broadcast */}
+            {/* SOS MAYDAY — must always be instantly accessible */}
             <button
               onClick={() => {
                 setIsDistressModalOpen(true);
@@ -822,10 +808,9 @@ export default function App() {
               }}
               style={{
                 background: 'linear-gradient(135deg, #EF4444, #9333EA)',
-                boxShadow: '0 8px 25px rgba(239, 68, 68, 0.45)',
+                boxShadow: activeDistressAlert ? '0 8px 25px rgba(239, 68, 68, 0.55)' : '0 6px 18px rgba(239, 68, 68, 0.35)',
               }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-white font-mono font-bold tracking-wide cursor-pointer hover:opacity-90 transition-all animate-pulse"
-              title="Trigger Emergency MAYDAY Console (1-Tap Fast SOS or Situation Report)"
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-white font-mono font-bold tracking-wide cursor-pointer hover:opacity-90 transition-all ${activeDistressAlert ? 'animate-pulse' : ''}`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>SOS MAYDAY</span>
@@ -858,8 +843,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Page Content — keyed so each workspace has a clean, unobtrusive arrival. */}
-        <main key={active} className="page-stage p-3 sm:p-4 lg:p-6 flex-1 min-w-0">{page}</main>
+        {/* Page Content */}
+        <main className="p-6 flex-1">{page}</main>
 
         {/* Offline Cache Status Footer */}
         <Footer
@@ -875,9 +860,6 @@ export default function App() {
         <EmergencyModal
           isOpen={isDistressModalOpen}
           assets={activeAssets}
-          user={user}
-          currentStation={selectedStation}
-          activeExpeditionName={activeDb.expeditions?.[0]?.name || 'EXP-701 Queen Maud Traverse'}
           onClose={() => setIsDistressModalOpen(false)}
           onTriggerEmergencyBroadcast={(incidentData) => {
             if (sim.isActive) {
@@ -928,18 +910,6 @@ export default function App() {
           geminiApiKey={geminiApiKey}
           onSaveKeys={handleSaveKeys}
           onClose={() => setIsApiKeyModalOpen(false)}
-        />
-      )}
-
-      {/* Offline Cache & Gateway Configuration Modal */}
-      {isOfflineModalOpen && (
-        <OfflineCacheModal
-          isOpen={isOfflineModalOpen}
-          onClose={() => setIsOfflineModalOpen(false)}
-          db={activeDb}
-          currentDeviceId={currentDeviceId}
-          currentDeviceType={currentDeviceType}
-          t={t}
         />
       )}
 

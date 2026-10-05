@@ -661,52 +661,6 @@ export function PreBootSystemCheck({ onComplete, onSkip, standaloneModal = false
         </div>
       </div>
 
-      {/* PINNED ACTIVE SENSOR FAULT & REMEDIATION DIAGNOSTIC BANNER (PHASE 10) */}
-      {injectedFault && (
-        <div className={`p-3.5 border-b font-mono transition-all shrink-0 ${
-          injectedFault === 'SIMULATED_COLD_SOAK_FAULT'
-            ? 'bg-rose-950/80 border-rose-500/80 text-rose-200 shadow-lg'
-            : 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200 shadow-lg'
-        }`}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
-              <span className="font-bold text-xs uppercase tracking-wider text-white">
-                {injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? '🚨 ACTIVE CRYOGENIC SENSOR FAULT DETECTED' : '⚡ SENSOR FAULT AUTO-REMEDIATED BY AI'}
-              </span>
-            </div>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-              injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'bg-rose-500/30 text-rose-300 border border-rose-500/50' : 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
-            }`}>
-              {injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'SEVERITY: CRITICAL (-38.4°C COLD-SOAK)' : 'STATUS: RESOLVED & VERIFIED'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px] bg-black/60 p-2.5 rounded-lg border border-white/10">
-            <div>
-              <span className="text-slate-400 block text-[9px] uppercase">Affected Sensor</span>
-              <span className="text-cyan-300 font-bold">FUEL-TRACE-SENS (0x0001DAE05840)</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[9px] uppercase">Subsystem</span>
-              <span className="text-white font-bold">Arctic Diesel F-34 Fluidics &amp; Trace Blanket</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[9px] uppercase">Current Sensor State</span>
-              <span className={injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                {injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'Temp -38.4°C (Waxing Risk)' : '+5.1°C Stabilized (Rail 3.8 bar)'}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[9px] uppercase">Automated Recovery Action</span>
-              <span className="text-amber-300 font-bold">
-                {injectedFault === 'SIMULATED_COLD_SOAK_FAULT' ? 'Circuit Tripped -> Engaging Auto-Remediation...' : 'Secondary Blanket Activated, Relay Bypassed'}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Terminal Main Log Stream Output */}
       <div 
         style={{ minHeight: standaloneModal ? '280px' : '380px' }}

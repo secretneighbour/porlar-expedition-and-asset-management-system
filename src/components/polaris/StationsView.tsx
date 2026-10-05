@@ -15,6 +15,8 @@ interface StationsViewProps {
   setDb?: React.Dispatch<React.SetStateAction<any>>;
   onNavigateToMap?: (coords?: { lat: number; lng: number }) => void;
   onNavigateToWeather?: (stationId: string) => void;
+  stations?: ResearchStation[];
+  onAddStation?: (station: ResearchStation) => void;
 }
 
 export function StationsView({
@@ -22,18 +24,22 @@ export function StationsView({
   db,
   setDb,
   onNavigateToMap,
-  onNavigateToWeather
+  onNavigateToWeather,
+  stations,
+  onAddStation
 }: StationsViewProps) {
   const [filterRegion, setFilterRegion] = useState<'ALL' | 'ANTARCTICA' | 'ARCTIC'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStation, setSelectedStation] = useState<ResearchStation | null>(null);
   const [isAddStationOpen, setIsAddStationOpen] = useState(false);
 
-  // Combine initial stations and any custom stations in DB
-  const stationsList: ResearchStation[] = [
-    ...INITIAL_STATIONS,
+  // Combine all authoritative stations from the backend with legacy customStations
+  const allRaw = [
+    ...(stations || INITIAL_STATIONS),
     ...(db?.customStations || [])
   ];
+
+  const stationsList = Array.from(new Map(allRaw.map(s => [s.id, s])).values());
 
   const filteredStations = stationsList.filter(s => {
     const matchesRegion = filterRegion === 'ALL' ||
@@ -85,7 +91,9 @@ export function StationsView({
       powerStatus: newStation.powerStatus
     };
 
-    if (setDb) {
+    if (onAddStation) {
+      onAddStation(created);
+    } else if (setDb) {
       setDb(prev => ({
         ...prev,
         customStations: [...(prev.customStations || []), created],
