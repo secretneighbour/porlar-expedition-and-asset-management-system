@@ -1,14 +1,34 @@
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const backendTarget = env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || env.VITE_API_URL || 'http://localhost:3000';
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'spa-fallback-generator',
+        closeBundle() {
+          const distDir = path.resolve(__dirname, 'dist');
+          const indexPath = path.join(distDir, 'index.html');
+          const fallbackPath = path.join(distDir, '200.html');
+          if (fs.existsSync(indexPath)) {
+            fs.copyFileSync(indexPath, fallbackPath);
+          }
+          // Ensure no recursive _redirects file is emitted
+          const redirectsPath = path.join(distDir, '_redirects');
+          if (fs.existsSync(redirectsPath)) {
+            fs.unlinkSync(redirectsPath);
+          }
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
