@@ -1536,10 +1536,10 @@ The production architecture runs natively on **Vercel Serverless Functions**:
    * **Value**: `1.4.2`
    *(Note: Cloudflare Pages v3 build image defaults to Bun 1.2.15 which cannot parse `lockfileVersion: 2`. Explicitly setting `BUN_VERSION=1.4.2` ensures Cloudflare installs the matching Bun version so `bun install --frozen-lockfile` succeeds deterministically).*
    * **Variable Name**: `VITE_API_BASE_URL`
-   * **Value**: The public HTTPS URL of your deployed Polar Operations backend API (e.g. `https://api.yourpolarserver.com` or your Cloudflare Worker/Tunnel domain).
-   *(Note: If hosting both frontend and backend on the same unified domain, leave `VITE_API_BASE_URL` empty to automatically use clean same-origin relative `/api/...` requests. Backend CORS automatically validates and allows `*.pages.dev`, `*.workers.dev`, and `*.trycloudflare.com` origins).*
+   * **Value**: (Optional) The public HTTPS URL of an external Polar Operations backend API (e.g. `https://api.yourpolarserver.com`).
+   *(Note: Cloudflare Pages includes a built-in Edge Function Gateway at `functions/api/[[catchall]].ts` backed by `_routes.json` and `_redirects`. If `VITE_API_BASE_URL` is empty, Cloudflare Pages directly serves `/api/health`, `/api/auth/login`, and `/api/heartbeat` with pure JSON on the edge. If `VITE_API_BASE_URL` is set, the gateway seamlessly proxies `/api/*` to the specified upstream backend with full CORS and header forwarding. In all cases, API routes are prevented from falling through to `index.html`).*
 5. **Deploy**:
-   Click **Save and Deploy**. Cloudflare will download Bun 1.4.2, verify the frozen lockfile in milliseconds, and build the static assets into `dist`.
+   Click **Save and Deploy**. Cloudflare will download Bun 1.4.2, verify the frozen lockfile in milliseconds, compile the edge functions in `functions/`, and build the static assets into `dist`.
 
 ---
 

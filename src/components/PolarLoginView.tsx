@@ -144,15 +144,21 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
           setStatusText(
             `Backend endpoint not found (HTTP 404) at ${apiUrl('/api/auth/login')}. Ensure backend service is deployed and running.`
           );
+        } else if (!contentType.includes('application/json')) {
+          setStatusText(
+            `Backend configuration error: Received HTML instead of JSON from ${apiUrl('/api/auth/login')}. Verify VITE_API_BASE_URL points to the live backend server.`
+          );
+        } else if (response.status === 502 || response.status === 504) {
+          setStatusText(
+            `Gateway error (HTTP ${response.status}): Upstream backend at ${apiUrl('/api/auth/login')} is unreachable or timed out. ${
+              data?.error?.message || ''
+            }`.trim()
+          );
         } else if (response.status >= 500) {
           setStatusText(
             `Server error (HTTP ${response.status}): ${
               data?.error?.message || data?.message || 'Polar Operations Backend encountered an internal error.'
             }`
-          );
-        } else if (!contentType.includes('application/json')) {
-          setStatusText(
-            `Backend configuration error: Received HTML instead of JSON from ${apiUrl('/api/auth/login')}. Verify VITE_API_BASE_URL points to the live backend server.`
           );
         } else {
           setStatusText(

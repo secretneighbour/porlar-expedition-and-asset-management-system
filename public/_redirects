@@ -1,0 +1,6 @@
+# Cloudflare Pages Routing Rules
+# 1. Do NOT rewrite /api/* to index.html (invoke Pages Functions or forward)
+/api/*  /api/:splat  200
+
+# 2. SPA client-side routing fallback for non-API web pages
+/*  /index.html  200
