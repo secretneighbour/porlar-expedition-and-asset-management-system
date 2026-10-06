@@ -1,29 +1,46 @@
-import type { IncomingMessage, ServerResponse } from 'http';
+/**
+ * GET /api/health
+ * Public health diagnostics endpoint for Polar Operations System
+ * Strictly returns booleans for environment variables to ensure zero secret leakage.
+ */
+
+import { handleCors, sendJson } from '../src/server/serverlessHandler';
+import { databaseManager } from '../src/server/database';
+import { getSafeEnvironmentStatus, validateServerEnvironment } from '../src/lib/env';
 
 export default function handler(req: any, res: any) {
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204;
-    return res.end();
+  if (handleCors(req, res, { allowedMethods: ['GET', 'OPTIONS'] })) {
+    return;
   }
 
-  res.statusCode = 200;
-  return res.end(
-    JSON.stringify({
-      status: 'ONLINE',
-      service: 'Polar Expedition Operations Command System',
-      timestamp: new Date().toISOString(),
-      database: {
-        status: 'connected',
-        storageType: 'vercel_serverless',
-        usersCount: 8,
-        assetsCount: 10,
-        expeditionsCount: 4,
-      },
-    })
-  );
+  if (req.method !== 'GET') {
+    res.statusCode = 405;
+    return res.end(JSON.stringify({ status: 'error', message: 'Method Not Allowed' }));
+  }
+
+  const dbHealth = databaseManager.getHealthInfo();
+  const envStatus = getSafeEnvironmentStatus();
+  const validation = validateServerEnvironment();
+
+  const isVercel = Boolean(process.env.VERCEL || process.env.NOW_BUILDER);
+  const environment = process.env.NODE_ENV || 'production';
+
+  sendJson(res, {
+    status: 'ok',
+    environment,
+    vercel: isVercel,
+    timestamp: new Date().toISOString(),
+    database: {
+      status: dbHealth.status,
+      storageType: dbHealth.storageType,
+      usersCount: dbHealth.usersCount,
+      assetsCount: dbHealth.assetsCount,
+      expeditionsCount: dbHealth.expeditionsCount,
+    },
+    env: envStatus,
+    system: {
+      geminiAiConfigured: validation.features.geminiAi,
+      supabaseConfigured: validation.features.supabase,
+    },
+  });
 }

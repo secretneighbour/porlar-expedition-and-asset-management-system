@@ -3882,31 +3882,31 @@
         "id": "RSC-0142",
         "name": "Dr. Elena Rostova",
         "role": "Scientist / Team Member",
-        "email": "elena.rostova@polar.gov.in",
+        "email": "e.rostova@polar-expedition.org",
         "password": "polar2026",
         "active": true
       },
       {
         "id": "AST-0101",
-        "name": "Vikram Nair",
-        "role": "Asset Manager",
-        "email": "vikram.nair@polar.gov.in",
+        "name": "Marcus Vance",
+        "role": "Asset Management",
+        "email": "m.vance@polar-expedition.org",
         "password": "polar2026",
         "active": true
       },
       {
         "id": "TRN-0301",
-        "name": "Marcus Vance",
-        "role": "Logistics Officer",
-        "email": "marcus.vance@polar.gov.in",
+        "name": "Capt. Francois Mercier",
+        "role": "Transportation",
+        "email": "f.mercier@polar-expedition.org",
         "password": "polar2026",
         "active": true
       },
       {
         "id": "ADM-0001",
-        "name": "Station Commander",
+        "name": "Base Cmdr. Henrik Lindqvist",
         "role": "Super Admin",
-        "email": "admin@polar.gov.in",
+        "email": "h.lindqvist@polar-expedition.org",
         "password": "polar2026",
         "active": true
       },
@@ -4008,6 +4008,30 @@
       }
     ],
     "auditLog": [
+      {
+        "id": "AUD-WP-6431",
+        "timestamp": "2026-10-06T13:53:36.431Z",
+        "actor": "GEMINI-WAYPOINT-AI",
+        "action": "AI_WAYPOINT_ROUTE_OPTIMIZED",
+        "details": "Optimized traverse order across 3 candidate waypoints. Mode: cv_heuristic_fallback.",
+        "severity": "normal"
+      },
+      {
+        "id": "AUD-WP-9318",
+        "timestamp": "2026-10-06T13:53:19.318Z",
+        "actor": "GEMINI-WAYPOINT-AI",
+        "action": "AI_WAYPOINT_ROUTE_OPTIMIZED",
+        "details": "Optimized traverse order across 3 candidate waypoints. Mode: cv_heuristic_fallback.",
+        "severity": "normal"
+      },
+      {
+        "id": "AUD-WP-8287",
+        "timestamp": "2026-10-06T13:52:38.287Z",
+        "actor": "GEMINI-WAYPOINT-AI",
+        "action": "AI_WAYPOINT_ROUTE_OPTIMIZED",
+        "details": "Optimized traverse order across 3 candidate waypoints. Mode: cv_heuristic_fallback.",
+        "severity": "normal"
+      },
       {
         "id": "AUD-AUTH-1960",
         "timestamp": "2026-09-28T12:46:01.960Z",
@@ -4453,5 +4477,5 @@
     ],
     "customWaypoints": []
   },
-  "lastUpdated": "2026-10-05T14:52:47.311Z"
+  "lastUpdated": "2026-10-06T13:57:17.325Z"
 }

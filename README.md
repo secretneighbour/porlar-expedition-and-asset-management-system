@@ -1450,83 +1450,142 @@ REQUIRE_PRODUCTION_SIGNING=true npm run android:build:release
 
 ---
 
-## 🔑 Unified Environment Configuration (`.env`)
+## 🔑 Environment Variable Architecture
 
-All project configuration across web, desktop (Tauri), mobile (Android), and the Node server is consolidated into a single `.env` file (with an example template in `.env.example`). No separate `.env.production` or `.env.development` files are required:
+POLAR-OS enforces strict architectural segregation between client-safe parameters and server-only secrets:
 
-```env
-# Centralized Backend Gateway URL
-VITE_API_BASE_URL="https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app"
+### 1. File Structure & Precedence
+* `.env.example`: Committed reference specification with sanitized placeholder keys.
+* `.env.local` / `.env`: Local development configuration (**strictly ignored by `.gitignore` — never commit secrets to Git!**).
+* **Vercel Project Settings → Environment Variables**: Authoritative configuration for production deployments.
 
-# Network & Server Port (defaults to 3000)
-PORT=3000
-HOST="0.0.0.0"
+### 2. Client-Side Variables (`NEXT_PUBLIC_*` / `VITE_*`)
+These variables are baked into the browser bundle and are safe for client-side execution:
+* `NEXT_PUBLIC_SUPABASE_URL` / `VITE_SUPABASE_URL`: Public Supabase API Gateway URL.
+* `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY`: Client-safe Anonymous Key.
+* `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` / `VITE_GOOGLE_MAPS_API_KEY`: Google Maps client key for satellite/terrain tiles.
+* `NEXT_PUBLIC_WS_URL` / `VITE_WS_URL`: Optional standalone WebSocket server URL (leave blank to use Vercel Serverless continuous HTTP polling sync).
+* `NEXT_PUBLIC_API_BASE_URL` / `VITE_API_BASE_URL`: API Base URL. **Leave empty for web deployments** so browsers use same-origin relative `/api/...` paths.
 
-# Optional Gemini AI API Key for Automated Route Risk & Tactical Reconnaissance
-GEMINI_API_KEY=""
-VITE_GEMINI_API_KEY=""
-
-# Optional Supabase Gateway Configuration
-VITE_SUPABASE_URL=""
-VITE_SUPABASE_ANON_KEY=""
-```
-
-*Note: You can also enter your Gemini and Google Maps API keys dynamically via the frontend **API Key Config** modal inside the application interface.*
+### 3. Server-Side Variables (Strictly Server-Only Secrets)
+These secrets are **never** bundled or exposed to the client:
+* `GEMINI_API_KEY`: Google Gemini API Key for autonomous SAR, route optimization & predictive analytics.
+* `AUTH_SECRET` / `JWT_SECRET`: Cryptographic secret for signing authoritative stateless HMAC-SHA256 session tokens.
+* `SUPABASE_SERVICE_ROLE_KEY`: Privileged server-side administrative key.
+* `DATABASE_URL`: Cloud / PostgreSQL database connection string.
+* `DATABASE_PATH`: Platform storage path (default: `./data/polar-database.json` in local development; routes safely to `/tmp/polar-database.json` on Vercel).
+* `PORT` / `HOST`: Local development network binding (`3000` / `0.0.0.0`).
+* `CORS_ALLOWED_ORIGINS`: Comma-delimited allowlist for cross-terminal access.
 
 ---
 
-## ☁️ Vercel Deployment & Cloud Hosting
+## ☁️ Vercel Production Deployment & Serverless Architecture
 
-POLAR-OS is engineered for cloud hosting on **Vercel** as a high-performance single-page application (SPA) with automated offline resilience and hybrid gateway connectivity.
+The production architecture runs natively on **Vercel Serverless Functions**:
 
-### 1. Zero-Configuration Deployment
-When importing this repository into Vercel:
-* **Framework Preset**: `Vite`
-* **Build Command**: `vite build` (or `npm run build`)
-* **Output Directory**: `dist`
-* **Configuration File**: Automatically managed via [`vercel.json`](vercel.json) with SPA clean rewrites:
+```text
+                    INTERNET
+                       │
+          ┌────────────▼────────────┐
+          │        VERCEL           │
+          │                         │
+          │ Next.js / Vite Frontend │
+          │         │               │
+          │         ▼               │
+          │     /api/*              │
+          │         │               │
+          │ Vercel Serverless API   │
+          └─────────┬───────────────┘
+                    │
+          ┌─────────┼──────────┐
+          ▼         ▼          ▼
+       Supabase   Gemini    External APIs
+```
+
+### 1. Step-by-Step Vercel Deployment Guide
+1. **Push your code to GitHub**:
+   Ensure all changes are pushed to your remote Git repository.
+2. **Import into Vercel**:
+   Go to [vercel.com](https://vercel.com) → **Add New Project** → Select your repository.
+3. **Build & Framework Settings**:
+   * Framework Preset: `Vite` (or `Other`)
+   * Build Command: `npm run build`
+   * Output Directory: `dist`
+4. **Configure Environment Variables**:
+   In **Project Settings → Environment Variables**, add:
+   * `GEMINI_API_KEY`: Your Gemini API key.
+   * `AUTH_SECRET`: A secure random cryptographic secret (e.g. `polar-ops-secret-key-2026`).
+   * `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` (if using Supabase persistence).
+   * Leave `NEXT_PUBLIC_API_BASE_URL` and `VITE_API_BASE_URL` **empty** so all browsers use same-origin relative `/api/...` requests.
+   * Select environments: **Production**, **Preview**, and **Development**.
+5. **Deploy**:
+   Click **Deploy**. Vercel will build the frontend into `dist` and deploy each endpoint in `api/` as a serverless function.
+
+---
+
+## 🔍 Production Diagnostics & Health Verification
+
+Verify your live production deployment by navigating to:
+
+```text
+https://YOUR-APP.vercel.app/api/health
+```
+
+### Sample `/api/health` Response:
 ```json
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "buildCommand": "vite build",
-  "outputDirectory": "dist",
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
-  ]
+  "status": "ok",
+  "environment": "production",
+  "vercel": true,
+  "timestamp": "2026-10-06T14:00:00.000Z",
+  "database": {
+    "status": "connected",
+    "storageType": "memory_fallback",
+    "usersCount": 16,
+    "assetsCount": 9,
+    "expeditionsCount": 4
+  },
+  "env": {
+    "GEMINI_API_KEY": true,
+    "AUTH_SECRET": true,
+    "DATABASE_URL": false,
+    "DATABASE_PATH": true,
+    "SUPABASE_URL": false,
+    "SUPABASE_SERVICE_ROLE_KEY": false,
+    "NEXT_PUBLIC_SUPABASE_URL": false,
+    "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY": false
+  },
+  "system": {
+    "geminiAiConfigured": true,
+    "supabaseConfigured": false
+  }
 }
 ```
 
-### 2. Operational Modes on Vercel
+#### Field Explanations:
+* `status`: Indicates operations gateway status (`ok`).
+* `environment`: Active deployment runtime (`production` or `development`).
+* `vercel`: `true` when executing in Vercel serverless lambda containers.
+* `database.status`: Connection status of state engine (`connected`).
+* `database.storageType`: Active persistence strategy (`supabase_cloud`, `file_json`, or `memory_fallback`).
+* `env`: **Safe boolean flags only.** Confirms which environment variables are present without leaking sensitive credentials or tokens.
+* `system.geminiAiConfigured`: `true` if Gemini 3.8 Flash is ready for live inference; if `false`, the system seamlessly runs high-precision deterministic heuristic models.
 
-| Deployment Mode | Configuration | Capabilities |
-| :--- | :--- | :--- |
-| **Vercel Serverless Mode** *(Default)* | Leave `VITE_API_URL` blank. | Client-side application uses clean relative paths (`/api/auth/login`, `/api/health`), automatically handled by Vercel serverless functions or proxy. |
-| **Connected External Backend** | Set `VITE_API_URL="https://your-node-backend.app"` | Remote Node/Express backend (`server.ts`) hosted on Railway, Render, Fly.io, or VPS. |
+---
 
-### 3. Vercel Environment Variables
+## 📱 Mobile, Tablet & Multi-Device Testing
 
-Configure these in **Vercel Project Settings > Environment Variables**:
-
-| Variable | Required? | Description |
-| :--- | :---: | :--- |
-| `VITE_API_URL` | *Optional* | Remote base URL for external backend server (`server.ts`). If omitted, POLAR-OS uses relative paths `/api/...` handled directly by Vercel serverless routes. |
-| `VITE_API_BASE_URL` | *Optional* | Backward-compatible alias for `VITE_API_URL`. |
-| `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
-| `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
-
-### 4. React Production Error Protection (Anti-Error #31)
-Production builds on Vercel are protected by the centralized [`safeFormat.ts`](src/utils/safeFormat.ts) suite:
-* `safeDisplayValue()`: Intercepts raw objects `{ code, message }`, telemetry records, and API errors, safely serializing them before JSX rendering.
-* `formatError()`: Extracts human-readable messages from HTTP, network, and Vercel serverless error objects.
-* `ErrorBoundary`: Automatically translates minified React errors (such as Error #31) into human-readable diagnostic messages with call stack previews and infinite reload protection.
+When testing on mobile phones (Android, iOS Safari) or tablets:
+1. Open the public HTTPS Vercel URL directly in your mobile browser:
+   ```text
+   https://YOUR-APP.vercel.app
+   ```
+2. **Never** attempt to access `http://localhost:3000` or `http://127.0.0.1:3000` from physical mobile devices or remote computers — physical phones cannot resolve the developer's laptop loopback.
+3. Because the frontend uses same-origin relative paths (`/api/auth/login`, `/api/health`, `/api/state`), all API requests are dispatched directly to the same deployment origin with zero CORS friction.
+4. **Offline Resilience**: If connectivity drops in the field, POLAR-OS caches state locally in IndexedDB / LocalStorage, and automatically reconciles changes once link status returns to online.
 
 ---
 
 ## 📄 License
 
-MIT © International Polar Expedition Consortium
+MIT © International Polar Expedition Operations Consortium

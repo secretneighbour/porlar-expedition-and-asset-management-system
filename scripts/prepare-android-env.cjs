@@ -276,16 +276,10 @@ function prepareEnvironment(options = { verbose: false }) {
     console.log(`  local.props:  ${fs.existsSync(localPropertiesPath) ? 'present' : 'missing'}`);
   }
 
-  // Ensure Android build uses the centralized backend URL rather than localhost
-  const CENTRAL_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
-  if (process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')) {
+  // Only configure backend URL override if explicitly targeted for Android native builds
+  const isAndroidBuild = process.argv.includes('--apk') || process.argv.includes('android');
+  if (isAndroidBuild && process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')) {
     process.env.VITE_API_BASE_URL = process.env.VITE_API_URL;
-  }
-  if (!process.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')) {
-    process.env.VITE_API_BASE_URL = CENTRAL_BACKEND_URL;
-  }
-  if (!process.env.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL.includes('localhost') || process.env.VITE_BACKEND_URL.includes('127.0.0.1')) {
-    process.env.VITE_BACKEND_URL = CENTRAL_BACKEND_URL;
   }
 
   return {

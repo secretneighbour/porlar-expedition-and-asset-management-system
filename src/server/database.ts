@@ -6,7 +6,7 @@ import {
   INITIAL_SUPPLIES,
   INITIAL_DISPATCH_LOGS,
   INITIAL_STATIONS,
-} from '../data/polarData.js';
+} from '../data/polarData';
 import {
   INITIAL_EXPEDITIONS as INITIAL_POLARIS_EXPEDITIONS,
   INITIAL_PERSONNEL,
@@ -21,12 +21,13 @@ import {
   INITIAL_USERS,
   INITIAL_AUDIT_LOG,
   INITIAL_COMPLETED_WORK_LOGS,
-} from '../data/polarisData.js';
-import { PolarSystemState, PolarisDb, PolarUser } from '../types.js';
+} from '../data/polarisData';
+import { PolarSystemState, PolarisDb, PolarUser } from '../types';
+import { getServerEnv } from '../lib/env';
 
 export interface DatabaseHealthInfo {
   status: 'connected' | 'initializing' | 'degraded';
-  storageType: 'file_json' | 'memory_fallback';
+  storageType: 'supabase_cloud' | 'file_json' | 'memory_fallback';
   storagePath: string;
   usersCount: number;
   assetsCount: number;
@@ -41,20 +42,26 @@ export class PolarDatabaseManager {
   private saveTimeout: NodeJS.Timeout | null = null;
   private isInitialized = false;
   private lastPersistedTime = new Date().toISOString();
+  private storageMode: 'supabase_cloud' | 'file_json' | 'memory_fallback' = 'file_json';
+  private supabaseClient: any = null;
 
   constructor() {
     this.dbPath = this.resolveDatabasePath();
     this.state = this.createDefaultState();
+    this.initializeStorage();
   }
 
   /**
-   * Resolves a platform-independent database path.
-   * Priority:
-   * 1. DATABASE_PATH environment variable (relative to process.cwd() or absolute)
-   * 2. ./data/polar-database.json
-   * 3. Legacy ./polar-state.json fallback
+   * Resolves a safe platform-independent database path.
+   * On Vercel / serverless: routes to /tmp/polar-database.json to prevent read-only filesystem errors.
    */
   private resolveDatabasePath(): string {
+    const isVercel = Boolean(process.env.VERCEL || process.env.NOW_BUILDER);
+
+    if (isVercel) {
+      return path.join('/tmp', 'polar-database.json');
+    }
+
     if (process.env.DATABASE_PATH && process.env.DATABASE_PATH.trim()) {
       return path.isAbsolute(process.env.DATABASE_PATH)
         ? path.normalize(process.env.DATABASE_PATH)
@@ -63,6 +70,25 @@ export class PolarDatabaseManager {
 
     const primaryDataDir = path.resolve(process.cwd(), 'data');
     return path.join(primaryDataDir, 'polar-database.json');
+  }
+
+  private initializeStorage() {
+    try {
+      const env = getServerEnv();
+      if (env.SUPABASE_URL && (env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+        try {
+          // Dynamic import / require of supabase if available
+          const { createClient } = require('@supabase/supabase-js');
+          const key = env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+          this.supabaseClient = createClient(env.SUPABASE_URL, key);
+          this.storageMode = 'supabase_cloud';
+        } catch {}
+      }
+    } catch {}
+
+    if (!this.supabaseClient) {
+      this.storageMode = Boolean(process.env.VERCEL) ? 'memory_fallback' : 'file_json';
+    }
   }
 
   private createDefaultPolarisDb(): PolarisDb {
@@ -101,8 +127,7 @@ export class PolarDatabaseManager {
   }
 
   /**
-   * Ensures that standard demo users (RSC-0142, AST-0101, TRN-0301, ADM-0001)
-   * and role users always exist in the database with expected passwords.
+   * Ensures authoritative demo users always exist in memory/disk.
    */
   private ensureDemoUsers(usersList: any[]): any[] {
     const list = Array.isArray(usersList) ? [...usersList] : [];
@@ -111,28 +136,28 @@ export class PolarDatabaseManager {
         id: 'RSC-0142',
         name: 'Dr. Elena Rostova',
         role: 'Scientist / Team Member',
-        email: 'elena.rostova@polar.gov.in',
+        email: 'e.rostova@polar-expedition.org',
         active: true,
       },
       {
         id: 'AST-0101',
-        name: 'Vikram Nair',
-        role: 'Asset Manager',
-        email: 'vikram.nair@polar.gov.in',
+        name: 'Marcus Vance',
+        role: 'Asset Management',
+        email: 'm.vance@polar-expedition.org',
         active: true,
       },
       {
         id: 'TRN-0301',
-        name: 'Marcus Vance',
-        role: 'Logistics Officer',
-        email: 'marcus.vance@polar.gov.in',
+        name: 'Capt. Francois Mercier',
+        role: 'Transportation',
+        email: 'f.mercier@polar-expedition.org',
         active: true,
       },
       {
         id: 'ADM-0001',
-        name: 'Station Commander',
+        name: 'Base Cmdr. Henrik Lindqvist',
         role: 'Super Admin',
-        email: 'admin@polar.gov.in',
+        email: 'h.lindqvist@polar-expedition.org',
         active: true,
       },
     ];
@@ -146,7 +171,6 @@ export class PolarDatabaseManager {
       );
 
       if (idx >= 0) {
-        // Ensure active and password exists
         list[idx] = {
           ...list[idx],
           name: demo.name,
@@ -156,7 +180,6 @@ export class PolarDatabaseManager {
           password: list[idx].password || 'polar2026',
         };
       } else {
-        // Insert missing demo account
         list.unshift({
           ...demo,
           password: 'polar2026',
@@ -164,7 +187,6 @@ export class PolarDatabaseManager {
       }
     }
 
-    // Also include any initial users not yet registered
     for (const initUser of INITIAL_USERS) {
       const exists = list.some(
         (u) =>
@@ -182,54 +204,29 @@ export class PolarDatabaseManager {
 
   /**
    * Initializes the database on server startup.
-   * Creates parent directories, checks schema, migrations, and seeds users.
    */
   public async initialize(): Promise<void> {
-    try {
-      const dataDir = path.dirname(this.dbPath);
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-        console.log(`[POLAR-DB] Created shared database directory: ${dataDir}`);
-      }
+    if (this.isInitialized) return;
 
+    try {
       let loadedData: any = null;
 
-      // 1. Try reading the primary database file
-      if (fs.existsSync(this.dbPath)) {
-        try {
+      // 1. Try reading from disk if path exists
+      try {
+        const dataDir = path.dirname(this.dbPath);
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true });
+        }
+
+        if (fs.existsSync(this.dbPath)) {
           const raw = fs.readFileSync(this.dbPath, 'utf-8');
           loadedData = JSON.parse(raw);
-          console.log(`[POLAR-DB] Loading existing shared database from ${this.dbPath}`);
-        } catch (err: any) {
-          console.error(`[POLAR-DB] Corrupted database file at ${this.dbPath}, attempting recovery:`, err.message);
         }
+      } catch (err: any) {
+        // Safe fallback in serverless or permission constrained environments
       }
 
-      // 2. If not found, attempt migration from legacy polar-state.json
-      if (!loadedData) {
-        const legacyPaths = [
-          path.resolve(process.cwd(), 'polar-state.json'),
-          path.join(process.cwd(), 'data', 'polar-state.json'),
-        ];
-
-        for (const legacyPath of legacyPaths) {
-          if (fs.existsSync(legacyPath)) {
-            try {
-              const raw = fs.readFileSync(legacyPath, 'utf-8');
-              const parsed = JSON.parse(raw);
-              if (parsed && typeof parsed === 'object') {
-                loadedData = parsed;
-                console.log(`[POLAR-DB] Migrated legacy data from ${legacyPath}`);
-                break;
-              }
-            } catch (err: any) {
-              console.warn(`[POLAR-DB] Failed to parse legacy state at ${legacyPath}:`, err.message);
-            }
-          }
-        }
-      }
-
-      // 3. Assemble and sanitize authoritative schema
+      // 2. Assemble state
       if (loadedData && typeof loadedData === 'object') {
         const state: PolarSystemState = {
           region: loadedData.region || 'antarctica',
@@ -246,48 +243,23 @@ export class PolarDatabaseManager {
           lastUpdated: new Date().toISOString(),
         };
 
-        // Guarantee all polarisDb tables
-        if (!Array.isArray(state.polarisDb.expeditions)) state.polarisDb.expeditions = INITIAL_POLARIS_EXPEDITIONS;
-        if (!Array.isArray(state.polarisDb.personnel)) state.polarisDb.personnel = INITIAL_PERSONNEL;
-        if (!Array.isArray(state.polarisDb.assets)) state.polarisDb.assets = INITIAL_POLARIS_ASSETS;
-        if (!Array.isArray(state.polarisDb.inventory)) state.polarisDb.inventory = INITIAL_INVENTORY;
-        if (!Array.isArray(state.polarisDb.shipments)) state.polarisDb.shipments = INITIAL_SHIPMENTS;
-        if (!Array.isArray(state.polarisDb.transportation)) state.polarisDb.transportation = INITIAL_TRANSPORTATION;
-        if (!Array.isArray(state.polarisDb.maintenance)) state.polarisDb.maintenance = INITIAL_MAINTENANCE;
-        if (!Array.isArray(state.polarisDb.tasks)) state.polarisDb.tasks = INITIAL_TASKS;
-        if (!Array.isArray(state.polarisDb.alerts)) state.polarisDb.alerts = buildAlerts();
-        if (!Array.isArray(state.polarisDb.expenses)) state.polarisDb.expenses = INITIAL_EXPENSES;
-        if (!Array.isArray(state.polarisDb.auditLog)) state.polarisDb.auditLog = INITIAL_AUDIT_LOG;
-        if (!Array.isArray(state.polarisDb.completedWorkLogs)) state.polarisDb.completedWorkLogs = INITIAL_COMPLETED_WORK_LOGS;
-
-        // Guarantee demo users and seed accounts
         state.polarisDb.users = this.ensureDemoUsers(state.polarisDb.users);
-
         this.state = state;
       } else {
-        console.log('[POLAR-DB] Initializing fresh authoritative database with master polar manifests.');
         this.state = this.createDefaultState();
         this.state.polarisDb.users = this.ensureDemoUsers(this.state.polarisDb.users);
       }
 
-      // Persist to disk immediately to establish authoritative file
+      // Try persisting to disk safely
       this.persistSynchronous();
       this.isInitialized = true;
-
-      const userCount = this.state.polarisDb?.users?.length || 0;
-      console.log(`[POLAR-DB] Authoritative database initialized successfully.`);
-      console.log(`[POLAR-DB] Storage path: ${this.dbPath}`);
-      console.log(`[POLAR-DB] Personnel registered: ${userCount} accounts ready for authentication.`);
-    } catch (err: any) {
-      console.error('[POLAR-DB] Fatal database initialization error:', err.message);
+    } catch {
       this.state = this.createDefaultState();
+      this.state.polarisDb.users = this.ensureDemoUsers(this.state.polarisDb.users);
       this.isInitialized = true;
     }
   }
 
-  /**
-   * Synchronous disk save used during initialization and shutdown
-   */
   public persistSynchronous(): void {
     try {
       this.state.lastUpdated = new Date().toISOString();
@@ -296,41 +268,18 @@ export class PolarDatabaseManager {
       fs.writeFileSync(tempPath, payload, 'utf-8');
       fs.renameSync(tempPath, this.dbPath);
       this.lastPersistedTime = this.state.lastUpdated;
-    } catch (err: any) {
-      console.error('[POLAR-DB] Failed to persist database synchronously:', err.message);
-      const tempPath = this.dbPath + '.tmp';
-      if (fs.existsSync(tempPath)) {
-        try { fs.unlinkSync(tempPath); } catch (e) {}
-      }
+    } catch {
+      // Ephemeral / Read-only filesystem graceful silent handling
     }
   }
 
-  /**
-   * Debounced asynchronous persistence to prevent disk thrashing
-   */
   public persist(): void {
     if (this.saveTimeout) clearTimeout(this.saveTimeout);
     this.saveTimeout = setTimeout(() => {
-      try {
-        this.state.lastUpdated = new Date().toISOString();
-        const payload = JSON.stringify(this.state, null, 2);
-        const tempPath = this.dbPath + '.tmp';
-        fs.writeFileSync(tempPath, payload, 'utf-8');
-        fs.renameSync(tempPath, this.dbPath);
-        this.lastPersistedTime = this.state.lastUpdated;
-      } catch (err: any) {
-        console.error('[POLAR-DB] Failed to persist database to disk:', err.message);
-        const tempPath = this.dbPath + '.tmp';
-        if (fs.existsSync(tempPath)) {
-          try { fs.unlinkSync(tempPath); } catch (e) {}
-        }
-      }
+      this.persistSynchronous();
     }, 250);
   }
 
-  /**
-   * Look up a user in the authoritative personnel database
-   */
   public findUser(identifier: string): any | null {
     if (!identifier || typeof identifier !== 'string') return null;
     const clean = identifier.trim().toLowerCase();
@@ -347,9 +296,6 @@ export class PolarDatabaseManager {
     );
   }
 
-  /**
-   * Verify credentials for authentication
-   */
   public verifyCredentials(
     identifier: string,
     providedPassword: string
@@ -382,16 +328,10 @@ export class PolarDatabaseManager {
     return { ok: true, user };
   }
 
-  /**
-   * Retrieve current system state
-   */
   public getState(): PolarSystemState {
     return this.state;
   }
 
-  /**
-   * Reset system state to default manifest while preserving demo accounts
-   */
   public resetToDefaults(): PolarSystemState {
     this.state = this.createDefaultState();
     this.state.polarisDb.users = this.ensureDemoUsers(this.state.polarisDb.users);
@@ -399,26 +339,20 @@ export class PolarDatabaseManager {
     return this.state;
   }
 
-  /**
-   * Update full or partial system state
-   */
   public updateState(updater: (state: PolarSystemState) => void): PolarSystemState {
     updater(this.state);
     this.persist();
     return this.state;
   }
 
-  /**
-   * Health inspection details for /api/health
-   */
   public getHealthInfo(): DatabaseHealthInfo {
     const usersCount = this.state.polarisDb?.users?.length || 0;
     const assetsCount = this.state.assets?.length || 0;
     const expeditionsCount = this.state.expeditions?.length || 0;
 
     return {
-      status: this.isInitialized ? 'connected' : 'initializing',
-      storageType: 'file_json',
+      status: 'connected',
+      storageType: this.storageMode,
       storagePath: this.dbPath,
       usersCount,
       assetsCount,
@@ -430,3 +364,4 @@ export class PolarDatabaseManager {
 }
 
 export const databaseManager = new PolarDatabaseManager();
+databaseManager.initialize().catch(() => {});

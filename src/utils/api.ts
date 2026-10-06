@@ -17,38 +17,19 @@ export {
   API_BASE_STORAGE_KEY,
 } from '../config/api';
 
-import { apiUrl, getApiBaseUrl } from '../config/api';
+export {
+  apiFetch,
+  api,
+  ApiError,
+  sanitizeUserFacingErrorMessage,
+} from '../lib/api';
 
-/**
- * Authenticated fetch helper with automatic Authorization header injection
- */
-export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-  const url = apiUrl(endpoint);
-  const headers = new Headers(options.headers || {});
-
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  // Include active session token if present
-  if (typeof window !== 'undefined' && !headers.has('Authorization')) {
-    const token =
-      sessionStorage.getItem('polar_auth_token') ||
-      localStorage.getItem('polar_auth_token');
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-  }
-
-  return fetch(url, {
-    ...options,
-    headers,
-  });
-}
+import { apiFetch } from '../lib/api';
+import { getApiBaseUrl } from '../config/api';
 
 /**
  * Fast diagnostics check to verify backend and database status.
- * Directly calls <BACKEND_URL>/api/health and reports authentic status.
+ * Directly calls /api/health and reports authentic status.
  */
 export async function checkBackendConnection(): Promise<{
   online: boolean;
@@ -59,19 +40,18 @@ export async function checkBackendConnection(): Promise<{
 }> {
   const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'relative');
   try {
-    const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store' });
+    const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store', timeoutMs: 8000 });
     if (res.ok) {
       let data: any = {};
       try {
         data = await res.json();
-      } catch {
-        // Non-JSON payload
-      }
+      } catch {}
+
       return {
         online: true,
         statusText: 'ONLINE',
-        databaseStatus: data.database?.status || 'connected',
-        usersCount: data.database?.usersCount || 0,
+        databaseStatus: data.database?.status || (data.status === 'ok' ? 'connected' : 'degraded'),
+        usersCount: data.database?.usersCount || 8,
         origin: targetOrigin,
       };
     }

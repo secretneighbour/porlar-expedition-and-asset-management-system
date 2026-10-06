@@ -1,17 +1,12 @@
 /**
  * Centralized API & Backend Gateway Configuration
  * Single Source of Truth for all frontend API & WebSocket requests.
+ * Fully compatible with Vercel Serverless Functions, Web, Mobile browsers, and Tauri Desktop.
  */
 
-import { isMobile, isTauri } from '../platform';
+import { isTauri } from '../platform';
 
 export const API_BASE_STORAGE_KEY = 'polar_api_base_url';
-
-/**
- * Authoritative default backend gateway URL.
- * Centralized Single Source of Truth for production mobile deployments.
- */
-export const DEFAULT_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
 
 /**
  * Normalizes backend URLs:
@@ -39,11 +34,18 @@ export function normalizeBackendUrl(rawUrl?: string | null): string {
  * In a web deployment (like Vercel), defaults to empty string so requests use relative paths (/api/...).
  */
 export const API_BASE_URL: string = normalizeBackendUrl(
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_BACKEND_URL ||
-  ''
+  (typeof import.meta !== 'undefined' &&
+    ((import.meta as any).env?.VITE_API_URL ||
+      (import.meta as any).env?.VITE_API_BASE_URL ||
+      (import.meta as any).env?.VITE_BACKEND_URL)) ||
+    ''
 );
+
+/**
+ * Default fallback backend gateway URL for standalone environments.
+ * Empty string ensures web deployments use same-origin relative paths.
+ */
+export const DEFAULT_BACKEND_URL = API_BASE_URL || '';
 
 /**
  * Helper to check if a target URL points to loopback/localhost
@@ -65,9 +67,6 @@ export function isNgrokUrl(url?: string | null): boolean {
  * Validates the API Base URL against runtime environment constraints.
  */
 export function validateApiBaseUrl(url?: string | null): { valid: boolean; warning?: string; error?: string } {
-  const isAndroidOrMobile = isMobile();
-  const isProduction = import.meta.env.PROD;
-
   if (!url || !url.trim()) {
     // Relative paths are expected, secure, and valid on web / Vercel
     return { valid: true };
@@ -76,16 +75,10 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
   const clean = normalizeBackendUrl(url);
 
   if (isLocalhost(clean)) {
-    if (isAndroidOrMobile) {
-      return {
-        valid: false,
-        error: `[POLAR API CONFIG ERROR] Critical: Android application is configured with loopback '${clean}'. A physical Android phone cannot reach localhost on your development computer!`,
-      };
-    }
-    if (isProduction && isTauri()) {
+    if (isTauri()) {
       return {
         valid: true,
-        warning: `[POLAR API CONFIG WARNING] Production Tauri desktop build is targeting '${clean}'. For field deployment, ensure a remote base station URL is specified.`,
+        warning: `[POLAR API CONFIG WARNING] Desktop build is targeting '${clean}'. For field deployment, ensure a remote base station URL is specified.`,
       };
     }
   }
@@ -97,9 +90,8 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
  * Retrieves the effective API Base URL with precedence:
  * 1. Window runtime override (window.__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
- * 3. Build-time environment variable (VITE_API_URL / VITE_API_BASE_URL)
- * 4. Android / Mobile fallback (DEFAULT_BACKEND_URL)
- * 5. Web environment default: empty string '' (for clean relative paths like /api/auth/login)
+ * 3. Standard Browser / Web (Mobile & Desktop): Returns empty string '' for clean relative /api/... paths
+ * 4. Desktop / Native Tauri: Build-time environment variable or configured base
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit window runtime override (e.g. injected by test harnesses)
@@ -114,44 +106,27 @@ export function getApiBaseUrl(): string {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
       if (stored && stored.trim()) {
         const cleanStored = normalizeBackendUrl(stored);
-        if (isMobile() && isLocalhost(cleanStored)) {
-          console.warn(`[POLAR API] Discarding stale localhost override on mobile device: ${cleanStored}`);
-        } else {
-          return cleanStored;
-        }
+        if (cleanStored) return cleanStored;
       }
     } catch {
       // localStorage may fail in restricted/private contexts
     }
-  }
 
-  // 3. Build-time environment variable (VITE_API_URL or VITE_API_BASE_URL)
-  if (API_BASE_URL) {
-    if (isMobile() && isLocalhost(API_BASE_URL)) {
-      console.warn(
-        `[POLAR API CONFIG] Localhost URL detected on mobile ('${API_BASE_URL}'); automatically falling back to central gateway: ${DEFAULT_BACKEND_URL}`
-      );
-      return DEFAULT_BACKEND_URL;
+    // 3. Any standard browser session (mobile phone, tablet, or desktop PC):
+    // Always use clean relative paths (/api/...) targeting the current deployment!
+    if (!isTauri()) {
+      return '';
     }
-    return API_BASE_URL;
   }
 
-  // 4. On Android / Mobile: relative URLs cannot resolve against a remote origin, so use gateway fallback
-  if (isMobile()) {
-    return DEFAULT_BACKEND_URL;
-  }
-
-  // 5. In standard browser / web (including Vercel deployment):
-  // Return empty string so all requests use clean relative paths (e.g. '/api/auth/login')
-  return '';
+  // 4. In native desktop Tauri: use build-time environment variable
+  return API_BASE_URL;
 }
 
 /**
  * Resolves an API endpoint path to a URL.
- * Honors centralized API_BASE_URL across all targets:
- * - On Mobile (Android/iOS) & Tauri: Uses complete centralized URL from .env
- * - In Web browsers: Automatically uses clean relative path when targeting same origin/Vercel host
  * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api.
+ * Web browsers and mobile phones accessing the Vercel web app automatically use clean relative paths.
  */
 export function apiUrl(endpoint: string): string {
   const base = getApiBaseUrl().replace(/\/+$/, '');
@@ -168,23 +143,17 @@ export function apiUrl(endpoint: string): string {
   }
 
   // In standard browser on the same host (or Vercel preview environments),
-  // prefer clean relative paths to avoid cross-origin CORS or Vercel preview protection redirects
-  if (typeof window !== 'undefined' && window.location.host && !isMobile() && !isTauri()) {
+  // prefer clean relative paths to avoid cross-origin CORS issues
+  if (typeof window !== 'undefined' && !isTauri()) {
+    if (!base) {
+      return path;
+    }
     try {
-      if (base) {
-        const parsedBase = new URL(base);
-        if (
-          parsedBase.host === window.location.host ||
-          (window.location.hostname.endsWith('.vercel.app') && parsedBase.hostname.endsWith('.vercel.app'))
-        ) {
-          return path;
-        }
-      } else {
+      const parsedBase = new URL(base);
+      if (parsedBase.host === window.location.host) {
         return path;
       }
-    } catch {
-      // In case of non-URL base string, proceed to fullUrl construction
-    }
+    } catch {}
   }
 
   let fullUrl = base ? `${base}${path}` : path;
@@ -217,19 +186,12 @@ export function wsUrl(path: string = '/ws'): string {
   }
 
   // In browser, derive directly from current origin
-  if (typeof window !== 'undefined' && window.location.host && !isMobile()) {
+  if (typeof window !== 'undefined' && window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${cleanPath}`;
   }
 
-  // Fallback for mobile / non-browser
-  try {
-    const parsed = new URL(DEFAULT_BACKEND_URL);
-    const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProtocol}//${parsed.host}${cleanPath}`;
-  } catch {
-    return `wss://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app${cleanPath}`;
-  }
+  return '';
 }
 
 /**
@@ -260,7 +222,6 @@ export function clearCustomApiBaseUrl(): void {
 // Global automatic ngrok bypass injection for browser/webview environments
 if (typeof window !== 'undefined') {
   try {
-    // Attempt setting cookie for ngrok interstitial bypass
     document.cookie = 'ngrok-skip-browser-warning=69420; path=/; max-age=31536000; SameSite=None; Secure';
   } catch {}
 

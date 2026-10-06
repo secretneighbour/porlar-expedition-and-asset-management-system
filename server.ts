@@ -38,6 +38,8 @@ import {
   Waypoint,
 } from './src/types.js';
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
+import { findAStarPath } from './src/utils/polarRouteAStar.js';
+import { verifySessionToken } from './src/server/auth.js';
 import os from 'os';
 import { GoogleGenAI } from '@google/genai';
 import { databaseManager } from './src/server/database.js';
@@ -495,18 +497,28 @@ async function startServer() {
   // ============================================================================
   
   // Phase 2: Reusable Authentication Middleware
-  function requireAuth(req, res, next) {
+  function requireAuth(req: any, res: any, next: any) {
     const authHeader = req.headers.authorization;
     const token = (authHeader && authHeader.startsWith('Bearer '))
       ? authHeader.slice(7)
       : req.query.token || (req.body && req.body.token);
 
-    if (!token || !authSessions.has(token)) {
+    if (!token) {
       return res.status(401).json({ ok: false, error: 'Unauthorized: Valid session required.' });
     }
 
-    req.user = authSessions.get(token);
-    next();
+    if (authSessions.has(token)) {
+      req.user = authSessions.get(token);
+      return next();
+    }
+
+    const verified = verifySessionToken(token);
+    if (verified.valid && verified.user) {
+      req.user = verified.user;
+      return next();
+    }
+
+    return res.status(401).json({ ok: false, error: verified.error || 'Unauthorized: Valid session required.' });
   }
 
   // Phase 2: Reusable RBAC Middleware
@@ -2218,6 +2230,35 @@ SCHEMA:
       });
     }
   });
+
+  // Tactical Polar A* Search endpoint
+  app.post('/api/ai/route-optimizer/astar', (req, res) => {
+    try {
+      const { startNode, goalNode, waypoints, dangerZones, environment, asset } = req.body || {};
+      if (!startNode || !goalNode) {
+        return res.status(400).json({ ok: false, error: 'startNode and goalNode coordinates are required.' });
+      }
+
+      const env = {
+        tempC: -42,
+        windSpeedKts: 22,
+        dangerZones: dangerZones || [],
+        ...environment,
+      };
+
+      const result = findAStarPath(startNode, goalNode, env, asset || {}, waypoints || []);
+
+      res.json({
+        status: 'ok',
+        ok: true,
+        ...result,
+      });
+    } catch (err: any) {
+      console.error('[POLAR-AI] A* route optimization error:', err.message);
+      res.status(500).json({ ok: false, error: err.message || 'A* pathfinding calculation error.' });
+    }
+  });
+
   function handleClientAction(action: string, payload: any) {
     switch (action) {
       case 'UPDATE_REGION':

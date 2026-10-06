@@ -83,23 +83,26 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         }),
       });
 
-      let data: AuthLoginResponse;
+      let data: any;
       try {
         data = await response.json();
       } catch (jsonErr) {
         throw new Error('Backend returned an invalid non-JSON response. Check network proxy or server logs.');
       }
 
-      if (response.ok && data.ok && data.user) {
-        setStatusText(`Authenticated as ${data.user.role} — routing to operations console…`);
+      if (response.ok && (data.ok || data.success) && (data.user || data.data?.user)) {
+        const userObj = data.user || data.data?.user;
+        const userRole = userObj.role;
+        setStatusText(`Authenticated as ${userRole} — routing to operations console…`);
         setStatusType('success');
 
         // Persist session token for authenticated REST & WebSocket communication
-        if (data.token) {
+        const token = data.token || data.data?.token;
+        if (token) {
           try {
-            sessionStorage.setItem('polar_auth_token', data.token);
+            sessionStorage.setItem('polar_auth_token', token);
             if (remember) {
-              localStorage.setItem('polar_auth_token', data.token);
+              localStorage.setItem('polar_auth_token', token);
             }
           } catch {}
         }
@@ -107,24 +110,33 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         setTimeout(() => {
           onLoginSuccess(
             {
-              id: data.user!.id,
-              name: data.user!.name,
-              role: data.user!.role,
-              email: data.user!.email,
+              id: userObj.id,
+              name: userObj.name,
+              role: userObj.role,
+              email: userObj.email,
               active: true,
             },
-            data.dashboardRoute || 'dashboard',
+            data.dashboardRoute || data.data?.dashboardRoute || 'dashboard',
             remember
           );
         }, 350);
       } else {
-        setStatusText(data.error || 'Authentication rejected. Verify your credentials.');
+        const errDetail =
+          data.error?.message ||
+          (typeof data.error === 'string' ? data.error : null) ||
+          data.message ||
+          'Authentication rejected. Verify your credentials.';
+        setStatusText(errDetail);
         setStatusType('error');
       }
     } catch (err: any) {
       console.error('[PolarLoginView] Backend authentication failure:', err.message);
-      const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
-      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify your network connection and backend service status.`);
+      const isNetworkErr = !err.status || err.message?.includes('fetch') || err.message?.includes('Network');
+      if (isNetworkErr) {
+        setStatusText('Backend unavailable: The Polar Operations API could not be reached. Check your network connection or try again.');
+      } else {
+        setStatusText(err.message || 'Authentication error. Please check your credentials and try again.');
+      }
       setStatusType('error');
       verifyBackend();
     } finally {

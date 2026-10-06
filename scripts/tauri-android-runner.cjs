@@ -17,16 +17,9 @@ const projectRoot = path.resolve(__dirname, '..');
 // Prepare SDK, NDK, and local.properties
 const { env } = prepareEnvironment({ verbose: false });
 
-// Ensure Android build uses the centralized backend URL rather than localhost
-const CENTRAL_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
+// If an explicit remote backend URL is provided via env, ensure it is set
 if (env.VITE_API_URL && !env.VITE_API_URL.includes('localhost')) {
   env.VITE_API_BASE_URL = env.VITE_API_URL;
-}
-if (!env.VITE_API_BASE_URL || env.VITE_API_BASE_URL.includes('localhost') || env.VITE_API_BASE_URL.includes('127.0.0.1')) {
-  env.VITE_API_BASE_URL = CENTRAL_BACKEND_URL;
-}
-if (!env.VITE_BACKEND_URL || env.VITE_BACKEND_URL.includes('localhost') || env.VITE_BACKEND_URL.includes('127.0.0.1')) {
-  env.VITE_BACKEND_URL = CENTRAL_BACKEND_URL;
 }
 
 const rawArgs = process.argv.slice(2);
