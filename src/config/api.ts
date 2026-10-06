@@ -29,15 +29,16 @@ export function normalizeBackendUrl(rawUrl?: string | null): string {
 }
 
 /**
- * Raw build-time environment variable injected by Vite.
- * Reads VITE_API_URL, VITE_API_BASE_URL, or VITE_BACKEND_URL.
- * In a web deployment (like Vercel), defaults to empty string so requests use relative paths (/api/...).
+ * Raw build-time environment variable injected by Vite or build environment.
+ * Reads VITE_API_BASE_URL, VITE_API_URL, VITE_BACKEND_URL, or NEXT_PUBLIC_API_BASE_URL.
+ * If not specified, defaults to empty string so requests use same-origin relative paths (/api/...).
  */
 export const API_BASE_URL: string = normalizeBackendUrl(
   (typeof import.meta !== 'undefined' &&
-    ((import.meta as any).env?.VITE_API_URL ||
-      (import.meta as any).env?.VITE_API_BASE_URL ||
-      (import.meta as any).env?.VITE_BACKEND_URL)) ||
+    ((import.meta as any).env?.VITE_API_BASE_URL ||
+      (import.meta as any).env?.VITE_API_URL ||
+      (import.meta as any).env?.VITE_BACKEND_URL ||
+      (import.meta as any).env?.NEXT_PUBLIC_API_BASE_URL)) ||
     ''
 );
 
@@ -90,8 +91,8 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
  * Retrieves the effective API Base URL with precedence:
  * 1. Window runtime override (window.__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
- * 3. Standard Browser / Web (Mobile & Desktop): Returns empty string '' for clean relative /api/... paths
- * 4. Desktop / Native Tauri: Build-time environment variable or configured base
+ * 3. Configured build-time backend gateway (VITE_API_BASE_URL, VITE_API_URL, VITE_BACKEND_URL)
+ * 4. Default for web browsers without configured external backend: clean relative paths ('')
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit window runtime override (e.g. injected by test harnesses)
@@ -100,7 +101,7 @@ export function getApiBaseUrl(): string {
     if (override) return override;
   }
 
-  // 2. User-configured localStorage override (from Operations Gateway modal on device)
+  // 2. User-configured override in localStorage (from Operations Gateway modal on device)
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
@@ -111,16 +112,15 @@ export function getApiBaseUrl(): string {
     } catch {
       // localStorage may fail in restricted/private contexts
     }
-
-    // 3. Any standard browser session (mobile phone, tablet, or desktop PC):
-    // Always use clean relative paths (/api/...) targeting the current deployment!
-    if (!isTauri()) {
-      return '';
-    }
   }
 
-  // 4. In native desktop Tauri: use build-time environment variable
-  return API_BASE_URL;
+  // 3. Build-time environment variable configured in .env or Cloudflare/Vercel build settings
+  if (API_BASE_URL && API_BASE_URL.trim()) {
+    return API_BASE_URL;
+  }
+
+  // 4. Default: Same-origin relative paths (/api/...) for unified web deployments
+  return '';
 }
 
 /**
@@ -173,9 +173,20 @@ export function apiUrl(endpoint: string): string {
  */
 export function wsUrl(path: string = '/ws'): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  // 1. Explicit dedicated WebSocket server URL (e.g. VITE_WS_URL)
+  const explicitWs =
+    typeof import.meta !== 'undefined' &&
+    ((import.meta as any).env?.VITE_WS_URL || (import.meta as any).env?.NEXT_PUBLIC_WS_URL);
+  if (explicitWs && explicitWs.trim()) {
+    const cleanWs = explicitWs.trim().replace(/\/+$/, '');
+    return `${cleanWs}${cleanPath}`;
+  }
+
   const base = getApiBaseUrl();
 
-  if (base && !isLocalhost(base)) {
+  // 2. Base URL configured
+  if (base) {
     try {
       const parsed = new URL(base);
       const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -185,7 +196,7 @@ export function wsUrl(path: string = '/ws'): string {
     }
   }
 
-  // In browser, derive directly from current origin
+  // 3. In browser, derive directly from current origin
   if (typeof window !== 'undefined' && window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${cleanPath}`;

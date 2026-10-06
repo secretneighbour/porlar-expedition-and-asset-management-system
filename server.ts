@@ -429,7 +429,7 @@ async function startServer() {
       origin &&
       (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
         /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com|vercel\.app)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com|vercel\.app|pages\.dev|workers\.dev)(:\d+)?$/.test(origin) ||
         /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/.test(origin));
 
     if (origin && (isLocalOrLan || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0)) {

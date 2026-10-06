@@ -39,6 +39,7 @@
     "preview": "vite preview --port=3000 --host=0.0.0.0",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "test:api": "bun scripts/verify-api-connection.ts",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "npm run build",
     "tauri": "tauri",

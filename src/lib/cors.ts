@@ -10,6 +10,8 @@ const LOCAL_LAN_REGEX =
   /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/i;
 
 const VERCEL_DOMAIN_REGEX = /^https:\/\/([a-zA-Z0-9_-]+\.)*vercel\.app$/i;
+const CLOUDFLARE_DOMAIN_REGEX = /^https:\/\/([a-zA-Z0-9_-]+\.)*(pages\.dev|workers\.dev|trycloudflare\.com)$/i;
+const SATELLITE_TUNNEL_REGEX = /^https:\/\/([a-zA-Z0-9_-]+\.)*(ngrok-free\.app|ngrok\.app|localtunnel\.me)$/i;
 const TAURI_ORIGIN_REGEX = /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/i;
 
 export interface CorsOptions {
@@ -42,10 +44,16 @@ export function isAllowedOrigin(origin?: string | null): boolean {
   // 2. Check Vercel production and preview domains
   if (VERCEL_DOMAIN_REGEX.test(clean)) return true;
 
-  // 3. Check native desktop/mobile Tauri origins
+  // 3. Check Cloudflare Pages, Workers, and Tunnels
+  if (CLOUDFLARE_DOMAIN_REGEX.test(clean)) return true;
+
+  // 4. Check satellite and external development tunnels
+  if (SATELLITE_TUNNEL_REGEX.test(clean)) return true;
+
+  // 5. Check native desktop/mobile Tauri origins
   if (TAURI_ORIGIN_REGEX.test(clean)) return true;
 
-  // 4. Check explicit configured origins in environment
+  // 6. Check explicit configured origins in environment
   try {
     const env = getServerEnv();
     if (env.CORS_ALLOWED_ORIGINS.length > 0) {

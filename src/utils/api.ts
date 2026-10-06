@@ -41,29 +41,38 @@ export async function checkBackendConnection(): Promise<{
   const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'relative');
   try {
     const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store', timeoutMs: 8000 });
-    if (res.ok) {
-      let data: any = {};
+    const contentType = res.headers.get('content-type') || '';
+
+    // Strictly require authentic JSON response from Polar Operations Backend
+    if (res.ok && contentType.includes('application/json')) {
+      let data: any = null;
       try {
         data = await res.json();
-      } catch {}
+      } catch {
+        data = null;
+      }
 
-      return {
-        online: true,
-        statusText: 'ONLINE',
-        databaseStatus: data.database?.status || (data.status === 'ok' ? 'connected' : 'degraded'),
-        usersCount: data.database?.usersCount || 8,
-        origin: targetOrigin,
-      };
+      if (data && (data.status === 'ok' || data.success)) {
+        return {
+          online: true,
+          statusText: 'ONLINE',
+          databaseStatus: data.database?.status || 'connected',
+          usersCount: data.database?.usersCount,
+          origin: targetOrigin,
+        };
+      }
     }
+
+    // Response was non-JSON (e.g. static HTML page) or HTTP error
     return {
       online: false,
-      statusText: `DEGRADED (${res.status})`,
+      statusText: res.ok ? 'INVALID_BACKEND_RESPONSE' : `HTTP_${res.status}`,
       origin: targetOrigin,
     };
   } catch (err: any) {
     return {
       online: false,
-      statusText: 'UNREACHABLE',
+      statusText: err?.code === 'TIMEOUT' ? 'TIMEOUT' : 'UNREACHABLE',
       origin: targetOrigin,
     };
   }

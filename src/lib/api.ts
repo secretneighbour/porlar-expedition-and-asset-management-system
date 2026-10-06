@@ -56,112 +56,19 @@ export function sanitizeUserFacingErrorMessage(msg: string, status?: number): st
   return msg.length > 200 ? msg.substring(0, 197) + '...' : msg;
 }
 
-export const API_BASE_STORAGE_KEY = 'polar_api_base_url';
+// Re-export centralized URL configuration from Single Source of Truth
+export {
+  API_BASE_STORAGE_KEY,
+  normalizeBackendUrl,
+  getApiBaseUrl,
+  apiUrl,
+  wsUrl,
+} from '../config/api';
 
-/**
- * Normalizes backend URLs:
- * - Trims whitespace
- * - Prepends scheme if missing
- * - Strips trailing slashes
- */
-export function normalizeBackendUrl(rawUrl?: string | null): string {
-  if (!rawUrl) return '';
-  let url = rawUrl.trim();
-  if (!url) return '';
-  if (!/^https?:\/\//i.test(url)) {
-    url = `https://${url}`;
-  }
-  return url.replace(/\/+$/, '');
-}
-
-/**
- * Returns the effective API Base URL.
- * In any web browser (desktop, tablet, or mobile), this returns an EMPTY STRING ('')
- * to ensure all requests use clean, same-origin relative paths (/api/...).
- * Only standalone desktop native apps (Tauri) or explicit overrides use an absolute URL.
- */
-export function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    // 1. Explicit window runtime override (e.g. test harness)
-    if ((window as any).__POLAR_API_BASE_URL__) {
-      return normalizeBackendUrl(String((window as any).__POLAR_API_BASE_URL__));
-    }
-
-    // 2. User-configured override from manual Gateway modal in localStorage (if set)
-    try {
-      const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
-      if (stored && stored.trim()) {
-        return normalizeBackendUrl(stored);
-      }
-    } catch {}
-
-    // 3. For any standard browser session (mobile, tablet, desktop):
-    // Always use clean relative paths targeting the current web deployment!
-    if (!isTauri()) {
-      return '';
-    }
-  }
-
-  // 4. In native desktop Tauri or non-browser environment, check build-time env
-  const envUrl =
-    (typeof import.meta !== 'undefined' &&
-      ((import.meta as any).env?.VITE_API_URL ||
-        (import.meta as any).env?.VITE_API_BASE_URL ||
-        (import.meta as any).env?.VITE_BACKEND_URL)) ||
-    '';
-
-  return normalizeBackendUrl(envUrl);
-}
-
-/**
- * Resolves an API endpoint path to a relative or absolute URL.
- * Ensures leading slash, strips redundant /api/api prefixes, and defaults to relative paths.
- */
-export function apiUrl(endpoint: string): string {
-  const base = getApiBaseUrl();
-  let path = (endpoint || '').trim();
-
-  if (!path.startsWith('/')) {
-    path = `/${path}`;
-  }
-
-  // Deduplicate /api if base ends with /api
-  if (base.endsWith('/api') && path.startsWith('/api/')) {
-    path = path.substring(4);
-  }
-
-  // If running in browser and targeting same host or relative
-  if (typeof window !== 'undefined' && !base) {
-    return path;
-  }
-
-  return base ? `${base}${path}` : path;
-}
-
-/**
- * Resolves WebSocket URL based on current host or configured base
- */
-export function wsUrl(path: string = '/ws'): string {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const base = getApiBaseUrl();
-
-  // 1. Explicit base URL configured
-  if (base) {
-    try {
-      const parsed = new URL(base);
-      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${wsProtocol}//${parsed.host}${cleanPath}`;
-    } catch {}
-  }
-
-  // 2. Current browser origin
-  if (typeof window !== 'undefined' && window.location.host) {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProtocol}//${window.location.host}${cleanPath}`;
-  }
-
-  return '';
-}
+import {
+  apiUrl,
+  getApiBaseUrl,
+} from '../config/api';
 
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number;
@@ -201,6 +108,7 @@ export async function apiFetch(endpoint: string, options: RequestOptions = {}): 
 
   try {
     const response = await fetch(url, {
+      credentials: options.credentials ?? 'include',
       ...options,
       headers,
       signal: controller.signal,
@@ -210,7 +118,12 @@ export async function apiFetch(endpoint: string, options: RequestOptions = {}): 
     if (err.name === 'AbortError') {
       throw new ApiError(`Request to ${endpoint} timed out after ${timeoutMs}ms.`, 408, 'TIMEOUT');
     }
-    throw new ApiError(err.message || 'Network connection failed.', 0, 'NETWORK_ERROR');
+    const cleanUrl = url.split('?')[0];
+    throw new ApiError(
+      `Network/CORS connection failed reaching ${cleanUrl}: ${err.message || 'Check network connection and backend CORS.'}`,
+      0,
+      'NETWORK_ERROR'
+    );
   } finally {
     clearTimeout(timeoutId);
   }

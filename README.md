@@ -1530,11 +1530,14 @@ The production architecture runs natively on **Vercel Serverless Functions**:
    * Framework Preset: `Vite`
    * Build Command: `bun run build` (or `npm run build`)
    * Build Output Directory: `dist`
-4. **Configure Required Environment Variable (CRITICAL)**:
+4. **Configure Environment Variables (CRITICAL)**:
    In **Settings → Builds & deployments → Environment variables** (or under Build variables during setup):
    * **Variable Name**: `BUN_VERSION`
    * **Value**: `1.4.2`
    *(Note: Cloudflare Pages v3 build image defaults to Bun 1.2.15 which cannot parse `lockfileVersion: 2`. Explicitly setting `BUN_VERSION=1.4.2` ensures Cloudflare installs the matching Bun version so `bun install --frozen-lockfile` succeeds deterministically).*
+   * **Variable Name**: `VITE_API_BASE_URL`
+   * **Value**: The public HTTPS URL of your deployed Polar Operations backend API (e.g. `https://api.yourpolarserver.com` or your Cloudflare Worker/Tunnel domain).
+   *(Note: If hosting both frontend and backend on the same unified domain, leave `VITE_API_BASE_URL` empty to automatically use clean same-origin relative `/api/...` requests. Backend CORS automatically validates and allows `*.pages.dev`, `*.workers.dev`, and `*.trycloudflare.com` origins).*
 5. **Deploy**:
    Click **Save and Deploy**. Cloudflare will download Bun 1.4.2, verify the frozen lockfile in milliseconds, and build the static assets into `dist`.
 
