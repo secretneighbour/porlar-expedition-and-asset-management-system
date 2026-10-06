@@ -43,4 +43,61 @@ for (const { input, expected } of urls) {
   }
 }
 
+console.log('--- TEST 3: apiUrl Resolution ---');
+import { apiUrl, setCustomApiBaseUrl, clearCustomApiBaseUrl } from '../src/config/api';
+
+// 3A: Standard base URL
+setCustomApiBaseUrl('https://example-backend.com');
+const loginUrl1 = apiUrl('/api/auth/login');
+console.log(`Base https://example-backend.com -> /api/auth/login: "${loginUrl1}"`);
+if (loginUrl1 !== 'https://example-backend.com/api/auth/login') {
+  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl1}`);
+}
+
+// 3B: Base ending in /api deduplication (must not produce /api/api)
+setCustomApiBaseUrl('https://example-backend.com/api');
+const loginUrl2 = apiUrl('/api/auth/login');
+console.log(`Base https://example-backend.com/api -> /api/auth/login: "${loginUrl2}"`);
+if (loginUrl2 !== 'https://example-backend.com/api/auth/login') {
+  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl2}`);
+}
+
+// 3C: Base with trailing slashes and endpoint without leading slash
+setCustomApiBaseUrl('https://example-backend.com///');
+const loginUrl3 = apiUrl('api/auth/login');
+console.log(`Base https://example-backend.com/// -> api/auth/login: "${loginUrl3}"`);
+if (loginUrl3 !== 'https://example-backend.com/api/auth/login') {
+  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl3}`);
+}
+
+// 3D: Ngrok development URL with browser warning bypass
+setCustomApiBaseUrl('https://alpha-recon.ngrok-free.app');
+const ngrokLogin = apiUrl('/api/auth/login');
+console.log(`Ngrok base https://alpha-recon.ngrok-free.app -> /api/auth/login: "${ngrokLogin}"`);
+if (
+  ngrokLogin !==
+  'https://alpha-recon.ngrok-free.app/api/auth/login?ngrok-skip-browser-warning=true'
+) {
+  throw new Error(`Expected ngrok skip warning query param, got ${ngrokLogin}`);
+}
+
+// 3E: Clean same-origin relative paths (Production Cloudflare Mode)
+clearCustomApiBaseUrl();
+const relativeLogin = apiUrl('/api/auth/login');
+console.log(`Empty Base (Production Cloudflare) -> /api/auth/login: "${relativeLogin}"`);
+if (relativeLogin !== '/api/auth/login') {
+  throw new Error(`Expected clean relative path /api/auth/login, got ${relativeLogin}`);
+}
+
+// 3F: Auth endpoints verification
+setCustomApiBaseUrl('https://example-backend.com');
+const authEndpoints = ['/api/auth/login', '/api/auth/logout', '/api/auth/session', '/api/heartbeat', '/api/health'];
+for (const ep of authEndpoints) {
+  const resolved = apiUrl(ep);
+  if (!resolved.startsWith('https://example-backend.com') || resolved.includes('/api/api/')) {
+    throw new Error(`Endpoint construction error for ${ep}: got ${resolved}`);
+  }
+}
+
+clearCustomApiBaseUrl();
 console.log('ALL TESTS PASSED SUCCESSFULLY!');

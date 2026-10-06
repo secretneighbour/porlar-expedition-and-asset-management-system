@@ -724,6 +724,18 @@ async function startServer() {
   });
 
   // Terminal heartbeat registration (works via HTTP fallback as well)
+  app.get('/api/heartbeat', (req, res) => {
+    const devices = getDeviceList();
+    res.json({
+      status: 'ok',
+      ok: true,
+      timestamp: new Date().toISOString(),
+      serverTime: new Date().toISOString(),
+      connectedClients: devices.length,
+      devices,
+    });
+  });
+
   app.post('/api/heartbeat', (req, res) => {
     const { deviceId, deviceType, deviceName, userAgent, batteryLevel, isCharging } = req.body;
     if (deviceId) {

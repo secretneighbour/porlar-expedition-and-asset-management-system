@@ -80,6 +80,13 @@ export interface RequestOptions extends RequestInit {
  */
 export async function apiFetch(endpoint: string, options: RequestOptions = {}): Promise<Response> {
   const url = apiUrl(endpoint);
+
+  // Safe API debugging in development only: log final URL without passwords, tokens, API keys, or secrets
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    const method = (options.method || 'GET').toUpperCase();
+    console.debug(`[POLAR API DEV] ${method} ${url}`);
+  }
+
   const headers = new Headers(options.headers || {});
 
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {

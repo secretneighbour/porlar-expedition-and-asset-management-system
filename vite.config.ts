@@ -6,9 +6,15 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const backendTarget = env.VITE_BACKEND_URL || env.VITE_API_BASE_URL || env.VITE_API_URL || 'http://localhost:3000';
+  const configuredApiBase = (env.VITE_API_BASE_URL || env.VITE_BACKEND_URL || env.VITE_API_URL || '').trim();
+  const backendTarget = configuredApiBase || 'http://localhost:3000';
 
   return {
+    define: {
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(configuredApiBase),
+      'import.meta.env.VITE_API_URL': JSON.stringify((env.VITE_API_URL || configuredApiBase).trim()),
+      'import.meta.env.VITE_BACKEND_URL': JSON.stringify((env.VITE_BACKEND_URL || configuredApiBase).trim()),
+    },
     plugins: [
       react(),
       tailwindcss(),

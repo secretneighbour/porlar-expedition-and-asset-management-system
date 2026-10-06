@@ -5,6 +5,8 @@
   ],
   "exclude": [
     "/assets/*",
+    "/index.html",
+    "/200.html",
     "/favicon.ico"
   ]
 }

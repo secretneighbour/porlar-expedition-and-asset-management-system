@@ -29,18 +29,79 @@ export function normalizeBackendUrl(rawUrl?: string | null): string {
 }
 
 /**
- * Raw build-time environment variable injected by Vite or build environment.
- * Reads VITE_API_BASE_URL, VITE_API_URL, VITE_BACKEND_URL, or NEXT_PUBLIC_API_BASE_URL.
- * If not specified, defaults to empty string so requests use same-origin relative paths (/api/...).
+ * Checks whether the current runtime is in production mode
  */
-export const API_BASE_URL: string = normalizeBackendUrl(
-  (typeof import.meta !== 'undefined' &&
-    ((import.meta as any).env?.VITE_API_BASE_URL ||
-      (import.meta as any).env?.VITE_API_URL ||
-      (import.meta as any).env?.VITE_BACKEND_URL ||
-      (import.meta as any).env?.NEXT_PUBLIC_API_BASE_URL)) ||
+export function isProductionEnvironment(): boolean {
+  return typeof import.meta !== 'undefined' && Boolean(import.meta.env?.PROD);
+}
+
+/**
+ * Checks whether the current runtime is in local development mode
+ */
+export function isDevelopmentEnvironment(): boolean {
+  return typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+}
+
+/**
+ * Helper to check if a target URL points to loopback/localhost/private network
+ */
+export function isLocalhost(url?: string | null): boolean {
+  if (!url) return false;
+  return /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?(\/.*)?$/i.test(
+    url.trim()
+  );
+}
+
+/**
+ * Checks if a target URL is an ephemeral development tunnel (ngrok, cloudflare tunnel, localtunnel)
+ */
+export function isTunnelUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const clean = url.trim().toLowerCase();
+  return (
+    /ngrok(-free)?\.(app|io)/i.test(clean) ||
+    /trycloudflare\.com/i.test(clean) ||
+    /localtunnel\.me/i.test(clean)
+  );
+}
+
+export const isNgrokUrl = isTunnelUrl;
+
+/**
+ * Checks if a target URL is either a local address or dev tunnel
+ */
+export function isLocalOrTunnelUrl(url?: string | null): boolean {
+  return isLocalhost(url) || isTunnelUrl(url);
+}
+
+/**
+ * Raw build-time environment variable injected by Vite or build environment.
+ * - In DEVELOPMENT: Honors VITE_API_BASE_URL (localhost:3000, ngrok, etc.) so developer
+ *   can connect frontend to local backend or expose via ngrok to mobile phones.
+ * - In PRODUCTION: If VITE_API_BASE_URL points to localhost or ngrok (leftover from local dev),
+ *   it automatically resolves to empty string ('') so all production requests stay same-origin
+ *   (/api/*) on the Cloudflare deployment domain without depending on localhost or ngrok.
+ */
+function resolveConfiguredApiBase(): string {
+  const raw = (
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.NEXT_PUBLIC_API_BASE_URL ||
     ''
-);
+  ).trim();
+
+  if (!raw) return '';
+
+  // In production builds (Cloudflare Pages web), strictly prevent routing to localhost or ngrok!
+  if (isProductionEnvironment() && isLocalOrTunnelUrl(raw)) {
+    return '';
+  }
+
+  return normalizeBackendUrl(raw);
+}
+
+export const API_BASE_URL: string = resolveConfiguredApiBase();
 
 /**
  * Default fallback backend gateway URL for standalone environments.
@@ -49,27 +110,11 @@ export const API_BASE_URL: string = normalizeBackendUrl(
 export const DEFAULT_BACKEND_URL = API_BASE_URL || '';
 
 /**
- * Helper to check if a target URL points to loopback/localhost
- */
-export function isLocalhost(url?: string | null): boolean {
-  if (!url) return false;
-  return /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/.*)?$/i.test(url.trim());
-}
-
-/**
- * Checks if a target URL is an ngrok tunnel
- */
-export function isNgrokUrl(url?: string | null): boolean {
-  if (!url) return false;
-  return /ngrok(-free)?\.(app|io)/i.test(url);
-}
-
-/**
  * Validates the API Base URL against runtime environment constraints.
  */
 export function validateApiBaseUrl(url?: string | null): { valid: boolean; warning?: string; error?: string } {
   if (!url || !url.trim()) {
-    // Relative paths are expected, secure, and valid on web / Vercel
+    // Relative paths are expected, secure, and valid on web / Cloudflare
     return { valid: true };
   }
 
@@ -89,15 +134,16 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
 
 /**
  * Retrieves the effective API Base URL with precedence:
- * 1. Window runtime override (window.__POLAR_API_BASE_URL__)
+ * 1. Global runtime override (__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
- * 3. Configured build-time backend gateway (VITE_API_BASE_URL, VITE_API_URL, VITE_BACKEND_URL)
- * 4. Default for web browsers without configured external backend: clean relative paths ('')
+ *    (in production, stale localhost/ngrok overrides are ignored)
+ * 3. Environment-configured API Base URL
+ * 4. Default for production web deployments: clean relative same-origin paths ('')
  */
 export function getApiBaseUrl(): string {
-  // 1. Explicit window runtime override (e.g. injected by test harnesses)
-  if (typeof window !== 'undefined' && (window as any).__POLAR_API_BASE_URL__) {
-    const override = normalizeBackendUrl(String((window as any).__POLAR_API_BASE_URL__));
+  // 1. Explicit global runtime override (e.g. injected by test harnesses)
+  if (typeof globalThis !== 'undefined' && (globalThis as any).__POLAR_API_BASE_URL__) {
+    const override = normalizeBackendUrl(String((globalThis as any).__POLAR_API_BASE_URL__));
     if (override) return override;
   }
 
@@ -107,14 +153,19 @@ export function getApiBaseUrl(): string {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
       if (stored && stored.trim()) {
         const cleanStored = normalizeBackendUrl(stored);
-        if (cleanStored) return cleanStored;
+        // On production public web domains, ignore stale localhost/ngrok overrides from past local sessions
+        if (isProductionEnvironment() && isLocalOrTunnelUrl(cleanStored)) {
+          // Ignore stale localhost
+        } else if (cleanStored) {
+          return cleanStored;
+        }
       }
     } catch {
       // localStorage may fail in restricted/private contexts
     }
   }
 
-  // 3. Build-time environment variable configured in .env or Cloudflare/Vercel build settings
+  // 3. Build-time environment variable configured in .env
   if (API_BASE_URL && API_BASE_URL.trim()) {
     return API_BASE_URL;
   }
@@ -137,34 +188,31 @@ export function apiUrl(endpoint: string): string {
     path = `/${path}`;
   }
 
-  // Deduplicate /api prefix if base already ends with /api
-  if (base.endsWith('/api') && path.startsWith('/api/')) {
-    path = path.substring(4);
-  }
-
-  // In standard browser on the same host (or Vercel preview environments),
-  // prefer clean relative paths to avoid cross-origin CORS issues
-  if (typeof window !== 'undefined' && !isTauri()) {
-    if (!base) {
-      return path;
+  // If a live backend base URL is configured, prepend it:
+  if (base) {
+    // Deduplicate /api prefix if base already ends with /api and path starts with /api/
+    if (base.endsWith('/api') && path.startsWith('/api/')) {
+      path = path.substring(4);
     }
-    try {
-      const parsedBase = new URL(base);
-      if (parsedBase.host === window.location.host) {
-        return path;
-      }
-    } catch {}
+
+    let fullUrl = `${base}${path}`;
+
+    // For ngrok endpoints, append ngrok-skip-browser-warning=true as query parameter.
+    if (fullUrl.includes('ngrok') && !fullUrl.includes('ngrok-skip-browser-warning')) {
+      const separator = fullUrl.includes('?') ? '&' : '?';
+      fullUrl = `${fullUrl}${separator}ngrok-skip-browser-warning=true`;
+    }
+
+    return fullUrl;
   }
 
-  let fullUrl = base ? `${base}${path}` : path;
-
-  // For ngrok endpoints, append ngrok-skip-browser-warning=true as query parameter.
-  if (fullUrl.includes('ngrok') && !fullUrl.includes('ngrok-skip-browser-warning')) {
-    const separator = fullUrl.includes('?') ? '&' : '?';
-    fullUrl = `${fullUrl}${separator}ngrok-skip-browser-warning=true`;
+  // If no base URL is configured, return the relative path
+  if (path.includes('ngrok') && !path.includes('ngrok-skip-browser-warning')) {
+    const separator = path.includes('?') ? '&' : '?';
+    path = `${path}${separator}ngrok-skip-browser-warning=true`;
   }
 
-  return fullUrl;
+  return path;
 }
 
 /**
@@ -176,8 +224,7 @@ export function wsUrl(path: string = '/ws'): string {
 
   // 1. Explicit dedicated WebSocket server URL (e.g. VITE_WS_URL)
   const explicitWs =
-    typeof import.meta !== 'undefined' &&
-    ((import.meta as any).env?.VITE_WS_URL || (import.meta as any).env?.NEXT_PUBLIC_WS_URL);
+    import.meta.env.VITE_WS_URL || import.meta.env.NEXT_PUBLIC_WS_URL || '';
   if (explicitWs && explicitWs.trim()) {
     const cleanWs = explicitWs.trim().replace(/\/+$/, '');
     return `${cleanWs}${cleanPath}`;
@@ -209,14 +256,23 @@ export function wsUrl(path: string = '/ws'): string {
  * Sets a runtime custom API Base URL (persisted to localStorage)
  */
 export function setCustomApiBaseUrl(url: string): void {
+  const clean = normalizeBackendUrl(url);
+  if (typeof globalThis !== 'undefined') {
+    (globalThis as any).__POLAR_API_BASE_URL__ = clean;
+  }
   if (typeof window !== 'undefined') {
-    const clean = normalizeBackendUrl(url);
     if (clean) {
-      localStorage.setItem(API_BASE_STORAGE_KEY, clean);
+      try {
+        localStorage.setItem(API_BASE_STORAGE_KEY, clean);
+      } catch {}
     } else {
-      localStorage.removeItem(API_BASE_STORAGE_KEY);
+      try {
+        localStorage.removeItem(API_BASE_STORAGE_KEY);
+      } catch {}
     }
-    window.dispatchEvent(new CustomEvent('polar:api_base_changed', { detail: clean }));
+    try {
+      window.dispatchEvent(new CustomEvent('polar:api_base_changed', { detail: clean }));
+    } catch {}
   }
 }
 
@@ -224,9 +280,16 @@ export function setCustomApiBaseUrl(url: string): void {
  * Clears runtime custom API Base URL override
  */
 export function clearCustomApiBaseUrl(): void {
+  if (typeof globalThis !== 'undefined') {
+    delete (globalThis as any).__POLAR_API_BASE_URL__;
+  }
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(API_BASE_STORAGE_KEY);
-    window.dispatchEvent(new CustomEvent('polar:api_base_changed', { detail: '' }));
+    try {
+      localStorage.removeItem(API_BASE_STORAGE_KEY);
+    } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('polar:api_base_changed', { detail: '' }));
+    } catch {}
   }
 }
 

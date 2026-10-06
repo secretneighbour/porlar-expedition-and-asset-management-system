@@ -1536,10 +1536,45 @@ The production architecture runs natively on **Vercel Serverless Functions**:
    * **Value**: `1.4.2`
    *(Note: Cloudflare Pages v3 build image defaults to Bun 1.2.15 which cannot parse `lockfileVersion: 2`. Explicitly setting `BUN_VERSION=1.4.2` ensures Cloudflare installs the matching Bun version so `bun install --frozen-lockfile` succeeds deterministically).*
    * **Variable Name**: `VITE_API_BASE_URL`
-   * **Value**: (Optional) The public HTTPS URL of an external Polar Operations backend API (e.g. `https://api.yourpolarserver.com`).
-   *(Note: Cloudflare Pages includes a built-in Edge Function Gateway at `functions/api/[[catchall]].ts` backed by `_routes.json` and native SPA routing fallback. If `VITE_API_BASE_URL` is empty, Cloudflare Pages directly serves `/api/health`, `/api/auth/login`, and `/api/heartbeat` with pure JSON on the edge. If `VITE_API_BASE_URL` is set, the gateway seamlessly proxies `/api/*` to the specified upstream backend with full CORS and header forwarding. In all cases, API routes are prevented from falling through to `index.html`).*
+   * **Value**: Leave empty for standard Cloudflare deployment. (Optional: public HTTPS URL of an external backend).
+   *(Note: The system features an automatic Two-Environment Architecture. In local development, `VITE_API_BASE_URL` allows connecting to `http://localhost:3000` or an ngrok tunnel. In production on Cloudflare Pages, API requests automatically use the same Cloudflare origin `/api/*` backed by `functions/api/[[catchall]].ts`. Cloudflare natively hosts both the frontend and the entire backend with Zero-Click S.A.R. dispatch, -50°C cold-soak predictive maintenance, and real-time state synchronization. Production has zero dependency on your development laptop or any separately running server).*
 5. **Deploy**:
    Click **Save and Deploy**. Cloudflare will download Bun 1.4.2, verify the frozen lockfile in milliseconds, compile the edge functions in `functions/`, and build the static assets into `dist`.
+
+---
+
+## 🌐 Two-Environment Architecture: Development vs. Production
+
+The Polar Operations System is architected to seamlessly support two completely distinct runtime environments without code modifications or configuration conflicts:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               1. LOCAL DEVELOPMENT MODE                                │
+│                                                                                        │
+│  [Developer Laptop]                                                                    │
+│  Frontend: http://localhost:3000   ◄───►  Backend: http://localhost:3000 (Express/WS)  │
+│                                                     │                                  │
+│  [Mobile Phones / Remote Field]                     ▼                                  │
+│  https://<ngrok-id>.ngrok-free.app ─────────► [ngrok tunnel]                           │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                           2. PRODUCTION / CLOUDFLARE MODE                              │
+│                         (LAPTOP COMPLETELY OFF & DISCONNECTED)                         │
+│                                                                                        │
+│  [Any Global Operator / Phone / Tablet]                                                │
+│  https://<cloudflare-domain>                                                           │
+│         │                                                                              │
+│         ├───►  Static UI & Maps (/assets/*, index.html) ──► Cloudflare Edge CDN        │
+│         └───►  API Calls (/api/*)                        ──► Cloudflare Pages Function  │
+│                                                             functions/api/[[catchall]] │
+│                                                             - Auth (/api/auth/*)       │
+│                                                             - Health (/api/health)     │
+│                                                             - Sync & State (/api/state)│
+│                                                             - AI S.A.R. & Maintenance  │
+│                                                             - Pathfinding & Inventory  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 

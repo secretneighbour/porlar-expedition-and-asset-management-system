@@ -103,7 +103,117 @@ async function runTests() {
     throw new Error('404 JSON check failed');
   }
 
-  console.log('\nALL 6 CLOUDFLARE EDGE API TESTS PASSED WITH 100% SUCCESS!');
+  console.log('\n--- TEST 7: GET /api/auth/session (WITH VALID TOKEN) ---');
+  const reqSession = new Request('https://polar-expedition.pages.dev/api/auth/session', {
+    method: 'GET',
+    headers: {
+      Origin: 'https://polar-expedition.pages.dev',
+      Authorization: `Bearer ${jsonLoginValid.token}`,
+    },
+  });
+  const resSession = await onRequest({ request: reqSession, env: {} });
+  const jsonSession = await resSession.json();
+  console.log(`Status: ${resSession.status}, JSON:`, JSON.stringify(jsonSession));
+  if (resSession.status !== 200 || !jsonSession.authenticated) {
+    throw new Error('Session verification failed');
+  }
+
+  console.log('\n--- TEST 8: POST /api/auth/logout ---');
+  const reqLogout = new Request('https://polar-expedition.pages.dev/api/auth/logout', {
+    method: 'POST',
+    headers: { Origin: 'https://polar-expedition.pages.dev' },
+  });
+  const resLogout = await onRequest({ request: reqLogout, env: {} });
+  const jsonLogout = await resLogout.json();
+  console.log(`Status: ${resLogout.status}, JSON:`, JSON.stringify(jsonLogout));
+  if (resLogout.status !== 200 || !jsonLogout.ok) {
+    throw new Error('Logout failed');
+  }
+
+  console.log('\n--- TEST 9: GET /api/state ---');
+  const reqState = new Request('https://polar-expedition.pages.dev/api/state', {
+    method: 'GET',
+    headers: { Origin: 'https://polar-expedition.pages.dev' },
+  });
+  const resState = await onRequest({ request: reqState, env: {} });
+  const jsonState = await resState.json();
+  console.log(`Status: ${resState.status}, Expeditions: ${jsonState.expeditions?.length}, Assets: ${jsonState.assets?.length}`);
+  if (resState.status !== 200 || !jsonState.ok || !Array.isArray(jsonState.expeditions)) {
+    throw new Error('State fetch failed');
+  }
+
+  console.log('\n--- TEST 10: POST /api/ai/sar/dispatch-crevasse-fall (AUTONOMOUS SAR) ---');
+  const reqSar = new Request('https://polar-expedition.pages.dev/api/ai/sar/dispatch-crevasse-fall', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://polar-expedition.pages.dev',
+    },
+  });
+  const resSar = await onRequest({ request: reqSar, env: {} });
+  const jsonSar = await resSar.json();
+  console.log(`Status: ${resSar.status}, Autonomous SAR Asset: ${jsonSar.autonomousDispatch?.assignedAsset}`);
+  if (resSar.status !== 200 || !jsonSar.autonomousDispatch?.assignedAsset) {
+    throw new Error('SAR dispatch failed');
+  }
+
+  console.log('\n--- TEST 11: POST /api/ai/predictive-maintenance (-50°C COLD SOAK) ---');
+  const reqMnt = new Request('https://polar-expedition.pages.dev/api/ai/predictive-maintenance', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://polar-expedition.pages.dev',
+    },
+    body: JSON.stringify({
+      assetId: 'AST-SNW-01',
+      ambientTempC: -52,
+      operatingHours: 1540,
+      vibrationRms: 2.3,
+    }),
+  });
+  const resMnt = await onRequest({ request: reqMnt, env: {} });
+  const jsonMnt = await resMnt.json();
+  console.log(`Status: ${resMnt.status}, Wear Risk: ${jsonMnt.wearRiskScore}, Hours to Fail: ${jsonMnt.hoursToEstimatedFailure}`);
+  if (resMnt.status !== 200 || !jsonMnt.wearRiskScore) {
+    throw new Error('Predictive maintenance failed');
+  }
+
+  console.log('\n--- TEST 12: POST /api/ai/weather-inventory/evaluate ---');
+  const reqWth = new Request('https://polar-expedition.pages.dev/api/ai/weather-inventory/evaluate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://polar-expedition.pages.dev',
+    },
+    body: JSON.stringify({ temperatureC: -48, windSpeedKt: 42 }),
+  });
+  const resWth = await onRequest({ request: reqWth, env: {} });
+  const jsonWth = await resWth.json();
+  console.log(`Status: ${resWth.status}, Burn Surge: +${jsonWth.burnRateSurgePercent}%, Days Left: ${jsonWth.daysOfHeatingSupplyRemaining}`);
+  if (resWth.status !== 200 || !jsonWth.burnRateSurgePercent) {
+    throw new Error('Weather inventory evaluation failed');
+  }
+
+  console.log('\n--- TEST 13: POST /api/ai/route-optimizer/astar ---');
+  const reqAstar = new Request('https://polar-expedition.pages.dev/api/ai/route-optimizer/astar', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://polar-expedition.pages.dev',
+    },
+    body: JSON.stringify({
+      startNode: { lat: -70.767, lng: 11.733 },
+      goalNode: { lat: -75.1, lng: 123.333 },
+    }),
+  });
+  const resAstar = await onRequest({ request: reqAstar, env: {} });
+  const jsonAstar = await resAstar.json();
+  console.log(`Status: ${resAstar.status}, Waypoints: ${jsonAstar.waypoints?.length}, Distance: ${jsonAstar.optimizedTraverseKm} km`);
+  if (resAstar.status !== 200 || !jsonAstar.waypoints) {
+    throw new Error('A* pathfinding failed');
+  }
+
+  console.log('\nALL 13 CLOUDFLARE EDGE API TESTS PASSED WITH 100% SUCCESS!');
 }
 
 runTests().catch((err) => {

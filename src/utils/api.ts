@@ -38,7 +38,7 @@ export async function checkBackendConnection(): Promise<{
   usersCount?: number;
   origin: string;
 }> {
-  const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'relative');
+  const targetOrigin = getApiBaseUrl() || 'same-origin';
   try {
     const res = await apiFetch('/api/health', { method: 'GET', cache: 'no-store', timeoutMs: 8000 });
     const contentType = res.headers.get('content-type') || '';
