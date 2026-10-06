@@ -1521,6 +1521,23 @@ The production architecture runs natively on **Vercel Serverless Functions**:
 5. **Deploy**:
    Click **Deploy**. Vercel will build the frontend into `dist` and deploy each endpoint in `api/` as a serverless function.
 
+### 2. Step-by-Step Cloudflare Pages Deployment Guide
+1. **Push your code to GitHub**:
+   Ensure all changes including `package.json`, `bun.lock`, and `.bun-version` are pushed.
+2. **Import into Cloudflare Pages**:
+   Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create application** → **Pages** → **Connect to Git** → Select repository.
+3. **Build & Framework Settings**:
+   * Framework Preset: `Vite`
+   * Build Command: `bun run build` (or `npm run build`)
+   * Build Output Directory: `dist`
+4. **Configure Required Environment Variable (CRITICAL)**:
+   In **Settings → Builds & deployments → Environment variables** (or under Build variables during setup):
+   * **Variable Name**: `BUN_VERSION`
+   * **Value**: `1.4.2`
+   *(Note: Cloudflare Pages v3 build image defaults to Bun 1.2.15 which cannot parse `lockfileVersion: 2`. Explicitly setting `BUN_VERSION=1.4.2` ensures Cloudflare installs the matching Bun version so `bun install --frozen-lockfile` succeeds deterministically).*
+5. **Deploy**:
+   Click **Save and Deploy**. Cloudflare will download Bun 1.4.2, verify the frozen lockfile in milliseconds, and build the static assets into `dist`.
+
 ---
 
 ## 🔍 Production Diagnostics & Health Verification

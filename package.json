@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Tactical operations hub and telemetry console for polar expeditions, research stations, and extreme survival logistics.",
   "type": "module",
+  "packageManager": "bun@1.4.2",
   "license": "MIT",
   "author": "Polar Expedition Operations Consortium",
   "main": "./dist/index.html",
@@ -80,7 +81,6 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
-    "vite": "^6.2.3",
     "ws": "^8.21.3"
   },
   "devDependencies": {
