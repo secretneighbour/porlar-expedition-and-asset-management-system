@@ -276,10 +276,18 @@ function prepareEnvironment(options = { verbose: false }) {
     console.log(`  local.props:  ${fs.existsSync(localPropertiesPath) ? 'present' : 'missing'}`);
   }
 
-  // Only configure backend URL override if explicitly targeted for Android native builds
-  const isAndroidBuild = process.argv.includes('--apk') || process.argv.includes('android');
-  if (isAndroidBuild && process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')) {
-    process.env.VITE_API_BASE_URL = process.env.VITE_API_URL;
+  // Centralized Cloudflare Worker backend URL for mobile/Android production
+  const PRODUCTION_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev';
+  const isAndroidBuild = process.argv.includes('--apk') || process.argv.includes('android') || process.env.TAURI_ENV_PLATFORM === 'android';
+  const isDebugBuild = process.argv.includes('--debug') || process.argv.includes('-d');
+  if (isAndroidBuild) {
+    if (!process.env.VITE_API_BASE_URL || (!isDebugBuild && (process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')))) {
+      process.env.VITE_API_BASE_URL = process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')
+        ? process.env.VITE_API_URL
+        : PRODUCTION_BACKEND_URL;
+    }
+    process.env.VITE_API_URL = process.env.VITE_API_BASE_URL;
+    process.env.VITE_BACKEND_URL = process.env.VITE_API_BASE_URL;
   }
 
   return {

@@ -4,9 +4,25 @@
  * Fully compatible with Vercel Serverless Functions, Web, Mobile browsers, and Tauri Desktop.
  */
 
-import { isTauri } from '../platform';
+import { isTauri, isMobile } from '../platform';
 
 export const API_BASE_STORAGE_KEY = 'polar_api_base_url';
+
+/**
+ * Canonical Production Cloudflare Worker Backend Gateway URL.
+ * Centralized Single Source of Truth for production phone apps, mobile field units, and remote operations.
+ */
+export const PRODUCTION_CLOUDFLARE_WORKER_URL =
+  'https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev';
+
+export const PRODUCTION_BACKEND_URL = PRODUCTION_CLOUDFLARE_WORKER_URL;
+
+/**
+ * Canonical Production WebSocket Gateway URL.
+ * Secure WebSocket connection (wss://) to Cloudflare Worker Durable Objects.
+ */
+export const PRODUCTION_WS_URL =
+  'wss://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/ws';
 
 /**
  * Normalizes backend URLs:
@@ -32,14 +48,26 @@ export function normalizeBackendUrl(rawUrl?: string | null): string {
  * Checks whether the current runtime is in production mode
  */
 export function isProductionEnvironment(): boolean {
-  return typeof import.meta !== 'undefined' && Boolean(import.meta.env?.PROD);
+  if (typeof import.meta !== 'undefined' && typeof import.meta.env?.PROD !== 'undefined') {
+    return Boolean(import.meta.env.PROD);
+  }
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
+    return process.env.NODE_ENV === 'production';
+  }
+  return false;
 }
 
 /**
  * Checks whether the current runtime is in local development mode
  */
 export function isDevelopmentEnvironment(): boolean {
-  return typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+  if (typeof import.meta !== 'undefined' && typeof import.meta.env?.DEV !== 'undefined') {
+    return Boolean(import.meta.env.DEV);
+  }
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
+    return process.env.NODE_ENV === 'development';
+  }
+  return true;
 }
 
 /**
@@ -79,11 +107,16 @@ export function isLocalOrTunnelUrl(url?: string | null): boolean {
  * - In DEVELOPMENT: Honors VITE_API_BASE_URL (localhost:3000, ngrok, etc.) so developer
  *   can connect frontend to local backend or expose via ngrok to mobile phones.
  * - In PRODUCTION: If VITE_API_BASE_URL points to localhost or ngrok (leftover from local dev),
- *   it automatically resolves to empty string ('') so all production requests stay same-origin
- *   (/api/*) on the Cloudflare deployment domain without depending on localhost or ngrok.
+ *   it automatically routes to the production Cloudflare Worker URL.
  */
 function resolveConfiguredApiBase(): string {
-  const envObj = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
+  const envObj =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env
+      : typeof process !== 'undefined' && process.env
+      ? process.env
+      : {};
+
   const raw = (
     envObj.VITE_API_BASE_URL ||
     envObj.VITE_API_URL ||
@@ -92,40 +125,45 @@ function resolveConfiguredApiBase(): string {
     ''
   ).trim();
 
-  if (!raw) return '';
-
-  // In production builds (Cloudflare Pages web), strictly prevent routing to localhost or ngrok!
+  // In production builds (mobile phone app APK / Cloudflare web), strictly prevent routing to localhost or dev tunnels
   if (isProductionEnvironment() && isLocalOrTunnelUrl(raw)) {
-    return '';
+    return PRODUCTION_CLOUDFLARE_WORKER_URL;
   }
 
-  return normalizeBackendUrl(raw);
+  if (raw) {
+    return normalizeBackendUrl(raw);
+  }
+
+  // In production builds or mobile/Tauri environments, default to centralized Cloudflare Worker
+  if (isProductionEnvironment() || isTauri()) {
+    return PRODUCTION_CLOUDFLARE_WORKER_URL;
+  }
+
+  return '';
 }
 
 export const API_BASE_URL: string = resolveConfiguredApiBase();
 
 /**
  * Default fallback backend gateway URL for standalone environments.
- * Empty string ensures web deployments use same-origin relative paths.
  */
-export const DEFAULT_BACKEND_URL = API_BASE_URL || '';
+export const DEFAULT_BACKEND_URL = API_BASE_URL || PRODUCTION_BACKEND_URL;
 
 /**
  * Validates the API Base URL against runtime environment constraints.
  */
 export function validateApiBaseUrl(url?: string | null): { valid: boolean; warning?: string; error?: string } {
   if (!url || !url.trim()) {
-    // Relative paths are expected, secure, and valid on web / Cloudflare
     return { valid: true };
   }
 
   const clean = normalizeBackendUrl(url);
 
   if (isLocalhost(clean)) {
-    if (isTauri()) {
+    if (isTauri() || (typeof window !== 'undefined' && isMobile())) {
       return {
-        valid: true,
-        warning: `[POLAR API CONFIG WARNING] Desktop build is targeting '${clean}'. For field deployment, ensure a remote base station URL is specified.`,
+        valid: false,
+        warning: `[POLAR API CONFIG WARNING] Mobile/Desktop device is targeting '${clean}'. Physical devices cannot reach loopback localhost. Target ${PRODUCTION_CLOUDFLARE_WORKER_URL} or an ngrok tunnel.`,
       };
     }
   }
@@ -138,8 +176,9 @@ export function validateApiBaseUrl(url?: string | null): { valid: boolean; warni
  * 1. Global runtime override (__POLAR_API_BASE_URL__)
  * 2. User-configured override in localStorage ('polar_api_base_url')
  *    (in production, stale localhost/ngrok overrides are ignored)
- * 3. Environment-configured API Base URL
- * 4. Default for production web deployments: clean relative same-origin paths ('')
+ * 3. Localhost laptop development check (allows testing against local Express server)
+ * 4. Environment-configured API Base URL
+ * 5. Default Canonical Gateway: Production Cloudflare Worker URL
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit global runtime override (e.g. injected by test harnesses)
@@ -154,11 +193,16 @@ export function getApiBaseUrl(): string {
       const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
       if (stored && stored.trim()) {
         const cleanStored = normalizeBackendUrl(stored);
-        // On production public web domains, ignore stale localhost/ngrok overrides from past local sessions
-        if (isProductionEnvironment() && isLocalOrTunnelUrl(cleanStored)) {
-          // Ignore stale localhost
-        } else if (cleanStored) {
-          return cleanStored;
+        if (isProductionEnvironment()) {
+          // In production mobile / web mode, never route to localhost, 127.0.0.1, LAN IP, or dev tunnels
+          if (isLocalOrTunnelUrl(cleanStored)) {
+            // Ignore stale localhost/ngrok override from dev sessions
+          } else if (cleanStored) {
+            return cleanStored;
+          }
+        } else {
+          // In development mode: allow localhost, ngrok, LAN IP, or remote URL
+          if (cleanStored) return cleanStored;
         }
       }
     } catch {
@@ -166,19 +210,35 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  // 3. Build-time environment variable configured in .env
+  // 3. Localhost laptop development check:
+  // When testing locally in development mode on desktop browser (visiting http://localhost:...):
+  // Allow relative paths to local Express server on port 3000 if no explicit tunnel/external URL is set
+  if (
+    isDevelopmentEnvironment() &&
+    !isTauri() &&
+    typeof window !== 'undefined' &&
+    isLocalhost(window.location.hostname) &&
+    (!API_BASE_URL || isLocalhost(API_BASE_URL))
+  ) {
+    return '';
+  }
+
+  // 4. Build-time environment variable configured in .env
   if (API_BASE_URL && API_BASE_URL.trim()) {
+    if (isProductionEnvironment() && isLocalOrTunnelUrl(API_BASE_URL)) {
+      return PRODUCTION_CLOUDFLARE_WORKER_URL;
+    }
     return API_BASE_URL;
   }
 
-  // 4. Default: Same-origin relative paths (/api/...) for unified web deployments
-  return '';
+  // 5. Default Canonical Gateway: Production Cloudflare Worker URL
+  return PRODUCTION_CLOUDFLARE_WORKER_URL;
 }
 
 /**
  * Resolves an API endpoint path to a URL.
  * Guarantees no double slashes, handles trailing slashes, and avoids duplicate /api/api.
- * Web browsers and mobile phones accessing the Vercel web app automatically use clean relative paths.
+ * Production mobile apps and web browsers resolve to the Cloudflare Worker URL.
  */
 export function apiUrl(endpoint: string): string {
   const base = getApiBaseUrl().replace(/\/+$/, '');
@@ -191,12 +251,14 @@ export function apiUrl(endpoint: string): string {
 
   // If a live backend base URL is configured, prepend it:
   if (base) {
+    const cleanBase = base.replace(/\/+$/, '');
+
     // Deduplicate /api prefix if base already ends with /api and path starts with /api/
-    if (base.endsWith('/api') && path.startsWith('/api/')) {
+    if (cleanBase.endsWith('/api') && path.startsWith('/api/')) {
       path = path.substring(4);
     }
 
-    let fullUrl = `${base}${path}`;
+    let fullUrl = `${cleanBase}${path}`;
 
     // For ngrok endpoints, append ngrok-skip-browser-warning=true as query parameter.
     if (fullUrl.includes('ngrok') && !fullUrl.includes('ngrok-skip-browser-warning')) {
@@ -219,15 +281,21 @@ export function apiUrl(endpoint: string): string {
 /**
  * Resolves a WebSocket URL based on configured base URL or current window host.
  * Automatically derives wss:// for https and ws:// for http.
+ * Production Cloudflare Worker WebSocket strictly derives wss://.
  */
 export function wsUrl(path: string = '/ws'): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
   // 1. Explicit dedicated WebSocket server URL (e.g. VITE_WS_URL)
-  const explicitWs =
-    import.meta.env.VITE_WS_URL || import.meta.env.NEXT_PUBLIC_WS_URL || '';
-  if (explicitWs && explicitWs.trim()) {
-    const cleanWs = explicitWs.trim().replace(/\/+$/, '');
+  const envObj =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env
+      : typeof process !== 'undefined' && process.env
+      ? process.env
+      : {};
+  const explicitWs = (envObj.VITE_WS_URL || envObj.NEXT_PUBLIC_WS_URL || '').trim();
+  if (explicitWs) {
+    const cleanWs = explicitWs.replace(/\/+$/, '');
     return `${cleanWs}${cleanPath}`;
   }
 
@@ -244,13 +312,18 @@ export function wsUrl(path: string = '/ws'): string {
     }
   }
 
-  // 3. In browser, derive directly from current origin
+  // 3. Fallback for production or native Tauri: Canonical Cloudflare Worker WSS URL
+  if (isProductionEnvironment() || isTauri()) {
+    return `${PRODUCTION_WS_URL.replace(/\/ws$/, '')}${cleanPath}`;
+  }
+
+  // 4. In browser, derive directly from current origin
   if (typeof window !== 'undefined' && window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${cleanPath}`;
   }
 
-  return '';
+  return PRODUCTION_WS_URL;
 }
 
 /**

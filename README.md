@@ -45,6 +45,7 @@ A mission-critical tactical operations console and real-time telemetry workstati
 - [💻 Programmatic Integration (React)](#-programmatic-integration-react)
 - [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
 - [📱 Android Mobile Workstation Build (Tauri v2)](#-android-mobile-workstation-build-tauri-v2)
+  - [Production Mobile & Android Backend Gateway Routing](#4-production-mobile--android-backend-gateway-routing)
 - [☁️ Full-Stack Cloudflare Workers Deployment & Architecture](#️-full-stack-cloudflare-workers-deployment--architecture)
 - [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
 - [📄 License](#-license)
@@ -1447,6 +1448,46 @@ To enforce strict production signing and fail if no credentials exist:
 ```bash
 REQUIRE_PRODUCTION_SIGNING=true npm run android:build:release
 ```
+
+### 4. Production Mobile & Android Backend Gateway Routing
+
+In production mobile phone apps and native Android Tauri builds, all backend API requests and real-time telemetry WebSockets are routed directly to the centralized Cloudflare Worker gateway:
+
+* **Production API Base URL**:
+  `https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev`
+* **Production WebSocket URL**:
+  `wss://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/ws`
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               PRODUCTION MOBILE / ANDROID APP NETWORK TOPOLOGY                         │
+│                                                                                        │
+│  [Android Phone / Field Tablet / Mobile Browser]                                       │
+│                         │                                                              │
+│                         ├───► HTTPS API Requests (https://...workers.dev/api/*)        │
+│                         │     ├── /api/health                                          │
+│                         │     ├── /api/auth/login (JWT Stateless Authentication)       │
+│                         │     ├── /api/heartbeat (Field Telemetry Registration)        │
+│                         │     ├── /api/state (Mission State & Assets)                  │
+│                         │     └── /api/ai/* (Predictive Maintenance & Autonomous SAR)  │
+│                         │                                                              │
+│                         └───► WSS WebSockets (wss://...workers.dev/ws)                 │
+│                               └── Durable Objects Multi-Client Presence & State Sync   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key Guarantees:
+1. **Centralized Single Source of Truth**: All URL generation logic is centralized in [`src/config/api.ts`](file:///home/solid/porlar-expedition-and-asset-management-system/src/config/api.ts). Changing the gateway URL in the future only requires editing this single module.
+2. **Clean Path Appending**: All API endpoints use `apiUrl(endpoint)`. It strictly deduplicates paths, strips trailing slashes, and guarantees no double slashes (`//api/...`), duplicated `/api`, or missing `/api`.
+3. **Secure WebSocket Derivation**: `wsUrl(path)` automatically derives `wss://` from the HTTPS gateway URL. Production mobile apps strictly connect via `wss://` and never downgrade to unencrypted `ws://` or `http://`.
+4. **Loopback & Dev Tunnel Sanitization**: Production builds and mobile devices automatically strip stale `localhost`, `127.0.0.1`, LAN IPs, or expired ngrok URLs from persistent storage so physical field units never attempt to reach an unreachable loopback host.
+5. **Preserved Development Workflows**:
+   - **Localhost Testing**: When developing locally on a laptop desktop browser at `http://localhost:3000`, the app routes relative `/api/*` requests directly to the local Express server on port 3000.
+   - **Ngrok Tunnel Testing**: When testing a physical mobile phone against a developer's laptop backend over ngrok (`https://<id>.ngrok-free.app`), the ngrok URL configured in `.env` or entered in the in-app *Operations Gateway* modal is honored, and the `ngrok-skip-browser-warning` bypass header is automatically injected.
+   - **Verification Diagnostics**: Run the verification test suite at any time:
+     ```bash
+     npx tsx scripts/verify-mobile-routing.ts
+     ```
 
 ---
 

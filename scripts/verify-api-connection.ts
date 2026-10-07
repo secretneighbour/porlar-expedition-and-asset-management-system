@@ -43,34 +43,56 @@ for (const { input, expected } of urls) {
   }
 }
 
-console.log('--- TEST 3: apiUrl Resolution ---');
-import { apiUrl, setCustomApiBaseUrl, clearCustomApiBaseUrl } from '../src/config/api';
+console.log('--- TEST 3: apiUrl & wsUrl Resolution ---');
+import { apiUrl, wsUrl, setCustomApiBaseUrl, clearCustomApiBaseUrl, PRODUCTION_CLOUDFLARE_WORKER_URL, PRODUCTION_WS_URL } from '../src/config/api';
 
-// 3A: Standard base URL
-setCustomApiBaseUrl('https://example-backend.com');
-const loginUrl1 = apiUrl('/api/auth/login');
-console.log(`Base https://example-backend.com -> /api/auth/login: "${loginUrl1}"`);
-if (loginUrl1 !== 'https://example-backend.com/api/auth/login') {
-  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl1}`);
+// 3A: Production Mobile / Cloudflare Gateway Default URL
+clearCustomApiBaseUrl();
+const cfLogin = apiUrl('/api/auth/login');
+console.log(`Default Production Cloudflare -> /api/auth/login: "${cfLogin}"`);
+if (cfLogin !== `${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/auth/login`) {
+  throw new Error(`Expected ${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/auth/login, got ${cfLogin}`);
 }
 
-// 3B: Base ending in /api deduplication (must not produce /api/api)
-setCustomApiBaseUrl('https://example-backend.com/api');
-const loginUrl2 = apiUrl('/api/auth/login');
-console.log(`Base https://example-backend.com/api -> /api/auth/login: "${loginUrl2}"`);
-if (loginUrl2 !== 'https://example-backend.com/api/auth/login') {
-  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl2}`);
+const cfHealth = apiUrl('/api/health');
+console.log(`Default Production Cloudflare -> /api/health: "${cfHealth}"`);
+if (cfHealth !== `${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/health`) {
+  throw new Error(`Expected ${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/health, got ${cfHealth}`);
 }
 
-// 3C: Base with trailing slashes and endpoint without leading slash
-setCustomApiBaseUrl('https://example-backend.com///');
-const loginUrl3 = apiUrl('api/auth/login');
-console.log(`Base https://example-backend.com/// -> api/auth/login: "${loginUrl3}"`);
-if (loginUrl3 !== 'https://example-backend.com/api/auth/login') {
-  throw new Error(`Expected https://example-backend.com/api/auth/login, got ${loginUrl3}`);
+const cfHeartbeat = apiUrl('/api/heartbeat');
+console.log(`Default Production Cloudflare -> /api/heartbeat: "${cfHeartbeat}"`);
+if (cfHeartbeat !== `${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/heartbeat`) {
+  throw new Error(`Expected ${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/heartbeat, got ${cfHeartbeat}`);
 }
 
-// 3D: Ngrok development URL with browser warning bypass
+// 3B: Production WebSocket WSS derivation
+const cfWs = wsUrl('/ws');
+console.log(`Default Production Cloudflare WebSocket -> "${cfWs}"`);
+if (cfWs !== 'wss://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/ws') {
+  throw new Error(`Expected wss://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/ws, got ${cfWs}`);
+}
+if (cfWs.startsWith('ws://') || cfWs.startsWith('http://')) {
+  throw new Error(`Insecure protocol detected in WebSocket: ${cfWs}`);
+}
+
+// 3C: Base ending in /api deduplication (must not produce /api/api)
+setCustomApiBaseUrl('https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/api');
+const dedupeLogin = apiUrl('/api/auth/login');
+console.log(`Deduplication test -> "${dedupeLogin}"`);
+if (dedupeLogin !== `${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/auth/login`) {
+  throw new Error(`Deduplication failure: got ${dedupeLogin}`);
+}
+
+// 3D: Trailing slash normalization without double slash
+setCustomApiBaseUrl('https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev///');
+const slashLogin = apiUrl('api/auth/login');
+console.log(`Slash normalization -> "${slashLogin}"`);
+if (slashLogin !== `${PRODUCTION_CLOUDFLARE_WORKER_URL}/api/auth/login` || slashLogin.includes('//api/')) {
+  throw new Error(`Slash normalization failure: got ${slashLogin}`);
+}
+
+// 3E: Ngrok development URL with browser warning bypass
 setCustomApiBaseUrl('https://alpha-recon.ngrok-free.app');
 const ngrokLogin = apiUrl('/api/auth/login');
 console.log(`Ngrok base https://alpha-recon.ngrok-free.app -> /api/auth/login: "${ngrokLogin}"`);
@@ -81,23 +103,18 @@ if (
   throw new Error(`Expected ngrok skip warning query param, got ${ngrokLogin}`);
 }
 
-// 3E: Clean same-origin relative paths (Production Cloudflare Mode)
-clearCustomApiBaseUrl();
-const relativeLogin = apiUrl('/api/auth/login');
-console.log(`Empty Base (Production Cloudflare) -> /api/auth/login: "${relativeLogin}"`);
-if (relativeLogin !== '/api/auth/login') {
-  throw new Error(`Expected clean relative path /api/auth/login, got ${relativeLogin}`);
+// 3F: Ngrok WebSocket WSS derivation
+const ngrokWs = wsUrl('/ws');
+console.log(`Ngrok WebSocket -> "${ngrokWs}"`);
+if (ngrokWs !== 'wss://alpha-recon.ngrok-free.app/ws') {
+  throw new Error(`Expected wss://alpha-recon.ngrok-free.app/ws, got ${ngrokWs}`);
 }
 
-// 3F: Auth endpoints verification
-setCustomApiBaseUrl('https://example-backend.com');
-const authEndpoints = ['/api/auth/login', '/api/auth/logout', '/api/auth/session', '/api/heartbeat', '/api/health'];
-for (const ep of authEndpoints) {
-  const resolved = apiUrl(ep);
-  if (!resolved.startsWith('https://example-backend.com') || resolved.includes('/api/api/')) {
-    throw new Error(`Endpoint construction error for ${ep}: got ${resolved}`);
-  }
+// 3G: Custom development override cleanup
+clearCustomApiBaseUrl();
+const finalHealth = apiUrl('/api/health');
+if (!finalHealth.startsWith('https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev')) {
+  throw new Error(`Expected Cloudflare Worker URL after clear, got ${finalHealth}`);
 }
 
-clearCustomApiBaseUrl();
-console.log('ALL TESTS PASSED SUCCESSFULLY!');
+console.log('ALL API ROUTING AND WEBSOCKET TESTS PASSED SUCCESSFULLY!');

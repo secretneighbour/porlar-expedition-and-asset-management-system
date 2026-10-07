@@ -259,21 +259,20 @@ export function usePolarSync() {
     const token = sessionStorage.getItem('polar_auth_token') || localStorage.getItem('polar_auth_token') || '';
     const socketUrl = wsUrl(`/ws?token=${token}`);
 
-    // In serverless hosting (Vercel / Cloudflare Pages / Workers), use continuous HTTP REST sync
-    // unless a dedicated standalone WebSocket gateway URL (e.g. VITE_WS_URL) is explicitly provided
-    const isServerlessDomain =
+    // In serverless hosting without persistent WebSockets (e.g. Vercel Serverless Functions),
+    // fallback cleanly to continuous HTTP REST sync unless an explicit WebSocket gateway is provided.
+    // Cloudflare Workers with Durable Objects (workers.dev) natively supports persistent WebSockets at /ws.
+    const isServerlessWithoutWs =
       typeof window !== 'undefined' &&
-      (window.location.hostname.includes('vercel.app') ||
-        window.location.hostname.includes('pages.dev') ||
-        window.location.hostname.includes('workers.dev'));
+      window.location.hostname.includes('vercel.app');
 
     const hasDedicatedWsServer = Boolean(
       typeof import.meta !== 'undefined' &&
         ((import.meta as any).env?.VITE_WS_URL || (import.meta as any).env?.NEXT_PUBLIC_WS_URL)
     );
 
-    if (!socketUrl || (isServerlessDomain && !hasDedicatedWsServer)) {
-      console.log('[SYNC] Operating in Serverless environment (Cloudflare / Vercel). Active via HTTP REST telemetry sync.');
+    if (!socketUrl || (isServerlessWithoutWs && !hasDedicatedWsServer)) {
+      console.log('[SYNC] Operating in Vercel Serverless environment. Active via HTTP REST telemetry sync.');
       setSyncStatus('connected');
       return;
     }

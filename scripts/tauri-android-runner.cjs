@@ -17,14 +17,23 @@ const projectRoot = path.resolve(__dirname, '..');
 // Prepare SDK, NDK, and local.properties
 const { env } = prepareEnvironment({ verbose: false });
 
-// If an explicit remote backend URL is provided via env, ensure it is set
-if (env.VITE_API_URL && !env.VITE_API_URL.includes('localhost')) {
-  env.VITE_API_BASE_URL = env.VITE_API_URL;
-}
-
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] || 'build';
 const passedArgs = rawArgs.slice(1);
+
+// Centralized Cloudflare Worker backend URL for mobile/Android production
+const PRODUCTION_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev';
+
+// Ensure Android build routes backend API requests to Cloudflare Worker by default,
+// while preserving explicit ngrok or dev overrides if specified by developer.
+const isDebugBuild = passedArgs.includes('--debug') || passedArgs.includes('-d');
+if (!env.VITE_API_BASE_URL || (!isDebugBuild && (env.VITE_API_BASE_URL.includes('localhost') || env.VITE_API_BASE_URL.includes('127.0.0.1')))) {
+  env.VITE_API_BASE_URL = env.VITE_API_URL && !env.VITE_API_URL.includes('localhost')
+    ? env.VITE_API_URL
+    : PRODUCTION_BACKEND_URL;
+}
+env.VITE_API_URL = env.VITE_API_BASE_URL;
+env.VITE_BACKEND_URL = env.VITE_API_BASE_URL;
 
 // Locate tauri CLI binary (node_modules/.bin/tauri)
 const tauriBin = process.platform === 'win32'

@@ -19,6 +19,8 @@ import {
   BatteryLow
 } from 'lucide-react';
 import { ConnectedDevice } from '../types';
+import { PRODUCTION_CLOUDFLARE_WORKER_URL, isLocalhost } from '../config/api';
+import { isTauri } from '../platform';
 
 interface DevicePairingModalProps {
   isOpen: boolean;
@@ -47,7 +49,12 @@ export const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const url = window.location.href;
+      let url = window.location.href;
+      // If running inside desktop Tauri or on loopback localhost, physical phones cannot reach it;
+      // provide the public Cloudflare Worker production URL for seamless camera pairing
+      if (isTauri() || isLocalhost(window.location.hostname)) {
+        url = PRODUCTION_CLOUDFLARE_WORKER_URL;
+      }
       setCurrentUrl(url);
 
       QRCode.toDataURL(url, {
