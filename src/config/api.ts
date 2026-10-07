@@ -83,11 +83,12 @@ export function isLocalOrTunnelUrl(url?: string | null): boolean {
  *   (/api/*) on the Cloudflare deployment domain without depending on localhost or ngrok.
  */
 function resolveConfiguredApiBase(): string {
+  const envObj = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (typeof process !== 'undefined' && process.env ? process.env : {});
   const raw = (
-    import.meta.env.VITE_API_BASE_URL ||
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_BACKEND_URL ||
-    import.meta.env.NEXT_PUBLIC_API_BASE_URL ||
+    envObj.VITE_API_BASE_URL ||
+    envObj.VITE_API_URL ||
+    envObj.VITE_BACKEND_URL ||
+    envObj.NEXT_PUBLIC_API_BASE_URL ||
     ''
   ).trim();
 

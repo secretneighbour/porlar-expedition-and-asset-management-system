@@ -1,0 +1,7 @@
+# Cloudflare Workers Assets Exclusions
+# Prevents backend bundles and sensitive maps from being served as public static assets
+server.cjs
+server.cjs.map
+*.map
+_routes.json
+_redirects
