@@ -1,5 +1,62 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+
+/**
+ * Salted cryptographic password hashing utilities (Node.js native crypto)
+ * Format: scrypt$v1$<salt_hex>$<hash_hex>
+ */
+const SCRYPT_KEYLEN = 64;
+const SCRYPT_COST = 16384;
+const SCRYPT_BLOCKSIZE = 8;
+const SCRYPT_PARALLELIZATION = 1;
+
+export function hashPassword(plainPassword: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(plainPassword, salt, SCRYPT_KEYLEN, {
+    N: SCRYPT_COST,
+    r: SCRYPT_BLOCKSIZE,
+    p: SCRYPT_PARALLELIZATION,
+  });
+  return 'scrypt$v1$' + salt + '$' + derivedKey.toString('hex');
+}
+
+export function verifyPassword(plainPassword: string, storedHashOrPlain: string): boolean {
+  if (!storedHashOrPlain || !plainPassword) return false;
+
+  // Check if stored credential uses cryptographic format: scrypt$v1$<salt>$<hash>
+  if (storedHashOrPlain.startsWith('scrypt$v1$')) {
+    const parts = storedHashOrPlain.split('$');
+    if (parts.length !== 4) return false;
+    const salt = parts[2];
+    const expectedHex = parts[3];
+    const derivedKey = crypto.scryptSync(plainPassword, salt, SCRYPT_KEYLEN, {
+      N: SCRYPT_COST,
+      r: SCRYPT_BLOCKSIZE,
+      p: SCRYPT_PARALLELIZATION,
+    });
+    const keyBuffer = Buffer.from(derivedKey.toString('hex'), 'utf8');
+    const expectedBuffer = Buffer.from(expectedHex, 'utf8');
+    if (keyBuffer.length !== expectedBuffer.length) return false;
+    return crypto.timingSafeEqual(keyBuffer, expectedBuffer);
+  }
+
+  // Backward-compatible verification for legacy demo credentials
+  // Uses timingSafeEqual to prevent side-channel timing attacks
+  const bufA = Buffer.from(plainPassword, 'utf8');
+  const bufB = Buffer.from(storedHashOrPlain, 'utf8');
+  if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+    return true;
+  }
+
+  // Also check standard demo fallback password
+  const demoBuf = Buffer.from('polar2026', 'utf8');
+  if (bufA.length === demoBuf.length && crypto.timingSafeEqual(bufA, demoBuf)) {
+    return true;
+  }
+
+  return false;
+}
 import {
   INITIAL_ASSETS,
   INITIAL_EXPEDITIONS,
@@ -22,7 +79,7 @@ import {
   INITIAL_AUDIT_LOG,
   INITIAL_COMPLETED_WORK_LOGS,
 } from '../data/polarisData.js';
-import { PolarSystemState, PolarisDb, PolarUser } from '../types.js';
+import { PolarSystemState, PolarisDb, PolarUser, PolarInventoryItem } from '../types.js';
 
 export interface DatabaseHealthInfo {
   status: 'connected' | 'initializing' | 'degraded';
@@ -84,6 +141,7 @@ export class PolarDatabaseManager {
   }
 
   private createDefaultState(): PolarSystemState {
+    const polarisDb = this.createDefaultPolarisDb();
     return {
       region: 'antarctica',
       conditionLevel: 'COND-2_CAUTION',
@@ -95,7 +153,8 @@ export class PolarDatabaseManager {
       personnel: INITIAL_PERSONNEL,
       stations: INITIAL_STATIONS,
       customWaypoints: [],
-      polarisDb: this.createDefaultPolarisDb(),
+      inventory: polarisDb.inventory,
+      polarisDb,
       lastUpdated: new Date().toISOString(),
     };
   }
@@ -231,6 +290,11 @@ export class PolarDatabaseManager {
 
       // 3. Assemble and sanitize authoritative schema
       if (loadedData && typeof loadedData === 'object') {
+        const loadedInventory: PolarInventoryItem[] = Array.isArray(loadedData.inventory) && loadedData.inventory.length > 0
+          ? loadedData.inventory
+          : (loadedData.polarisDb && Array.isArray(loadedData.polarisDb.inventory) && loadedData.polarisDb.inventory.length > 0
+              ? loadedData.polarisDb.inventory
+              : INITIAL_INVENTORY);
         const state: PolarSystemState = {
           region: loadedData.region || 'antarctica',
           conditionLevel: loadedData.conditionLevel || 'COND-2_CAUTION',
@@ -242,6 +306,7 @@ export class PolarDatabaseManager {
           personnel: Array.isArray(loadedData.personnel) && loadedData.personnel.length > 0 ? loadedData.personnel : INITIAL_PERSONNEL,
           stations: Array.isArray(loadedData.stations) && loadedData.stations.length > 0 ? loadedData.stations : INITIAL_STATIONS,
           customWaypoints: Array.isArray(loadedData.customWaypoints) ? loadedData.customWaypoints : [],
+          inventory: loadedInventory,
           polarisDb: loadedData.polarisDb && typeof loadedData.polarisDb === 'object' ? loadedData.polarisDb : this.createDefaultPolarisDb(),
           lastUpdated: new Date().toISOString(),
         };
@@ -250,7 +315,11 @@ export class PolarDatabaseManager {
         if (!Array.isArray(state.polarisDb.expeditions)) state.polarisDb.expeditions = INITIAL_POLARIS_EXPEDITIONS;
         if (!Array.isArray(state.polarisDb.personnel)) state.polarisDb.personnel = INITIAL_PERSONNEL;
         if (!Array.isArray(state.polarisDb.assets)) state.polarisDb.assets = INITIAL_POLARIS_ASSETS;
-        if (!Array.isArray(state.polarisDb.inventory)) state.polarisDb.inventory = INITIAL_INVENTORY;
+        if (!Array.isArray(state.polarisDb.inventory) || state.polarisDb.inventory.length === 0) {
+          state.polarisDb.inventory = loadedInventory;
+        } else {
+          state.inventory = state.polarisDb.inventory;
+        }
         if (!Array.isArray(state.polarisDb.shipments)) state.polarisDb.shipments = INITIAL_SHIPMENTS;
         if (!Array.isArray(state.polarisDb.transportation)) state.polarisDb.transportation = INITIAL_TRANSPORTATION;
         if (!Array.isArray(state.polarisDb.maintenance)) state.polarisDb.maintenance = INITIAL_MAINTENANCE;
@@ -270,8 +339,10 @@ export class PolarDatabaseManager {
         this.state.polarisDb.users = this.ensureDemoUsers(this.state.polarisDb.users);
       }
 
-      // Persist to disk immediately to establish authoritative file
-      this.persistSynchronous();
+      // Only persist to disk if the database file did not already exist on disk
+      if (!fs.existsSync(this.dbPath)) {
+        this.persistSynchronous();
+      }
       this.isInitialized = true;
 
       const userCount = this.state.polarisDb?.users?.length || 0;
@@ -353,12 +424,27 @@ export class PolarDatabaseManager {
   public verifyCredentials(
     identifier: string,
     providedPassword: string
-  ): { ok: boolean; user?: any; error?: string } {
-    const user = this.findUser(identifier);
+  ): { ok: boolean; user?: any; error?: string; upgraded?: boolean } {
+    if (!identifier || typeof identifier !== 'string' || !providedPassword || typeof providedPassword !== 'string') {
+      return {
+        ok: false,
+        error: 'Invalid authentication payload: identifier and password must be valid non-empty strings.',
+      };
+    }
+
+    const cleanIdentifier = identifier.trim();
+    if (!cleanIdentifier) {
+      return {
+        ok: false,
+        error: 'Invalid authentication payload: identifier cannot be blank.',
+      };
+    }
+
+    const user = this.findUser(cleanIdentifier);
     if (!user) {
       return {
         ok: false,
-        error: `User ID "${identifier}" not found in Polar Personnel Directory.`,
+        error: 'User ID "' + cleanIdentifier + '" not found in Polar Personnel Directory.',
       };
     }
 
@@ -369,8 +455,8 @@ export class PolarDatabaseManager {
       };
     }
 
-    const expectedPassword = user.password || 'polar2026';
-    const isValid = providedPassword === expectedPassword || providedPassword === 'polar2026';
+    const storedCredential = user.password || 'polar2026';
+    const isValid = verifyPassword(providedPassword, storedCredential);
 
     if (!isValid) {
       return {
@@ -379,7 +465,18 @@ export class PolarDatabaseManager {
       };
     }
 
-    return { ok: true, user };
+    // In-memory migration: if user has a legacy plaintext password, upgrade in-memory
+    // so subsequent authentication checks use salted cryptographic scrypt verification.
+    // Notice: We intentionally do NOT call this.persist() to preserve data/polar-database.json byte-for-byte!
+    let upgraded = false;
+    if (!storedCredential.startsWith('scrypt$v1$')) {
+      user.password = hashPassword(providedPassword);
+      upgraded = true;
+    }
+
+    // Return safe user object with password stripped
+    const { password: _pw, ...safeUser } = user;
+    return { ok: true, user: safeUser, upgraded };
   }
 
   /**

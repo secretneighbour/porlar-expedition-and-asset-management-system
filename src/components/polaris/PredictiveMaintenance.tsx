@@ -20,6 +20,7 @@ interface PredictiveProps {
   canEdit: boolean;
   geminiApiKey?: string;
   onViewTraditional?: () => void;
+  isSimulation?: boolean;
 }
 
 export function PredictiveMaintenance({
@@ -28,7 +29,8 @@ export function PredictiveMaintenance({
   setDb,
   canEdit,
   geminiApiKey,
-  onViewTraditional
+  onViewTraditional,
+  isSimulation = false,
 }: PredictiveProps) {
   const [ambientTemp, setAmbientTemp] = useState<number>(-50);
   const [records, setRecords] = useState<PredictiveMaintenanceRecord[]>(() => computePredictiveRecords(-50));
@@ -37,6 +39,8 @@ export function PredictiveMaintenance({
   const [aiAnalysisResult, setAiAnalysisResult] = useState<any>(null);
   const [actionSuccessModal, setActionSuccessModal] = useState<{ open: boolean; title: string; desc: string; savings: number; downtime: number } | null>(null);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'CRITICAL' | 'HIGH' | 'AVERTED'>('ALL');
+  const [executingId, setExecutingId] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   // Handle ambient temperature change slider
   const handleTempChange = (newTemp: number) => {
@@ -104,8 +108,12 @@ export function PredictiveMaintenance({
     }
   };
 
-  // One-click Maintain Today execution
+  // One-click Maintain Today execution with idempotency guard & error handling
   const handleExecuteMaintenanceToday = async (record: PredictiveMaintenanceRecord) => {
+    if (executingId) return;
+    setExecutingId(record.id);
+    setExecutionError(null);
+    let serverData: any = null;
     try {
       const res = await apiFetch('/api/ai/predictive-maintenance/execute', {
         method: 'POST',
@@ -113,100 +121,134 @@ export function PredictiveMaintenance({
         body: JSON.stringify({
           assetId: record.assetId,
           technician: record.assignedTechnician,
-          partConsumed: record.partRequired
+          partConsumed: record.partRequired,
+          isSimulation,
         })
       });
 
       if (!res.ok) {
-        console.warn('Server endpoint error, applying local state update.');
+        let errMsg = `Authorization or Server Error (${res.status}): Failed to execute predictive maintenance.`;
+        try {
+          const errData = await res.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch {}
+        setExecutionError(errMsg);
+        setExecutingId(null);
+        return;
       }
-    } catch (err) {
-      console.warn('Network call error, applying local client update.');
+
+      serverData = await res.json().catch(() => null);
+    } catch (err: any) {
+      setExecutionError(`Network connection error: ${err.message || 'Server unreachable'}`);
+      setExecutingId(null);
+      return;
+    }
+
+    if (serverData?.alreadyExecuted) {
+      // Idempotency: When server returns alreadyExecuted: true, client must not deduct stock or dispatch inventory update
+      setRecords(prev => prev.map(r => r.id === record.id ? { ...r, isPrevented: true, riskScore: 4, severity: 'LOW' as const } : r));
+      setExecutingId(null);
+      setActionSuccessModal({
+        open: true,
+        title: `Already Maintained Today: ${record.assetName}`,
+        desc: serverData.message || `Preventive maintenance for ${record.assetName} was already performed today. No duplicate stock deduction was made.`,
+        savings: record.costSavedUsd,
+        downtime: record.downtimeSavedHours
+      });
+      return;
     }
 
     // Update local records
     setRecords(prev => prev.map(r => r.id === record.id ? { ...r, isPrevented: true, riskScore: 4, severity: 'LOW' as const } : r));
 
-    // Update global db state
-    setDb((d: any) => {
-      const updatedAssets = d.assets.map((a: any) => {
-        if (a.id === record.assetId || a.name.toLowerCase().includes('snowcat')) {
-          return { ...a, condition: 'Excellent', status: 'Available' };
-        }
-        return a;
+    if (isSimulation) {
+      // In simulation mode, update isolated sandbox state
+      setDb((d: any) => {
+        const updatedAssets = d.assets.map((a: any) => {
+          if (a.id === record.assetId || (record.assetName && a.name === record.assetName)) {
+            return { ...a, condition: 'Excellent', status: 'Available' };
+          }
+          return a;
+        });
+
+        const updatedMaintenance = d.maintenance.map((m: any) => {
+          if (m.assetId === record.assetId || (record.assetName && m.assetName === record.assetName)) {
+            return {
+              ...m,
+              status: 'Completed',
+              notes: `[PREVENTIVE AI SUCCESS] ${record.component} replaced today prior to traverse under ${ambientTemp}°C cold stress. Downtime averted: ${record.downtimeSavedHours}h. Cost saved: $${record.costSavedUsd.toLocaleString()}.`,
+            };
+          }
+          return m;
+        });
+
+        const updatedInventory = d.inventory.map((inv: any) => {
+          const partName = (record.partRequired || '').toLowerCase();
+          if (inv.name && (inv.name.toLowerCase().includes(partName) || partName.includes(inv.name.toLowerCase()))) {
+            return { ...inv, quantity: Math.max(0, inv.quantity - 1) };
+          }
+          return inv;
+        });
+
+        const newCompletedWork = {
+          id: `CWL-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+          timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          category: 'maintenance' as const,
+          title: `Predictive Pre-Failure Belt Replacement on ${record.assetName}`,
+          entityId: record.assetId,
+          entityName: record.assetName,
+          stationOrExpedition: 'Maitri / Bharati Polar Depot',
+          assignedToOrOperator: record.assignedTechnician,
+          clearedBy: 'AI Autonomous Janitor' as const,
+          actionTaken: `Replaced cold-soaked ${record.component} before traverse. Calibrated tension to 8.2mm under ${ambientTemp}°C thermal stress. Auto-cleared ticket from active queue.`,
+          resolutionNotes: `Vibration RMS reduced to 0.4 mm/s. Belt elasticity verified for -50°C cold-soak operations.`,
+          avertedImpactOrSavings: `Averted catastrophic field breakdown. Saved ${record.downtimeSavedHours}h downtime & $${record.costSavedUsd.toLocaleString()} repair costs.`,
+          status: 'Archived & Verified' as const
+        };
+
+        const updatedAudit = [
+          {
+            id: `AUD-${Date.now().toString().slice(-4)}`,
+            timestamp: new Date().toISOString(),
+            user: record.assignedTechnician,
+            action: 'SIMULATION_PREDICTIVE_MAINTENANCE',
+            entity: 'Asset / Maintenance',
+            details: `[SIMULATION] Pre-failure belt replacement executed on ${record.assetName} today. Averted ${record.downtimeSavedHours}h field downtime and $${record.costSavedUsd.toLocaleString()} repair expense.`,
+          },
+          ...d.auditLog
+        ];
+
+        return {
+          ...d,
+          assets: updatedAssets,
+          maintenance: updatedMaintenance,
+          inventory: updatedInventory,
+          auditLog: updatedAudit,
+          completedWorkLogs: [newCompletedWork, ...(d.completedWorkLogs || [])]
+        };
       });
-
-      const updatedMaintenance = d.maintenance.map((m: any) => {
-        if (m.assetId === record.assetId || (m.assetName && m.assetName.toLowerCase().includes('snowcat'))) {
-          return {
-            ...m,
-            status: 'Completed',
-            notes: `[PREVENTIVE AI SUCCESS] Serpentine belt replaced today prior to traverse under ${ambientTemp}°C cold stress. Downtime averted: ${record.downtimeSavedHours}h. Cost saved: $${record.costSavedUsd.toLocaleString()}.`,
-          };
-        }
-        return m;
-      });
-
-      const updatedInventory = d.inventory.map((inv: any) => {
-        if (inv.name.toLowerCase().includes('belt') || inv.name.toLowerCase().includes('serpentine')) {
-          return { ...inv, quantity: Math.max(0, inv.quantity - 1) };
-        }
-        return inv;
-      });
-
-      const newCompletedWork = {
-        id: `CWL-${Date.now().toString().slice(-4)}`,
-        timestamp: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
-        timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        category: 'maintenance' as const,
-        title: `Predictive Pre-Failure Belt Replacement on ${record.assetName}`,
-        entityId: record.assetId,
-        entityName: record.assetName,
-        stationOrExpedition: 'Maitri / Bharati Polar Depot',
-        assignedToOrOperator: record.assignedTechnician,
-        clearedBy: 'AI Autonomous Janitor' as const,
-        actionTaken: `Replaced cold-soaked ${record.component} before traverse. Calibrated tension to 8.2mm under ${ambientTemp}°C thermal stress. Auto-cleared ticket from active queue.`,
-        resolutionNotes: `Vibration RMS reduced to 0.4 mm/s. Belt elasticity verified for -50°C cold-soak operations.`,
-        avertedImpactOrSavings: `Averted catastrophic field breakdown. Saved ${record.downtimeSavedHours}h downtime & $${record.costSavedUsd.toLocaleString()} repair costs.`,
-        status: 'Archived & Verified' as const
-      };
-
-      const updatedAudit = [
-        {
-          id: `AUD-${Date.now().toString().slice(-4)}`,
-          timestamp: new Date().toISOString(),
-          user: record.assignedTechnician,
-          action: 'PREDICTIVE_MAINTENANCE_EXECUTED',
-          entity: 'Asset / Maintenance',
-          details: `Pre-failure belt replacement executed on ${record.assetName} today. Averted ${record.downtimeSavedHours}h field downtime and $${record.costSavedUsd.toLocaleString()} repair expense.`,
-        },
-        ...d.auditLog
-      ];
-
-      return {
-        ...d,
-        assets: updatedAssets,
-        maintenance: updatedMaintenance,
-        inventory: updatedInventory,
-        auditLog: updatedAudit,
-        completedWorkLogs: [newCompletedWork, ...(d.completedWorkLogs || [])]
-      };
-    });
+    }
+    // Live mode: Authoritative backend owns stock deduction, asset state, and broadcast via STATE_UPDATE.
+    // Do not call setDb here to prevent duplicate inventory deduction or broad database overwrite over WebSocket.
 
     emitAiActionBroadcast({
       category: 'maintenance',
-      message: `Pre-failure ${record.component} replaced on ${record.assetName}. Auto-cleared work ticket & logged forensic audit archive.`,
+      message: `${isSimulation ? '[SIMULATION] ' : ''}Pre-failure ${record.component} replaced on ${record.assetName}. Auto-cleared work ticket & logged forensic audit archive.`,
       stationOrAsset: record.assetName,
       impact: `+$${record.costSavedUsd.toLocaleString()} saved`
     });
 
     setActionSuccessModal({
       open: true,
-      title: `Preventive Maintenance Executed Today: ${record.assetName}`,
-      desc: `The technician replaced the ${record.component} before the scheduled polar traverse. Catastrophic field breakdown in -50°C blizzard has been completely averted.`,
+      title: isSimulation ? `[SIMULATION] Preventive Action Executed: ${record.assetName}` : `Preventive Maintenance Executed Today: ${record.assetName}`,
+      desc: isSimulation
+        ? `[SIMULATED SCENARIO] The technician replaced the ${record.component} in the training environment. Production assets and records remain unaffected.`
+        : `The technician replaced the ${record.component} before the scheduled polar traverse. Catastrophic field breakdown in -50°C blizzard has been completely averted.`,
       savings: record.costSavedUsd,
       downtime: record.downtimeSavedHours
     });
+    setExecutingId(null);
   };
 
   const primaryAlert = records.find(r => r.id === 'PRD-0001') || records[0];

@@ -100,9 +100,22 @@ export function Modal({
   t: any;
   wide?: boolean;
 }) {
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       style={{
         background: 'rgba(0, 0, 0, 0.75)',
         backdropFilter: 'blur(12px)',
@@ -119,28 +132,31 @@ export function Modal({
           borderRadius: '24px',
           boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6)',
         }}
-        className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[85vh] overflow-y-auto`}
+        className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           style={{ borderBottom: `1px solid ${t?.border || 'rgba(255, 255, 255, 0.12)'}` }}
-          className="flex items-center justify-between px-6 py-4.5 sticky top-0 bg-inherit z-10 backdrop-blur-md"
+          className="flex items-center justify-between px-4 sm:px-6 py-4 sticky top-0 bg-inherit z-10 backdrop-blur-md"
         >
           <h3
+            id="modal-dialog-title"
             style={{ color: t?.text || '#F5F3FF', fontFamily: FONT_HEAD }}
-            className="text-lg font-bold"
+            className="text-base sm:text-lg font-bold pr-2 truncate"
           >
             {title}
           </h3>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close dialog"
             style={{ color: t?.textDim || '#C9C1E8' }}
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6">{children}</div>
       </div>
     </div>
   );
@@ -210,6 +226,7 @@ export function Toolbar({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search operations, personnel, assets..."
+          aria-label="Search operations, personnel, assets"
           style={{ color: t?.text || '#F5F3FF', fontFamily: FONT_BODY }}
           className="outline-none bg-transparent text-sm w-full placeholder:opacity-50"
         />
@@ -345,6 +362,7 @@ export function Table({
               {columns.map((c) => (
                 <th
                   key={c.key}
+                  scope="col"
                   style={{ color: t?.textDim || '#C9C1E8', fontFamily: FONT_BODY }}
                   className="text-left font-semibold px-4.5 py-3.5 whitespace-nowrap text-xs uppercase tracking-wider"
                 >

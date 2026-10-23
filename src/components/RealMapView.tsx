@@ -1,15 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import L from 'leaflet';
-import { 
-  Compass, 
-  MapPin, 
-  Truck, 
-  Plane, 
-  AlertTriangle, 
-  Layers, 
-  LocateFixed, 
-  Loader2, 
-  Crosshair, 
+import {
+  Compass,
+  MapPin,
+  Truck,
+  Plane,
+  AlertTriangle,
+  Layers,
+  LocateFixed,
+  Loader2,
+  Crosshair,
   Navigation,
   Globe,
   Radio,
@@ -27,8 +27,12 @@ import {
   RefreshCw,
   ArrowRight,
   ShieldCheck,
-  X
+  X,
+  Mountain
 } from 'lucide-react';
+import { offlineMapCache } from '../utils/offlineMapCache.js';
+import { createPersistentTileLayer } from '../utils/persistentTileLayer.js';
+import { PolarTerrain3DView } from './PolarTerrain3DView.js';
 import {
   PolarRegion,
   PolarAsset,
@@ -83,6 +87,7 @@ interface RealMapViewProps {
   onAddWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
   onDeleteWaypoint?: (waypointId: string, expeditionId?: string) => void;
   onUpdateWaypoint?: (waypoint: Waypoint, expeditionId?: string) => void;
+  onReorderWaypoints?: (waypoints: Waypoint[], expeditionId?: string) => void;
   showDangerHeatmap?: boolean;
   onToggleDangerHeatmap?: () => void;
   isSimulation?: boolean;
@@ -95,6 +100,16 @@ interface RealMapViewProps {
  * Web Mercator projection (EPSG:3857) mathematical boundary is [-85.05112878°, +85.05112878°].
  * Clamps coordinates safely so Leaflet projection formulas never encounter Infinity/NaN.
  */
+export const OFFLINE_TILE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">' +
+  '<rect width="256" height="256" fill="#090d16" stroke="#1e293b" stroke-width="1"/>' +
+  '<path d="M 0 128 L 256 128 M 128 0 L 128 256" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,4"/>' +
+  '<circle cx="128" cy="128" r="8" fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.4"/>' +
+  '<text x="128" y="145" text-anchor="middle" fill="#64748b" font-family="monospace" font-size="9" letter-spacing="1">POLAR OFFLINE CACHE</text>' +
+  '<text x="128" y="160" text-anchor="middle" fill="#0284c7" font-family="monospace" font-size="8" opacity="0.7">VECTOR MODE ACTIVE</text>' +
+  '</svg>'
+);
+
 function safeMercatorLatLng(lat: number, lng: number): [number, number] {
   const safeLat = Math.max(-85.0, Math.min(85.0, Number(lat) || 0));
   let safeLng = Number(lng) || 0;
@@ -139,6 +154,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   onAddWaypoint,
   onDeleteWaypoint,
   onUpdateWaypoint,
+  onReorderWaypoints,
   showDangerHeatmap: showDangerHeatmapProp,
   onToggleDangerHeatmap,
   isSimulation = false,
@@ -149,11 +165,41 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
+  const notifiedArrivalsRef = useRef<Set<string>>(new Set());
   const heatmapLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const userGpsMarkerRef = useRef<L.LayerGroup | null>(null);
   const currentTileLayerRef = useRef<L.TileLayer | null>(null);
 
   const [mapType, setMapType] = useState<'satellite' | 'dark' | 'terrain' | 'osm' | 'google_hybrid'>('satellite');
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(() => typeof navigator !== 'undefined' ? !navigator.onLine : false);
+  const [tileErrors, setTileErrors] = useState<number>(0);
+  const [tilesLoaded, setTilesLoaded] = useState<number>(0);
+  const [is3DMode, setIs3DMode] = useState<boolean>(false);
+  const [cachedTileHits, setCachedTileHits] = useState<number>(0);
+  const [cachedTilesSaved, setCachedTilesSaved] = useState<number>(0);
+  const [cacheStats, setCacheStats] = useState<{ count: number; estimatedBytes: number }>({ count: 0, estimatedBytes: 0 });
+
+  useEffect(() => {
+    offlineMapCache.initCache().then(() => {
+      offlineMapCache.getCacheStats().then(setCacheStats);
+    });
+  }, []);
+
+  useEffect(() => {
+    const onOnline = () => {
+      setIsOfflineMode(false);
+      setTileErrors(0);
+    };
+    const onOffline = () => {
+      setIsOfflineMode(true);
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
   const [localHeatmapActive, setLocalHeatmapActive] = useState<boolean>(true);
   const [dangerFilter, setDangerFilter] = useState<'all' | 'extreme' | 'lethal'>('all');
   const [followMode, setFollowMode] = useState<boolean>(false);
@@ -190,9 +236,10 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
   // 1. Initialize Leaflet Map Instance once on mount
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    if ((mapContainerRef.current as any)._leaflet_id) return;
 
     // McMurdo area (-77.85°, 166.66°) or Svalbard (78.92°, 11.93°)
-    const [initialLat, initialLng] = region === 'antarctica' 
+    const [initialLat, initialLng] = region === 'antarctica'
       ? safeMercatorLatLng(-77.85, 166.66)
       : safeMercatorLatLng(78.92, 11.93);
 
@@ -207,12 +254,22 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Initial tile layer (ESRI World Imagery by default)
-    const initialTile = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    // Initial tile layer (ESRI World Imagery with persistent offline caching)
+    const initialTile = createPersistentTileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.esri.com" target="_blank" rel="noreferrer">Esri World Imagery</a> | Earthstar, USGS, NASA Polar Data',
+      errorTileUrl: OFFLINE_TILE_SVG,
       noWrap: false,
-    }).addTo(map);
+      onTileHit: () => setCachedTileHits(prev => prev + 1),
+      onTileMiss: () => {
+        setCachedTilesSaved(prev => prev + 1);
+        offlineMapCache.getCacheStats().then(setCacheStats);
+      },
+      onTileFallback: () => setTileErrors(prev => prev + 1),
+    });
+    initialTile.on('tileerror', () => setTileErrors(prev => prev + 1));
+    initialTile.on('tileload', () => setTilesLoaded(prev => prev + 1));
+    initialTile.addTo(map);
     currentTileLayerRef.current = initialTile;
 
     // Create data layers (Heatmap sits beneath markers)
@@ -233,7 +290,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       if (targetEl && (targetEl.closest('.leaflet-marker-icon') || targetEl.closest('.leaflet-popup'))) {
         return;
       }
-      
+
       const popupContent = `
         <div style="font-family: ui-monospace, monospace; padding: 4px; color: #0f172a; min-width: 210px;">
           <div style="font-weight: 800; font-size: 11px; color: #0284c7; margin-bottom: 3px; display:flex; align-items:center; gap:4px;">
@@ -405,12 +462,22 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     }
 
     try {
-      const newLayer = L.tileLayer(tileUrl, {
+      const newLayer = createPersistentTileLayer(tileUrl, {
         maxZoom,
         attribution,
         subdomains,
+        errorTileUrl: OFFLINE_TILE_SVG,
         noWrap: false,
-      }).addTo(mapInstance);
+        onTileHit: () => setCachedTileHits(prev => prev + 1),
+        onTileMiss: () => {
+          setCachedTilesSaved(prev => prev + 1);
+          offlineMapCache.getCacheStats().then(setCacheStats);
+        },
+        onTileFallback: () => setTileErrors(prev => prev + 1),
+      });
+      newLayer.on('tileerror', () => setTileErrors(prev => prev + 1));
+      newLayer.on('tileload', () => setTilesLoaded(prev => prev + 1));
+      newLayer.addTo(mapInstance);
 
       currentTileLayerRef.current = newLayer;
       triggerInvalidateSize();
@@ -454,8 +521,14 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
 
     layerGroup.clearLayers();
 
-    // 1. Research Stations
-    stations.forEach((st) => {
+    // 1. Research Stations (Deduplicated and validated)
+    const uniqueStations = new Map<string, ResearchStation>();
+    for (const st of stations) {
+      if (st && st.id && typeof st.lat === 'number' && Number.isFinite(st.lat) && typeof st.lng === 'number' && Number.isFinite(st.lng)) {
+        if (!uniqueStations.has(st.id)) uniqueStations.set(st.id, st);
+      }
+    }
+    uniqueStations.forEach((st) => {
       const [safeLat, safeLng] = safeMercatorLatLng(st.lat, st.lng);
       const weather = stationWeather?.[st.id];
 
@@ -514,7 +587,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         <div style="font-family: sans-serif; min-width: 240px; color: #0f172a; padding: 4px;">
           <div style="font-weight: 800; font-size: 13px; color: #0369a1; margin-bottom: 2px;">${st.name}</div>
           <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">[${st.code}] • ${st.country}</div>
-          
+
           ${weather ? `
             <div style="margin-bottom: 8px; padding: 6px; background: #0f172a; color: #f8fafc; border-radius: 6px; border: 1px solid #0284c7;">
               <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10.5px; margin-bottom: 4px;">
@@ -553,7 +626,13 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     });
 
     // 2. Active Expeditions and Waypoint Tracks with Traveled/Remaining Tracing
-    expeditions.forEach((exp) => {
+    const uniqueExpeditions = new Map<string, Expedition>();
+    for (const exp of expeditions) {
+      if (exp && exp.id && typeof exp.currentLat === 'number' && Number.isFinite(exp.currentLat) && typeof exp.currentLng === 'number' && Number.isFinite(exp.currentLng)) {
+        if (!uniqueExpeditions.has(exp.id)) uniqueExpeditions.set(exp.id, exp);
+      }
+    }
+    uniqueExpeditions.forEach((exp) => {
       // Evaluate live waypoint progress, sequential ETAs, and split paths
       const progress = evaluateWaypointProgress(
         exp.currentLat,
@@ -562,9 +641,13 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         arrivalRadiusKm
       );
 
-      // Auto-trigger waypoint arrival callback if newly reached
+      // Auto-trigger waypoint arrival callback if newly reached (deduplicated)
       if (progress.newlyReachedWaypoint && onUpdateWaypoint) {
-        onUpdateWaypoint(progress.newlyReachedWaypoint, exp.id);
+        const arrivalKey = `${exp.id}-${progress.newlyReachedWaypoint.id}`;
+        if (!notifiedArrivalsRef.current.has(arrivalKey)) {
+          notifiedArrivalsRef.current.add(arrivalKey);
+          onUpdateWaypoint(progress.newlyReachedWaypoint, exp.id);
+        }
       }
 
       // 2a. Actual Traveled Track History (GPS Breadcrumbs from telemetry/simulation)
@@ -852,24 +935,40 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             };
           }
 
-          if (upBtn && onUpdateWaypoint && wpIdx > 0) {
+          if (upBtn && (onReorderWaypoints || onUpdateWaypoint) && wpIdx > 0) {
             upBtn.onclick = () => {
-              const prevWp = progress.enrichedWaypoints[wpIdx - 1];
-              const curSeq = wp.sequence ?? (wpIdx + 1);
-              const prevSeq = prevWp.sequence ?? wpIdx;
-              onUpdateWaypoint({ ...wp, sequence: prevSeq }, exp.id);
-              onUpdateWaypoint({ ...prevWp, sequence: curSeq }, exp.id);
+              if (onReorderWaypoints && exp.waypoints) {
+                const wps = [...exp.waypoints];
+                const temp = wps[wpIdx];
+                wps[wpIdx] = wps[wpIdx - 1];
+                wps[wpIdx - 1] = temp;
+                onReorderWaypoints(wps, exp.id);
+              } else if (onUpdateWaypoint) {
+                const prevWp = progress.enrichedWaypoints[wpIdx - 1];
+                const curSeq = wp.sequence ?? (wpIdx + 1);
+                const prevSeq = prevWp.sequence ?? wpIdx;
+                onUpdateWaypoint({ ...wp, sequence: prevSeq }, exp.id);
+                onUpdateWaypoint({ ...prevWp, sequence: curSeq }, exp.id);
+              }
               mapInstance?.closePopup();
             };
           }
 
-          if (downBtn && onUpdateWaypoint && wpIdx < progress.enrichedWaypoints.length - 1) {
+          if (downBtn && (onReorderWaypoints || onUpdateWaypoint) && wpIdx < progress.enrichedWaypoints.length - 1) {
             downBtn.onclick = () => {
-              const nextWp = progress.enrichedWaypoints[wpIdx + 1];
-              const curSeq = wp.sequence ?? (wpIdx + 1);
-              const nextSeq = nextWp.sequence ?? (wpIdx + 2);
-              onUpdateWaypoint({ ...wp, sequence: nextSeq }, exp.id);
-              onUpdateWaypoint({ ...nextWp, sequence: curSeq }, exp.id);
+              if (onReorderWaypoints && exp.waypoints) {
+                const wps = [...exp.waypoints];
+                const temp = wps[wpIdx];
+                wps[wpIdx] = wps[wpIdx + 1];
+                wps[wpIdx + 1] = temp;
+                onReorderWaypoints(wps, exp.id);
+              } else if (onUpdateWaypoint) {
+                const nextWp = progress.enrichedWaypoints[wpIdx + 1];
+                const curSeq = wp.sequence ?? (wpIdx + 1);
+                const nextSeq = nextWp.sequence ?? (wpIdx + 2);
+                onUpdateWaypoint({ ...wp, sequence: nextSeq }, exp.id);
+                onUpdateWaypoint({ ...nextWp, sequence: curSeq }, exp.id);
+              }
               mapInstance?.closePopup();
             };
           }
@@ -924,7 +1023,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 6px;">[${exp.code}] • Leader: ${exp.leader}</div>
           <div style="font-size: 11px; margin-bottom: 3px;"><strong>Current GPS:</strong> ${exp.currentLat.toFixed(4)}°, ${exp.currentLng.toFixed(4)}°</div>
           <div style="font-size: 11px; margin-bottom: 3px;"><strong>Progress:</strong> ${exp.distanceCoveredKm} / ${exp.totalDistanceKm} km (${Math.round((exp.distanceCoveredKm / Math.max(exp.totalDistanceKm, 1)) * 100)}%)</div>
-          
+
           ${wLive ? `
             <div style="margin-bottom: 6px; padding: 4px 6px; background: #0f172a; color: #f8fafc; border-radius: 4px; font-size: 11px; font-family: monospace;">
               <span style="color: #fbbf24;">FIELD AWOS:</span> <strong>${wLive.tempC}°C</strong> (Windchill: <strong>${wLive.apparentTempC}°C</strong>, Wind: <strong>${wLive.windSpeedKts} kts</strong>)
@@ -932,7 +1031,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           ` : `
             <div style="font-size: 11px; margin-bottom: 3px;"><strong>Weather:</strong> ${exp.currentWeather.tempC}°C (Wind: ${exp.currentWeather.windKnots} kts)</div>
           `}
-          
+
           <div style="font-size: 11px; margin-bottom: 6px;"><strong>Rations Remaining:</strong> ${exp.rationsDaysRemaining} Days</div>
           <div style="font-size: 10px; background: #fef3c7; color: #92400e; padding: 4px 6px; border-radius: 4px; font-weight: bold;">
             PHASE: ${exp.phase.toUpperCase().replace('_', ' ')}
@@ -947,8 +1046,14 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       layerGroup.addLayer(convoyMarker);
     });
 
-    // 3. Polar Assets (Snowcats, Twin Otters, LC-130s, Rigs)
-    assets.forEach((asset) => {
+    // 3. Polar Assets (Deduplicated and validated)
+    const uniqueAssets = new Map<string, PolarAsset>();
+    for (const asset of assets) {
+      if (asset && asset.id && asset.currentLocation && typeof asset.currentLocation.lat === 'number' && Number.isFinite(asset.currentLocation.lat) && typeof asset.currentLocation.lng === 'number' && Number.isFinite(asset.currentLocation.lng)) {
+        if (!uniqueAssets.has(asset.id)) uniqueAssets.set(asset.id, asset);
+      }
+    }
+    uniqueAssets.forEach((asset) => {
       const [safeLat, safeLng] = safeMercatorLatLng(asset.currentLocation.lat, asset.currentLocation.lng);
       const isAir = asset.category === 'aviation';
       const isEmergency = asset.category === 'emergency_sar';
@@ -1003,8 +1108,14 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       layerGroup.addLayer(assetMarker);
     });
 
-    // 4. Crevasse Fields & Katabatic Zones (Hazards)
-    hazards.forEach((hz) => {
+    // 4. Crevasse Fields & Katabatic Zones (Deduplicated and validated)
+    const uniqueHazards = new Map<string, any>();
+    for (const hz of hazards) {
+      if (hz && hz.id && typeof hz.lat === 'number' && Number.isFinite(hz.lat) && typeof hz.lng === 'number' && Number.isFinite(hz.lng)) {
+        if (!uniqueHazards.has(hz.id)) uniqueHazards.set(hz.id, hz);
+      }
+    }
+    uniqueHazards.forEach((hz) => {
       const [safeLat, safeLng] = safeMercatorLatLng(hz.lat, hz.lng);
       const circle = L.circle([safeLat, safeLng], {
         radius: (hz.radiusKm || 15) * 1000,
@@ -1091,9 +1202,15 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       layerGroup.addLayer(distressMarker);
     }
 
-    // 7. Custom Tactical Waypoints / Ground Fixes
+    // 7. Custom Tactical Waypoints / Ground Fixes (Deduplicated and validated)
     if (customWaypoints && customWaypoints.length > 0) {
-      customWaypoints.forEach((cwp) => {
+      const uniqueCwps = new Map<string, Waypoint>();
+      for (const cwp of customWaypoints) {
+        if (cwp && cwp.id && typeof cwp.lat === 'number' && Number.isFinite(cwp.lat) && typeof cwp.lng === 'number' && Number.isFinite(cwp.lng)) {
+          if (!uniqueCwps.has(cwp.id)) uniqueCwps.set(cwp.id, cwp);
+        }
+      }
+      uniqueCwps.forEach((cwp) => {
         const [cLat, cLng] = safeMercatorLatLng(cwp.lat, cwp.lng);
         const cwpIcon = L.divIcon({
           html: `
@@ -1145,7 +1262,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
         layerGroup.addLayer(cwpMarker);
       });
     }
-  }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition, showGpsTrack, arrivalRadiusKm, showWaypointLabels, onUpdateWaypoint, onDeleteWaypoint, activeProposedRoute]);
+  }, [mapInstance, stations, assets, expeditions, hazards, activeDistress, region, customWaypoints, onSelectStation, onSelectAsset, onSelectExpedition, showGpsTrack, arrivalRadiusKm, showWaypointLabels, onUpdateWaypoint, onReorderWaypoints, onDeleteWaypoint, activeProposedRoute]);
 
   // 6.5. Draw Sub-Zero Danger Zones Heatmap Overlay
   useEffect(() => {
@@ -1260,9 +1377,9 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             </span>
             <span style="font-size: 10px; color: #64748b;">R: ${zone.radiusKm} km</span>
           </div>
-          
+
           <div style="font-weight: 800; font-size: 13px; color: #0f172a; margin-bottom: 4px;">${zone.name}</div>
-          
+
           <div style="background: #0f172a; color: #f8fafc; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
               <span style="font-size: 18px; font-weight: 900; color: ${isLethal ? '#fb7185' : isExtreme ? '#a5b4fc' : '#38bdf8'};">
@@ -1557,11 +1674,12 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       if (data.status === 'ok' && data.plan) {
         setLocalProposedRoute(data.plan);
         setShowProposedPanel(true);
+        const modeLabel = data.plan.mode === 'gemini_ai_live' ? 'Gemini 3.8 Flash' : (data.plan.mode === 'gemini_ai_cached' ? 'Gemini AI (Cached)' : 'Deterministic Pathfinder');
         emitAiActionBroadcast({
           category: 'logistics',
-          message: `${isSimulation ? '[SIMULATION] ' : ''}Gemini route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
+          message: `${isSimulation ? '[SIMULATION] ' : ''}${modeLabel} route proposed: ${data.plan.recommendedOrder.join(' → ')} (${data.plan.estimatedDistanceKm} km, Risk: ${data.plan.riskLevel}).`,
           stationOrAsset: currentExpedition.name,
-          impact: `Pending operator approval. Mode: ${data.plan.mode}.`,
+          impact: `Pending operator approval. Engine: ${data.plan.engineUsed || data.plan.mode}.`,
         });
       } else {
         setOptimizerError(data.message || 'Optimization request failed.');
@@ -1609,8 +1727,78 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
     if (onClearProposedRoute) onClearProposedRoute();
   };
 
+  // Handler for exiting 3D Terrain view with optional camera sync
+  const handleExit3DView = useCallback((newCoords?: { lat: number; lng: number }) => {
+    setIs3DMode(false);
+    if (newCoords && typeof newCoords.lat === 'number' && typeof newCoords.lng === 'number' && mapInstance) {
+      try {
+        const [safeLat, safeLng] = safeMercatorLatLng(newCoords.lat, newCoords.lng);
+        mapInstance.panTo([safeLat, safeLng], { animate: true });
+      } catch (e) {}
+    }
+  }, [mapInstance]);
+
+  // Leaflet InvalidateSize synchronization when returning from 3D mode
+  useEffect(() => {
+    if (!is3DMode && mapInstance) {
+      // Step 1: Immediate frame tick
+      const raf = requestAnimationFrame(() => {
+        try {
+          mapInstance.invalidateSize({ pan: false });
+        } catch (e) {}
+      });
+
+      // Step 2: Staged timers to ensure container layout reflow is complete
+      const t1 = setTimeout(() => {
+        try {
+          mapInstance.invalidateSize({ pan: false });
+        } catch (e) {}
+      }, 60);
+
+      const t2 = setTimeout(() => {
+        try {
+          mapInstance.invalidateSize({ pan: false });
+        } catch (e) {}
+      }, 250);
+
+      const t3 = setTimeout(() => {
+        try {
+          mapInstance.invalidateSize({ pan: false });
+        } catch (e) {}
+      }, 600);
+
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [is3DMode, mapInstance]);
+
   return (
     <div className="relative w-full flex flex-col bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
+      {/* 3D Polar Terrain Elevation View (Active when is3DMode is toggled) */}
+      {is3DMode && (
+        <div className="relative w-full z-30">
+          <PolarTerrain3DView
+            region={region}
+            stations={stations}
+            expeditions={expeditions}
+            activeDistress={activeDistress}
+            focusCoords={focusCoords}
+            onExit3DView={handleExit3DView}
+            onSelectStation={onSelectStation}
+          />
+        </div>
+      )}
+
+      {/* 2D Polar GIS Workstation View: Persistently mounted in DOM, hidden when 3D is active */}
+      <div
+        id="real-map-2d-viewport-wrapper"
+        style={{ display: is3DMode ? 'none' : 'flex' }}
+        className="w-full flex-col relative"
+      >
       {/* Top Map Toolbar */}
       <div className="p-3 bg-slate-900/90 backdrop-blur border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 z-10">
         {/* Layer Type Switcher */}
@@ -1672,6 +1860,16 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
               Google Maps
             </button>
           )}
+          <button
+            type="button"
+            id="btn-toggle-3d-terrain"
+            onClick={() => setIs3DMode(true)}
+            className="px-2.5 py-1 rounded font-bold transition-all text-purple-300 hover:text-white hover:bg-purple-900/60 flex items-center gap-1 border border-purple-500/30 ml-1 shadow-sm"
+            aria-label="Switch to 3D Polar Terrain Elevation view"
+          >
+            <Mountain className="w-3.5 h-3.5 text-purple-400" />
+            <span>3D Terrain</span>
+          </button>
         </div>
 
         {/* Sub-Zero Danger Zones Heatmap Controls */}
@@ -1888,6 +2086,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
             onClick={handleFitAllPoints}
             className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
             title="Fit All Active Assets & Bases"
+            aria-label="Fit all active assets and bases in view"
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -1925,7 +2124,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
               type="button"
               onClick={onOpenApiKeyModal}
               className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono flex items-center gap-1.5 transition-colors ${
-                googleMapsApiKey 
+                googleMapsApiKey
                   ? 'border-emerald-600 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60'
                   : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300'
               }`}
@@ -1959,12 +2158,35 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
       </div>
 
       {/* Main Map Container */}
-      <div className="relative w-full h-[560px] min-h-[500px] bg-slate-950">
-        <div 
-          ref={mapContainerRef} 
-          className="w-full h-full absolute inset-0 z-0 bg-slate-950" 
-          style={{ width: '100%', height: '100%', minHeight: '500px' }}
+      <div className="relative w-full h-[400px] sm:h-[500px] lg:h-[580px] min-h-[350px] bg-slate-950">
+        <div
+          ref={mapContainerRef}
+          className="w-full h-full absolute inset-0 z-0 bg-slate-950"
+          style={{ width: '100%', height: '100%', minHeight: '350px' }}
         />
+
+        {/* Tactical Polar Offline Mode HUD */}
+        {(isOfflineMode || tileErrors > 0) && (
+          <div
+            id="map-offline-banner"
+            role="status"
+            aria-live="polite"
+            className="absolute top-3 left-3 z-[400] bg-amber-950/90 backdrop-blur-md border border-amber-500/60 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono text-amber-200 flex items-center gap-2 pointer-events-auto"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <div>
+              <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                <span>POLAR OFFLINE MAP MODE</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/80 border border-amber-600/50">
+                  {cachedTileHits > 0 ? `PERSISTENT CACHE ACTIVE (${cachedTileHits} SERVED) • CACHED VECTOR` : 'CACHED VECTOR GRID FALLBACK'}
+                </span>
+              </div>
+              <div className="text-[11px] text-amber-200/80">
+                {cacheStats.count} tiles cached locally ({((cacheStats.estimatedBytes || 0) / 1024).toFixed(0)} KB) • {stations.length} bases operational
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Overlaid Real Geolocation Telemetry HUD */}
         {userLat !== null && userLng !== null && (
@@ -2103,6 +2325,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
                 onClick={() => setShowProposedPanel(false)}
                 className="text-slate-500 hover:text-white p-1 rounded transition-colors cursor-pointer"
                 title="Minimize panel"
+                aria-label="Minimize AI route recommendation panel"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2266,6 +2489,7 @@ export const RealMapView: React.FC<RealMapViewProps> = ({
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 };

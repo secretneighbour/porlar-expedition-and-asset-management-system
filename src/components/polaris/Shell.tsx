@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ChevronRight, ChevronDown, Bell, Sun, Moon, LogOut, Terminal,
+  Menu, X, ChevronRight, ChevronDown, Bell, Sun, Moon, LogOut, Terminal,
   Radio, Key, QrCode, ShieldAlert, Volume2, VolumeX, Monitor,
   Cpu, Wifi, WifiOff, ThermometerSnowflake, Wind, Gauge, Sparkles, Target, AlertTriangle, CheckCircle2
 } from 'lucide-react';
@@ -16,6 +16,8 @@ export function Sidebar({
   setCollapsed,
   unreadAlerts = 0,
   hasActiveDistress = false,
+  mobileOpen = false,
+  setMobileOpen,
 }: {
   t: any;
   theme: string;
@@ -26,6 +28,8 @@ export function Sidebar({
   setCollapsed: (c: boolean) => void;
   unreadAlerts?: number;
   hasActiveDistress?: boolean;
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
 }) {
   // Collapsible section state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -35,21 +39,32 @@ export function Sidebar({
   };
 
   return (
-    <aside
-      style={{
-        background: t.sidebar || 'rgba(6, 12, 27, 0.95)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        width: collapsed ? 72 : 256,
-        borderRight: `1px solid ${t.border}`,
-      }}
-      className="shrink-0 h-screen sticky top-0 flex flex-col transition-all duration-200 overflow-hidden z-20 select-none shadow-2xl font-mono"
-    >
-      {/* Brand Header */}
-      <div
-        style={{ borderBottom: `1px solid ${t.border}` }}
-        className="flex items-center gap-3 px-4 py-4 shrink-0 bg-black/20"
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={() => setMobileOpen?.(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        style={{
+          background: t.sidebar || 'rgba(6, 12, 27, 0.95)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          width: collapsed ? 72 : 256,
+          borderRight: `1px solid ${t.border}`,
+        }}
+        className={`fixed md:sticky top-0 left-0 h-screen shrink-0 flex flex-col transition-all duration-200 overflow-hidden z-50 md:z-20 select-none shadow-2xl font-mono ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
       >
+        {/* Brand Header */}
+        <div
+          style={{ borderBottom: `1px solid ${t.border}` }}
+          className="flex items-center justify-between px-4 py-4 shrink-0 bg-black/20"
+        >
+          <div className="flex items-center gap-3">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -85,7 +100,18 @@ export function Sidebar({
             </span>
           </div>
         )}
-      </div>
+          </div>
+          {setMobileOpen && (
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close navigation drawer"
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
 
       {/* Grouped Nav List */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4 text-xs" aria-label="Main Navigation">
@@ -124,7 +150,7 @@ export function Sidebar({
                     return (
                       <button
                         key={item.key}
-                        onClick={() => setActive(item.key)}
+                        onClick={() => { setActive(item.key); setMobileOpen?.(false); }}
                         style={{
                           background: isActive
                             ? (t.accentSoft || 'rgba(0, 242, 254, 0.15)')
@@ -193,6 +219,7 @@ export function Sidebar({
         onClick={() => setCollapsed(!collapsed)}
         style={{ color: t.textDim, borderTop: `1px solid ${t.border}`, background: 'rgba(0,0,0,0.2)' }}
         className="px-3.5 py-3 text-xs flex items-center justify-between cursor-pointer hover:text-white hover:bg-white/5 transition-colors"
+        aria-label={collapsed ? "Expand sidebar navigation" : "Collapse sidebar navigation"}
       >
         <span className="flex items-center gap-2">
           <ChevronRight size={14} className={`transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} />
@@ -200,6 +227,7 @@ export function Sidebar({
         </span>
       </button>
     </aside>
+    </>
   );
 }
 
@@ -211,10 +239,6 @@ export function Topbar({
   onLogout,
   unread,
   setActive,
-  onOpenPreBoot,
-  onOpenPairing,
-  onOpenApiKey,
-  onTriggerMayday,
   syncStatus = 'synced',
   connectedClients = 1,
   currentDeviceId = 'NODE-01',
@@ -229,7 +253,15 @@ export function Topbar({
   onOpenSimulation,
   stationWeather,
   sensorHealth = { status: 'nominal' },
+  mobileOpen = false,
+  setMobileOpen,
+  onOpenPreBoot,
+  onOpenPairing,
+  onOpenApiKey,
+  onTriggerMayday,
 }: {
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
   t: any;
   theme: string;
   setTheme: (s: string) => void;
@@ -237,10 +269,6 @@ export function Topbar({
   onLogout: () => void;
   unread: number;
   setActive: (a: string) => void;
-  onOpenPreBoot: () => void;
-  onOpenPairing?: () => void;
-  onOpenApiKey?: () => void;
-  onTriggerMayday?: () => void;
   syncStatus?: 'synced' | 'connecting' | 'offline';
   connectedClients?: number;
   currentDeviceId?: string;
@@ -255,6 +283,10 @@ export function Topbar({
   onOpenSimulation?: () => void;
   stationWeather?: Record<string, any>;
   sensorHealth?: { status: 'nominal' | 'degraded', affectedSensor?: string | null };
+  onOpenPreBoot?: () => void;
+  onOpenPairing?: () => void;
+  onOpenApiKey?: () => void;
+  onTriggerMayday?: () => void;
 }) {
   const [timeStr, setTimeStr] = useState<string>('');
   const [utcStr, setUtcStr] = useState<string>('');
@@ -289,7 +321,19 @@ export function Topbar({
       className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 py-2.5 gap-3 font-mono text-xs select-none"
     >
       {/* Left: Station Context & Telemetry Badges */}
-      <div className="flex items-center gap-3 flex-wrap min-w-0">
+      <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+        {setMobileOpen && (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileOpen}
+            style={{ border: `1px solid ${t.border}`, background: t.bgAlt, color: t.accent }}
+            className="md:hidden p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors shrink-0"
+          >
+            {mobileOpen ? <X size={15} /> : <Menu size={15} />}
+          </button>
+        )}
         {/* Station Selector */}
         <div className="flex items-center gap-1.5">
           <span style={{ color: t.textFaint }} className="text-[10px] uppercase hidden sm:inline">Station:</span>
@@ -297,6 +341,7 @@ export function Topbar({
             <select
               value={selectedStation}
               onChange={(e) => onSelectStation(e.target.value)}
+              aria-label="Select active research station"
               style={{
                 background: t.bgAlt || 'rgba(0, 242, 254, 0.05)',
                 border: `1px solid ${t.borderLight || t.border}`,
@@ -428,48 +473,10 @@ export function Topbar({
             }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:text-white transition-colors cursor-pointer text-[11px] font-mono font-bold"
             title="Launch Mission Simulation & Training Sandbox"
+            aria-label={isSimulationActive ? "Simulation mode active, click to view training controls" : "Launch mission simulation training sandbox"}
           >
             <Target size={13} style={{ color: isSimulationActive ? '#F59E0B' : t.accent }} className={isSimulationActive ? 'animate-pulse' : ''} />
             <span className="hidden sm:inline">{isSimulationActive ? 'SIM ACTIVE' : 'SIMULATION'}</span>
-          </button>
-        )}
-
-        {/* Quick Action: Device Pairing */}
-        {onOpenPairing && (
-          <button
-            type="button"
-            onClick={onOpenPairing}
-            style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-            className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
-            title="Pair Phone via QR Code"
-          >
-            <QrCode size={13} style={{ color: t.accent }} />
-            <span>Pair</span>
-          </button>
-        )}
-
-        {/* Quick Action: POST Diagnostics */}
-        <button
-          type="button"
-          onClick={onOpenPreBoot}
-          style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
-          title="Hardware & Cryo-Sensor Pre-Boot Diagnostics"
-        >
-          <Terminal size={13} style={{ color: t.accent }} />
-          <span className="hidden sm:inline">POST</span>
-        </button>
-
-        {/* Quick Action: API Keys */}
-        {onOpenApiKey && (
-          <button
-            type="button"
-            onClick={onOpenApiKey}
-            style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
-            title="Configure Gemini & Google Maps Keys"
-          >
-            <Key size={13} style={{ color: t.accent }} />
           </button>
         )}
 
@@ -484,6 +491,7 @@ export function Topbar({
           }}
           className="px-2 py-1 rounded-lg font-mono font-bold text-[10px] cursor-pointer hover:brightness-125 transition-all"
           title={`Theme: ${themeDisplay}. Click to switch theme.`}
+          aria-label={`Cycle display theme. Current: ${themeDisplay}`}
         >
           {themeDisplay}
         </button>
@@ -500,6 +508,7 @@ export function Topbar({
             }}
             className="p-1.5 rounded-lg cursor-pointer hover:text-white transition-colors hidden sm:block"
             title={crtEnabled ? "CRT Scanlines: ACTIVE" : "CRT Scanlines: OFF"}
+            aria-label={crtEnabled ? "CRT Scanlines Active. Click to turn off." : "CRT Scanlines Off. Click to turn on."}
           >
             <Monitor size={13} />
           </button>
@@ -513,6 +522,7 @@ export function Topbar({
             style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer hidden sm:block"
             title={soundEnabled ? "Tactical Audio: ON" : "Tactical Audio: MUTED"}
+            aria-label={soundEnabled ? "Tactical Audio Active. Click to mute." : "Tactical Audio Muted. Click to enable."}
           >
             {soundEnabled ? <Volume2 size={13} style={{ color: t.accent }} /> : <VolumeX size={13} />}
           </button>
@@ -525,6 +535,7 @@ export function Topbar({
           style={{ border: `1px solid ${t.border}`, background: t.bgAlt }}
           className="relative p-1.5 rounded-lg text-slate-400 hover:text-white cursor-pointer transition-colors"
           title="Tactical Alerts"
+          aria-label={`View system alerts (${unread} unread)`}
         >
           <Bell size={14} />
           {unread > 0 && (
@@ -545,6 +556,7 @@ export function Topbar({
                 : 'bg-rose-700 hover:bg-rose-600 shadow-rose-950/80'
             }`}
             title="Trigger Emergency MAYDAY Broadcast"
+            aria-label="Trigger emergency mayday distress broadcast"
           >
             <ShieldAlert size={14} />
             <span className="hidden sm:inline">MAYDAY</span>
@@ -566,6 +578,7 @@ export function Topbar({
             style={{ color: t.textDim }}
             className="p-1 hover:text-rose-400 transition-colors cursor-pointer"
             title="Sign Out"
+            aria-label="Sign out of polar console"
           >
             <LogOut size={14} />
           </button>

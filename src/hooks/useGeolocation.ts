@@ -222,14 +222,31 @@ export const useGeolocation = (autoStartWatch: boolean = true): UseGeolocationRe
     setState((prev) => ({ ...prev, isWatching: false, loading: false }));
   }, []);
 
-  // Allow manual override of location coordinates
+  // Allow manual override of location coordinates with strict coordinate bounds validation
   const setManualLocation = useCallback((lat: number, lng: number, name?: string) => {
+    if (
+      typeof lat !== 'number' ||
+      typeof lng !== 'number' ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      setState((prev) => ({
+        ...prev,
+        error: `Invalid manual coordinates: Latitude must be between -90 and +90, Longitude between -180 and +180 (received: ${lat}, ${lng}).`,
+      }));
+      return;
+    }
+
     setState((prev) => ({
       ...prev,
       latitude: lat,
       longitude: lng,
       cityName: name || `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
-      accuracyMeters: 10,
+      accuracyMeters: null, // Honest: manual coordinates have no satellite accuracy metric
       source: 'manual',
       loading: false,
       error: null,
@@ -279,7 +296,9 @@ export const useGeolocation = (autoStartWatch: boolean = true): UseGeolocationRe
       : '';
 
   const formattedAccuracy =
-    state.accuracyMeters !== null
+    state.source === 'manual'
+      ? 'Manual Entry (Unverified GPS)'
+      : state.accuracyMeters !== null
       ? state.source === 'ip'
         ? 'Est. via IP Geo'
         : `±${state.accuracyMeters < 10 ? state.accuracyMeters.toFixed(1) : Math.round(state.accuracyMeters)}m ${

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Compass, Users, Boxes, Wrench, Package, Ship, AlertTriangle, Sparkles,
   CheckCircle2, DollarSign, Clock, ArrowRight, Cpu, Zap,
@@ -74,28 +74,32 @@ export function AIWidget({ t, db, geminiApiKey }: { t: any; db: any; geminiApiKe
         meta: { cached: true, latencyMs: 2, tokensSaved: 850, mode: 'local_ml_physics_model' }
       });
     } else if (query.includes("maintenance") || query.includes("critical asset") || query.includes("asset")) {
-      const expMatch = db.assets.filter((a: any) => a.status === "Under Maintenance" || a.status === "Damaged");
+      const assetsList = Array.isArray(db?.assets) ? db.assets : [];
+      const expMatch = assetsList.filter((a: any) => a.status === "Under Maintenance" || a.status === "maintenance" || a.status === "Damaged");
       setAnswer({
         text: `Found ${expMatch.length} asset(s) requiring immediate tactical maintenance oversight:`,
         list: expMatch.slice(0, 6).map((a: any) => `${a.name} (${a.id}) - Status: ${a.status}, Next Service: ${a.nextMaintenance}`),
         meta: { cached: true, latencyMs: 1, tokensSaved: 720, mode: 'local_ml_physics_model' }
       });
     } else if (query.includes("low stock") || query.includes("inventory") || query.includes("supply")) {
-      const low = db.inventory.filter((i: any) => i.quantity <= i.minStock);
+      const invList = Array.isArray(db?.inventory) ? db.inventory : [];
+      const low = invList.filter((i: any) => typeof i.quantity === 'number' && typeof i.minStock === 'number' && i.quantity <= i.minStock);
       setAnswer({
         text: `Tactical Inventory Audit: ${low.length} item(s) currently at or below emergency minimum thresholds:`,
         list: low.slice(0, 6).map((i: any) => `${i.name} - ${i.quantity}/${i.minStock} ${i.unit} (Location: ${i.location})`),
         meta: { cached: true, latencyMs: 1, tokensSaved: 650, mode: 'local_ml_physics_model' }
       });
     } else if (query.includes("delay") || query.includes("shipment") || query.includes("logistics")) {
-      const delayed = db.shipments.filter((s: any) => s.status === "Delayed" || s.status === "In Transit");
+      const shpList = Array.isArray(db?.shipments) ? db.shipments : [];
+      const delayed = shpList.filter((s: any) => s.status === "Delayed" || s.status === "In Transit");
       setAnswer({
         text: `Polar Logistics Pipeline: ${delayed.length} shipment(s) currently en-route or delayed:`,
         list: delayed.slice(0, 6).map((s: any) => `${s.id} -> Destination: ${s.destination} (${s.cargo}) - Status: ${s.status}`),
         meta: { cached: true, latencyMs: 2, tokensSaved: 680, mode: 'local_ml_physics_model' }
       });
     } else if (query.includes("readiness") || query.includes("score")) {
-      const list = db.expeditions.map((e: any) => ({ e, r: computeReadiness(e, db) })).sort((a: any, b: any) => a.r.overall - b.r.overall);
+      const expList = Array.isArray(db?.expeditions) ? db.expeditions : [];
+      const list = expList.map((e: any) => ({ e, r: computeReadiness(e, db) })).sort((a: any, b: any) => a.r.overall - b.r.overall);
       setAnswer({
         text: "Polar Mission Readiness Rankings (Lowest score prioritized):",
         list: list.map((x: any) => `${x.e.name}: ${x.r.overall}% overall readiness`),
@@ -213,7 +217,8 @@ export function DashboardView({
   user,
   geminiApiKey,
   setActive,
-  setDb
+  setDb,
+  isSimulation = false,
 }: {
   t: any;
   db: any;
@@ -221,35 +226,67 @@ export function DashboardView({
   geminiApiKey?: string;
   setActive?: (tab: string) => void;
   setDb?: React.Dispatch<React.SetStateAction<any>>;
+  isSimulation?: boolean;
 }) {
-  const [maintainedToday, setMaintainedToday] = useState(false);
+  const [maintainedTodayLocal, setMaintainedTodayLocal] = useState(false);
+  const hasMaintainedTodayInDb = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const inAudit = (Array.isArray(db?.auditLog) ? db.auditLog : []).some(
+      (log: any) =>
+        log.action === 'PREDICTIVE_MAINTENANCE_EXECUTED' &&
+        typeof log.timestamp === 'string' &&
+        log.timestamp.startsWith(todayStr)
+    );
+    const inWorkLogs = (Array.isArray(db?.completedWorkLogs) ? db.completedWorkLogs : []).some(
+      (wl: any) =>
+        typeof wl.timestamp === 'string' &&
+        wl.timestamp.startsWith(todayStr) &&
+        (wl.entityId === 'AST-0001' || (wl.notes && wl.notes.includes('PREVENTIVE AI SUCCESS')))
+    );
+    return inAudit || inWorkLogs;
+  }, [db?.auditLog, db?.completedWorkLogs]);
+  const maintainedToday = maintainedTodayLocal || hasMaintainedTodayInDb;
   const [executing, setExecuting] = useState(false);
 
-  const activeExp = db.expeditions.filter((e: any) => e.status === "Active").length;
-  const upcomingExp = db.expeditions.filter((e: any) => ["Planning","Approved","Preparation"].includes(e.status)).length;
-  const inUse = db.assets.filter((a: any) => a.status === "In Use" || a.status === "Assigned").length;
-  const underMaint = db.assets.filter((a: any) => a.status === "Under Maintenance").length;
-  const lowStock = db.inventory.filter((i: any) => i.quantity <= i.minStock).length;
-  const pendingShip = db.shipments.filter((s: any) => ["Planned","Packed","Dispatched","In Transit"].includes(s.status)).length;
-  const critical = db.alerts.filter((a: any) => a.severity === "CRITICAL").length;
-  const maintDue = db.maintenance.filter((m: any) => m.status !== "Completed" && m.status !== "Cancelled").length;
+  const expeditions = Array.isArray(db?.expeditions) ? db.expeditions : [];
+  const assets = Array.isArray(db?.assets) ? db.assets : [];
+  const inventory = Array.isArray(db?.inventory) ? db.inventory : [];
+  const shipments = Array.isArray(db?.shipments) ? db.shipments : [];
+  const alerts = Array.isArray(db?.alerts) ? db.alerts : [];
+  const maintenance = Array.isArray(db?.maintenance) ? db.maintenance : [];
 
-  const statusDist = EXP_STATUSES.map(s => ({ name: s, value: db.expeditions.filter((e: any) => e.status === s).length })).filter(d => d.value > 0);
+  const activeExp = expeditions.filter((e: any) => e.status === "Active" || e.phase === "in_progress").length;
+  const upcomingExp = expeditions.filter((e: any) => ["Planning","Approved","Preparation","planning","staging"].includes(e.status || e.phase)).length;
+  const inUse = assets.filter((a: any) => a.status === "In Use" || a.status === "Assigned" || a.status === "in_transit" || a.status === "operational").length;
+  const underMaint = assets.filter((a: any) => a.status === "Under Maintenance" || a.status === "maintenance" || a.status === "Damaged" || a.status === "cold_soaked").length;
+  const lowStock = inventory.filter((i: any) => typeof i.quantity === 'number' && typeof i.minStock === 'number' && i.quantity <= i.minStock).length;
+  const pendingShip = shipments.filter((s: any) => ["Planned","Packed","Dispatched","In Transit"].includes(s.status)).length;
+  const critical = alerts.filter((a: any) => a.severity === "CRITICAL").length;
+  const maintDue = maintenance.filter((m: any) => m.status !== "Completed" && m.status !== "Cancelled").length;
+
+  const statusDist = EXP_STATUSES.map(s => ({ name: s, value: expeditions.filter((e: any) => e.status === s).length })).filter(d => d.value > 0);
   const PIE_COLORS = ['#7C3AED', '#60A5FA', '#C4B5FD', '#5EEAB0', '#FBBF24', '#F43F5E'];
 
   // Quick maintain handler right from Dashboard
   const handleQuickMaintainToday = async () => {
+    if (executing || maintainedToday) return;
     setExecuting(true);
     try {
-      await apiFetch('/api/ai/predictive-maintenance/execute', {
+      const res = await apiFetch('/api/ai/predictive-maintenance/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           assetId: 'AST-0001',
           technician: 'Manoj Joshi (PER-0007)',
-          partConsumed: 'Heavy-Duty Serpentine Engine Belts'
+          partConsumed: 'Heavy-Duty Serpentine Engine Belts',
+          isSimulation,
         })
       });
+      if (!res.ok && (res.status === 401 || res.status === 403)) {
+        console.warn('Unauthorized or forbidden to execute maintenance:', res.status);
+        setExecuting(false);
+        return;
+      }
     } catch (e) {
       console.warn('Network call failed, applying local state update.');
     }
@@ -279,7 +316,7 @@ export function DashboardView({
     }
 
     setExecuting(false);
-    setMaintainedToday(true);
+    setMaintainedTodayLocal(true);
   };
 
   return (

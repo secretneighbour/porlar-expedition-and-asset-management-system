@@ -176,3 +176,27 @@ h1, h2, h3, h4, .display-font {
   --tactical-bg: #0D0804;
   --tactical-panel: rgba(23, 15, 7, 0.82);
 }
+
+/* Accessible Focus Indicators & Reduced Motion (Phase 4C) */
+:focus-visible {
+  outline: 2px solid var(--purple-400);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--purple-300);
+  outline-offset: 2px;
+}

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  Radio, 
-  MapPin, 
-  Volume2, 
-  VolumeX, 
-  Crosshair, 
-  CheckCircle2, 
+import {
+  Radio,
+  MapPin,
+  Volume2,
+  VolumeX,
+  Crosshair,
+  CheckCircle2,
   ShieldAlert,
   ShieldCheck,
   Send,
@@ -24,6 +24,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { ActiveDistressAlert, PolarAsset } from '../types';
+import { getSpokenMaydayEnabled, setSpokenMaydayEnabled, speakMaydayAlert } from '../utils/spokenAlerts';
 import { apiFetch } from '../utils/api';
 
 export interface ActiveDistressBannerProps {
@@ -41,6 +42,7 @@ export interface ActiveDistressBannerProps {
   onToggleAutoSar?: () => void;
   isMarkedSafe?: boolean;
   onMarkSafe?: () => void;
+  isSimulation?: boolean;
 }
 
 export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
@@ -58,8 +60,28 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
   onToggleAutoSar,
   isMarkedSafe = false,
   onMarkSafe,
+  isSimulation = false,
 }) => {
   const [showAcknowledgeForm, setShowAcknowledgeForm] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState<boolean>(() => getSpokenMaydayEnabled());
+
+  React.useEffect(() => {
+    const active = propDistress || propActiveDistress;
+    const muted = propIsMuted ?? propIsAlarmMuted ?? false;
+    if (active && isVoiceEnabled && !muted) {
+      speakMaydayAlert(active, { isMuted: muted });
+    }
+  }, [propDistress?.id, propActiveDistress?.id, isVoiceEnabled, propIsMuted, propIsAlarmMuted]);
+
+  const handleToggleVoiceAlert = () => {
+    const next = !isVoiceEnabled;
+    setIsVoiceEnabled(next);
+    setSpokenMaydayEnabled(next);
+    const active = propDistress || propActiveDistress;
+    if (next && active) {
+      speakMaydayAlert(active, { force: true });
+    }
+  };
   const [dispatcherName, setDispatcherName] = useState('Operations Desk Lead');
   const [showReasoningDetail, setShowReasoningDetail] = useState(true);
   const [isExecutingAutoSar, setIsExecutingAutoSar] = useState(false);
@@ -120,10 +142,12 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
   return (
     <div
       id="distress-active-banner"
+      role="alert"
+      aria-live="assertive"
       style={{
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: hasAutonomousSAR 
+        boxShadow: hasAutonomousSAR
           ? '0 10px 40px rgba(16, 185, 129, 0.2), 0 0 20px rgba(124, 58, 237, 0.15)'
           : isAcknowledged
           ? '0 10px 40px rgba(245, 158, 11, 0.2)'
@@ -169,12 +193,12 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
             </button>
           )}
 
-          {onTriggerCrevasseFall && (
+          {isSimulation && onTriggerCrevasseFall && (
             <button
               type="button"
               onClick={onTriggerCrevasseFall}
               className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1 transition-colors shadow-sm"
-              title="Re-simulate Crevasse Fall Mayday beacon with autonomous zero-click dispatch"
+              title="Re-simulate Crevasse Fall Mayday beacon with autonomous zero-click dispatch in simulation sandbox"
             >
               <RefreshCw className="w-3 h-3" />
               <span className="opacity-90 font-mono">[SIM DRILL]</span>
@@ -221,12 +245,12 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
                   {hasAutonomousSAR ? (
                     <>
                       <Zap className="w-3 h-3" />
-                      AUTONOMOUSLY DISPATCHED BY AI (ZERO-CLICK)
+                      {isSimulation ? 'AUTONOMOUS S.A.R. DISPATCHED (SIMULATED DRILL)' : 'AUTONOMOUSLY DISPATCHED BY AI (ZERO-CLICK)'}
                     </>
                   ) : isAcknowledged ? (
-                    'STATUS: ACKNOWLEDGED BY HQ (SAR IN TRANSIT)'
+                    isSimulation ? 'STATUS: ACKNOWLEDGED IN SIMULATION (DRILL)' : 'STATUS: ACKNOWLEDGED BY HQ (SAR IN TRANSIT)'
                   ) : (
-                    '🚨 LIVE FIELD MAYDAY BEACON ACTIVE'
+                    isSimulation ? '🛡️ [SIMULATED SCENARIO DRILL] MAYDAY BEACON ACTIVE' : '🚨 REAL-WORLD LIVE FIELD MAYDAY BEACON ACTIVE'
                   )}
                 </span>
 
@@ -257,6 +281,7 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
             <button
               type="button"
               onClick={onToggleMute}
+              aria-label={isMuted ? "Unmute emergency audio siren" : "Mute emergency audio siren"}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs border border-slate-700 transition-colors cursor-pointer"
               title={isMuted ? 'Unmute siren' : 'Mute siren'}
             >
@@ -268,10 +293,28 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
               <span>{isMuted ? 'MUTED' : 'ALARM ON'}</span>
             </button>
 
+            {/* Spoken Voice Alert Toggle */}
+            <button
+              type="button"
+              id="toggle-spoken-mayday-btn"
+              onClick={handleToggleVoiceAlert}
+              aria-label={isVoiceEnabled ? "Disable spoken voice alerts" : "Enable spoken voice alerts"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+                isVoiceEnabled
+                  ? 'bg-cyan-950/90 hover:bg-cyan-900 border-cyan-500/50 text-cyan-300'
+                  : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+              title={isVoiceEnabled ? 'Spoken voice alerts enabled' : 'Click to enable spoken voice alerts'}
+            >
+              <Radio className={`w-3.5 h-3.5 ${isVoiceEnabled ? 'text-cyan-400 animate-pulse' : 'text-slate-500'}`} />
+              <span>{isVoiceEnabled ? 'VOICE MAYDAY' : 'VOICE OFF'}</span>
+            </button>
+
             {onLocateOnMap && (
               <button
                 type="button"
                 onClick={handleLocate}
+                aria-label="Center map radar on distress coordinates"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-400 hover:text-sky-300 text-xs border border-slate-700 transition-colors cursor-pointer"
               >
                 <Crosshair className="w-4 h-4" />
@@ -285,6 +328,7 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
                   type="button"
                   onClick={handleTriggerAutonomousDispatchNow}
                   disabled={isExecutingAutoSar}
+                  aria-label="Trigger autonomous zero-click search and rescue dispatch"
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition-colors border border-emerald-400 cursor-pointer disabled:opacity-50"
                 >
                   <Zap className="w-4 h-4 text-amber-300" />
@@ -294,6 +338,7 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAcknowledgeForm(!showAcknowledgeForm)}
+                  aria-label="Open manual HQ search and rescue dispatch dialog"
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-900/50 transition-colors border border-rose-400 cursor-pointer"
                 >
                   <Radio className="w-4 h-4" />
@@ -306,6 +351,7 @@ export const ActiveDistressBanner: React.FC<ActiveDistressBannerProps> = ({
                   <button
                     type="button"
                     onClick={onMarkSafe}
+                    aria-label="Confirm field party safety before resolving distress beacon"
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition-colors border border-emerald-400 cursor-pointer animate-pulse"
                   >
                     <ShieldCheck className="w-4 h-4" />

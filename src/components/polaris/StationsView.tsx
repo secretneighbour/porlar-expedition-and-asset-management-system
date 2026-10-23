@@ -75,6 +75,17 @@ export function StationsView({
     e.preventDefault();
     if (!newStation.name.trim()) return;
 
+    const latNum = Number(newStation.lat);
+    const lngNum = Number(newStation.lng);
+    if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+      alert('Latitude must be a valid number between -90 and +90.');
+      return;
+    }
+    if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+      alert('Longitude must be a valid number between -180 and +180.');
+      return;
+    }
+
     const created: ResearchStation = {
       id: `st-custom-${Date.now()}`,
       name: newStation.name,
@@ -411,7 +422,7 @@ export function StationsView({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field t={t} label="Code">
                 <input
                   type="text"
@@ -434,7 +445,7 @@ export function StationsView({
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field t={t} label="Latitude (°)">
                 <input
                   type="number"
@@ -457,7 +468,7 @@ export function StationsView({
               </Field>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field t={t} label="Elevation (m)">
                 <input
                   type="number"
@@ -493,7 +504,7 @@ export function StationsView({
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field t={t} label="Winter Crew Size">
                 <input
                   type="number"

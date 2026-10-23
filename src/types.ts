@@ -285,6 +285,20 @@ export interface PolarPersonnel {
   status: string;
 }
 
+export interface PolarInventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  minStock: number;
+  location: string;
+  expiry?: string | null;
+  supplier?: string;
+  cost?: number;
+  notes?: string;
+}
+
 export interface PolarisDb {
   expeditions: any[];
   personnel: PolarPersonnel[];
@@ -334,6 +348,7 @@ export interface PolarSystemState {
   personnel?: PolarPersonnel[];
   stations?: ResearchStation[];
   customWaypoints?: Waypoint[];
+  inventory?: PolarInventoryItem[];
   polarisDb?: PolarisDb;
   lastUpdated: string;
 }
@@ -358,13 +373,18 @@ export type SyncMessageType =
   | 'ACKNOWLEDGE_DISTRESS'
   | 'RESOLVE_DISTRESS'
   | 'UPDATE_ASSET'
+  | 'ADD_ASSET'
   | 'UPDATE_EXPEDITION'
   | 'ADD_EXPEDITION'
   | 'ADD_STATION'
   | 'ADD_PERSONNEL'
+  | 'ADD_INVENTORY'
+  | 'UPDATE_INVENTORY'
+  | 'ADJUST_INVENTORY_STOCK'
   | 'ADD_WAYPOINT'
   | 'DELETE_WAYPOINT'
   | 'UPDATE_WAYPOINT'
+  | 'REORDER_WAYPOINTS'
   | 'UPDATE_STATIONS'
   | 'UPDATE_CONDITION'
   | 'UPDATE_REGION'
@@ -373,6 +393,7 @@ export type SyncMessageType =
   | 'RESET_STATE'
   | 'UPDATE_POLARIS_DB'
   | 'UPDATE_POLARIS_COLLECTION'
+  | 'ACTION_REJECTED'
   | 'STATE_UPDATE';
 
 export interface HourlyForecastPoint {
