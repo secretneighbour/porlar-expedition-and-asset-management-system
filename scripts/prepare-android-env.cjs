@@ -197,9 +197,35 @@ function ensureAppBuildGradle() {
 }
 
 /**
+ * Loads configuration from the single .env file into process.env
+ */
+function loadSingleEnv() {
+  const envPath = path.join(projectRoot, '.env');
+  if (!fs.existsSync(envPath)) return;
+  try {
+    require('dotenv').config({ path: envPath });
+  } catch {
+    const content = fs.readFileSync(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const idx = trimmed.indexOf('=');
+      if (idx > 0) {
+        const key = trimmed.slice(0, idx).trim();
+        const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+}
+
+/**
  * Prepare environment variables for child processes (Tauri CLI, Gradle, Rust compiler)
  */
 function prepareEnvironment(options = { verbose: false }) {
+  loadSingleEnv();
   ensureAppBuildGradle();
   const sdk = findSystemSdk();
   const ndk = findSystemNdk(sdk);
@@ -250,16 +276,18 @@ function prepareEnvironment(options = { verbose: false }) {
     console.log(`  local.props:  ${fs.existsSync(localPropertiesPath) ? 'present' : 'missing'}`);
   }
 
-  // Ensure Android build uses the centralized backend URL rather than localhost
-  const CENTRAL_BACKEND_URL = 'https://polar-expedition-and-asset-management-system-4cmpww9cj.vercel.app';
-  if (process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')) {
-    process.env.VITE_API_BASE_URL = process.env.VITE_API_URL;
-  }
-  if (!process.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')) {
-    process.env.VITE_API_BASE_URL = CENTRAL_BACKEND_URL;
-  }
-  if (!process.env.VITE_BACKEND_URL || process.env.VITE_BACKEND_URL.includes('localhost') || process.env.VITE_BACKEND_URL.includes('127.0.0.1')) {
-    process.env.VITE_BACKEND_URL = CENTRAL_BACKEND_URL;
+  // Centralized Cloudflare Worker backend URL for mobile/Android production
+  const PRODUCTION_BACKEND_URL = 'https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev';
+  const isAndroidBuild = process.argv.includes('--apk') || process.argv.includes('android') || process.env.TAURI_ENV_PLATFORM === 'android';
+  const isDebugBuild = process.argv.includes('--debug') || process.argv.includes('-d');
+  if (isAndroidBuild) {
+    if (!process.env.VITE_API_BASE_URL || (!isDebugBuild && (process.env.VITE_API_BASE_URL.includes('localhost') || process.env.VITE_API_BASE_URL.includes('127.0.0.1')))) {
+      process.env.VITE_API_BASE_URL = process.env.VITE_API_URL && !process.env.VITE_API_URL.includes('localhost')
+        ? process.env.VITE_API_URL
+        : PRODUCTION_BACKEND_URL;
+    }
+    process.env.VITE_API_URL = process.env.VITE_API_BASE_URL;
+    process.env.VITE_BACKEND_URL = process.env.VITE_API_BASE_URL;
   }
 
   return {

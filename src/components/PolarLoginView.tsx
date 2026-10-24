@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthLoginResponse, PolarUser } from '../types';
-import { apiFetch, checkBackendConnection, getApiBaseUrl } from '../utils/api';
+import { apiFetch, checkBackendConnection, getApiBaseUrl, apiUrl } from '../utils/api';
 
 interface PolarLoginViewProps {
   onLoginSuccess: (user: PolarUser, dashboardRoute: string, remember: boolean) => void;
@@ -83,23 +83,30 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         }),
       });
 
-      let data: AuthLoginResponse;
-      try {
-        data = await response.json();
-      } catch (jsonErr) {
-        throw new Error('Backend returned an invalid non-JSON response. Check network proxy or server logs.');
+      const contentType = response.headers.get('content-type') || '';
+      let data: any = null;
+
+      if (contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
       }
 
-      if (response.ok && data.ok && data.user) {
-        setStatusText(`Authenticated as ${data.user.role} — routing to operations console…`);
+      if (response.ok && data && (data.ok || data.success) && (data.user || data.data?.user)) {
+        const userObj = data.user || data.data?.user;
+        const userRole = userObj.role;
+        setStatusText(`Authenticated as ${userRole} — routing to operations console…`);
         setStatusType('success');
 
         // Persist session token for authenticated REST & WebSocket communication
-        if (data.token) {
+        const token = data.token || data.data?.token;
+        if (token) {
           try {
-            sessionStorage.setItem('polar_auth_token', data.token);
+            sessionStorage.setItem('polar_auth_token', token);
             if (remember) {
-              localStorage.setItem('polar_auth_token', data.token);
+              localStorage.setItem('polar_auth_token', token);
             }
           } catch {}
         }
@@ -107,24 +114,73 @@ export function PolarLoginView({ onLoginSuccess }: PolarLoginViewProps) {
         setTimeout(() => {
           onLoginSuccess(
             {
-              id: data.user!.id,
-              name: data.user!.name,
-              role: data.user!.role,
-              email: data.user!.email,
+              id: userObj.id,
+              name: userObj.name,
+              role: userObj.role,
+              email: userObj.email,
               active: true,
             },
-            data.dashboardRoute || 'dashboard',
+            data.dashboardRoute || data.data?.dashboardRoute || 'dashboard',
             remember
           );
         }, 350);
       } else {
-        setStatusText(data.error || 'Authentication rejected. Verify your credentials.');
+        // Precise status differentiation
+        if (response.status === 401) {
+          setStatusText(
+            data?.error?.message ||
+              (typeof data?.error === 'string' ? data.error : null) ||
+              data?.message ||
+              'Invalid credentials. Please verify your Call Sign and Passcode.'
+          );
+        } else if (response.status === 403) {
+          setStatusText(
+            data?.error?.message ||
+              (typeof data?.error === 'string' ? data.error : null) ||
+              data?.message ||
+              'Access denied. Account is inactive or selected role is unauthorized.'
+          );
+        } else if (response.status === 404) {
+          setStatusText(
+            `Backend endpoint not found (HTTP 404) at ${apiUrl('/api/auth/login')}. Ensure backend service is deployed and running.`
+          );
+        } else if (!contentType.includes('application/json')) {
+          setStatusText(
+            `Backend configuration error: Received HTML instead of JSON from ${apiUrl('/api/auth/login')}. Verify VITE_API_BASE_URL points to the live backend server.`
+          );
+        } else if (response.status === 502 || response.status === 504) {
+          setStatusText(
+            `Gateway error (HTTP ${response.status}): Upstream backend at ${apiUrl('/api/auth/login')} is unreachable or timed out. ${
+              data?.error?.message || ''
+            }`.trim()
+          );
+        } else if (response.status >= 500) {
+          setStatusText(
+            `Server error (HTTP ${response.status}): ${
+              data?.error?.message || data?.message || 'Polar Operations Backend encountered an internal error.'
+            }`
+          );
+        } else {
+          setStatusText(
+            data?.error?.message ||
+              (typeof data?.error === 'string' ? data.error : null) ||
+              data?.message ||
+              `Authentication rejected (HTTP ${response.status}). Verify credentials.`
+          );
+        }
         setStatusType('error');
       }
     } catch (err: any) {
-      console.error('[PolarLoginView] Backend authentication failure:', err.message);
-      const targetOrigin = getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : 'server');
-      setStatusText(`Connection failed: Unable to reach Polar Operations Backend at ${targetOrigin}. Verify your network connection and backend service status.`);
+      console.error('[PolarLoginView] Backend authentication failure:', err);
+      if (err?.code === 'TIMEOUT') {
+        setStatusText(`Connection timed out: Polar Operations Server at ${apiUrl('/api/auth/login')} took too long to respond.`);
+      } else if (err?.code === 'NETWORK_ERROR' || err?.message?.includes('Network') || err?.message?.includes('fetch')) {
+        setStatusText(
+          `Backend unavailable: Could not connect to ${apiUrl('/api/auth/login')}. Check your network connection or verify VITE_API_BASE_URL and backend CORS configuration.`
+        );
+      } else {
+        setStatusText(err.message || 'Authentication error. Please check your credentials and try again.');
+      }
       setStatusType('error');
       verifyBackend();
     } finally {

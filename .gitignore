@@ -2,11 +2,12 @@ node_modules/
 build/
 dist/
 coverage/
+.wrangler/
 .DS_Store
 *.log
 .env*
 !.env.example
-!.env.production
+
 
 # Android & Keystore files
 *.keystore

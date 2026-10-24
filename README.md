@@ -57,7 +57,8 @@ A mission-critical tactical operations console and real-time telemetry workstati
 - [💻 Programmatic Integration (React)](#-programmatic-integration-react)
 - [🛠️ NPM Scripts & CLI Usage](#️-npm-scripts--cli-usage)
 - [📱 Android Mobile Workstation Build (Tauri v2)](#-android-mobile-workstation-build-tauri-v2)
-- [🔑 Environment Configuration](#-environment-configuration)
+  - [Production Mobile & Android Backend Gateway Routing](#4-production-mobile--android-backend-gateway-routing)
+- [☁️ Full-Stack Cloudflare Workers Deployment & Architecture](#️-full-stack-cloudflare-workers-deployment--architecture)
 - [☁️ Vercel Deployment & Cloud Hosting](#️-vercel-deployment--cloud-hosting)
 - [📄 License](#-license)
 
@@ -1660,76 +1661,259 @@ To enforce strict production signing and fail if no credentials exist:
 REQUIRE_PRODUCTION_SIGNING=true npm run android:build:release
 ```
 
----
+### 4. Production Mobile & Android Backend Gateway Routing
 
-## 🔑 Environment Configuration
+In production mobile phone apps and native Android Tauri builds, all backend API requests and real-time telemetry WebSockets are routed directly to the centralized Cloudflare Worker gateway:
 
-Declare optional environment variables in `.env`:
+* **Production API Base URL**:
+  `https://porlar-expedition-and-asset-management-system.ggm23768.workers.dev`
+* **Production WebSocket URL**:
+  `wss://porlar-expedition-and-asset-management-system.ggm23768.workers.dev/ws`
 
-```env
-# Optional Port (defaults to 3000)
-PORT=3000
-
-# Optional Gemini API Key for AI Tactical Reconnaissance Advisor
-GEMINI_API_KEY=your_gemini_api_key_here
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               PRODUCTION MOBILE / ANDROID APP NETWORK TOPOLOGY                         │
+│                                                                                        │
+│  [Android Phone / Field Tablet / Mobile Browser]                                       │
+│                         │                                                              │
+│                         ├───► HTTPS API Requests (https://...workers.dev/api/*)        │
+│                         │     ├── /api/health                                          │
+│                         │     ├── /api/auth/login (JWT Stateless Authentication)       │
+│                         │     ├── /api/heartbeat (Field Telemetry Registration)        │
+│                         │     ├── /api/state (Mission State & Assets)                  │
+│                         │     └── /api/ai/* (Predictive Maintenance & Autonomous SAR)  │
+│                         │                                                              │
+│                         └───► WSS WebSockets (wss://...workers.dev/ws)                 │
+│                               └── Durable Objects Multi-Client Presence & State Sync   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-*Note: You can also enter your Gemini API key dynamically via the frontend **API Key Config** modal inside the application interface.*
+#### Key Guarantees:
+1. **Centralized Single Source of Truth**: All URL generation logic is centralized in [`src/config/api.ts`](file:///home/solid/porlar-expedition-and-asset-management-system/src/config/api.ts). Changing the gateway URL in the future only requires editing this single module.
+2. **Clean Path Appending**: All API endpoints use `apiUrl(endpoint)`. It strictly deduplicates paths, strips trailing slashes, and guarantees no double slashes (`//api/...`), duplicated `/api`, or missing `/api`.
+3. **Secure WebSocket Derivation**: `wsUrl(path)` automatically derives `wss://` from the HTTPS gateway URL. Production mobile apps strictly connect via `wss://` and never downgrade to unencrypted `ws://` or `http://`.
+4. **Loopback & Dev Tunnel Sanitization**: Production builds and mobile devices automatically strip stale `localhost`, `127.0.0.1`, LAN IPs, or expired ngrok URLs from persistent storage so physical field units never attempt to reach an unreachable loopback host.
+5. **Preserved Development Workflows**:
+   - **Localhost Testing**: When developing locally on a laptop desktop browser at `http://localhost:3000`, the app routes relative `/api/*` requests directly to the local Express server on port 3000.
+   - **Ngrok Tunnel Testing**: When testing a physical mobile phone against a developer's laptop backend over ngrok (`https://<id>.ngrok-free.app`), the ngrok URL configured in `.env` or entered in the in-app *Operations Gateway* modal is honored, and the `ngrok-skip-browser-warning` bypass header is automatically injected.
+   - **Verification Diagnostics**: Run the verification test suite at any time:
+     ```bash
+     npx tsx scripts/verify-mobile-routing.ts
+     ```
 
 ---
 
-## ☁️ Vercel Deployment & Cloud Hosting
+## 🔑 Environment Variable Architecture
 
-POLAR-OS is engineered for cloud hosting on **Vercel** as a high-performance single-page application (SPA) with automated offline resilience and hybrid gateway connectivity.
+POLAR-OS enforces strict architectural segregation between client-safe parameters and server-only secrets:
 
-### 1. Zero-Configuration Deployment
-When importing this repository into Vercel:
-* **Framework Preset**: `Vite`
-* **Build Command**: `vite build` (or `npm run build`)
-* **Output Directory**: `dist`
-* **Configuration File**: Automatically managed via [`vercel.json`](vercel.json) with SPA clean rewrites:
+### 1. File Structure & Precedence
+* `.env.example`: Committed reference specification with sanitized placeholder keys.
+* `.env.local` / `.env`: Local development configuration (**strictly ignored by `.gitignore` — never commit secrets to Git!**).
+* **Vercel Project Settings → Environment Variables**: Authoritative configuration for production deployments.
+
+### 2. Client-Side Variables (`NEXT_PUBLIC_*` / `VITE_*`)
+These variables are baked into the browser bundle and are safe for client-side execution:
+* `NEXT_PUBLIC_SUPABASE_URL` / `VITE_SUPABASE_URL`: Public Supabase API Gateway URL.
+* `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY`: Client-safe Anonymous Key.
+* `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` / `VITE_GOOGLE_MAPS_API_KEY`: Google Maps client key for satellite/terrain tiles.
+* `NEXT_PUBLIC_WS_URL` / `VITE_WS_URL`: Optional standalone WebSocket server URL (leave blank to use Vercel Serverless continuous HTTP polling sync).
+* `NEXT_PUBLIC_API_BASE_URL` / `VITE_API_BASE_URL`: API Base URL. **Leave empty for web deployments** so browsers use same-origin relative `/api/...` paths.
+
+### 3. Server-Side Variables (Strictly Server-Only Secrets)
+These secrets are **never** bundled or exposed to the client:
+* `GEMINI_API_KEY`: Google Gemini API Key for autonomous SAR, route optimization & predictive analytics.
+* `AUTH_SECRET` / `JWT_SECRET`: Cryptographic secret for signing authoritative stateless HMAC-SHA256 session tokens.
+* `SUPABASE_SERVICE_ROLE_KEY`: Privileged server-side administrative key.
+* `DATABASE_URL`: Cloud / PostgreSQL database connection string.
+* `DATABASE_PATH`: Platform storage path (default: `./data/polar-database.json` in local development; routes safely to `/tmp/polar-database.json` on Vercel).
+* `PORT` / `HOST`: Local development network binding (`3000` / `0.0.0.0`).
+* `CORS_ALLOWED_ORIGINS`: Comma-delimited allowlist for cross-terminal access.
+
+---
+
+## ☁️ Vercel Production Deployment & Serverless Architecture
+
+The production architecture runs natively on **Vercel Serverless Functions**:
+
+```text
+                    INTERNET
+                       │
+          ┌────────────▼────────────┐
+          │        VERCEL           │
+          │                         │
+          │ Next.js / Vite Frontend │
+          │         │               │
+          │         ▼               │
+          │     /api/*              │
+          │         │               │
+          │ Vercel Serverless API   │
+          └─────────┬───────────────┘
+                    │
+          ┌─────────┼──────────┐
+          ▼         ▼          ▼
+       Supabase   Gemini    External APIs
+```
+
+### 1. Step-by-Step Vercel Deployment Guide
+1. **Push your code to GitHub**:
+   Ensure all changes are pushed to your remote Git repository.
+2. **Import into Vercel**:
+   Go to [vercel.com](https://vercel.com) → **Add New Project** → Select your repository.
+3. **Build & Framework Settings**:
+   * Framework Preset: `Vite` (or `Other`)
+   * Build Command: `npm run build`
+   * Output Directory: `dist`
+4. **Configure Environment Variables**:
+   In **Project Settings → Environment Variables**, add:
+   * `GEMINI_API_KEY`: Your Gemini API key.
+   * `AUTH_SECRET`: A secure random cryptographic secret (e.g. `polar-ops-secret-key-2026`).
+   * `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` (if using Supabase persistence).
+   * Leave `NEXT_PUBLIC_API_BASE_URL` and `VITE_API_BASE_URL` **empty** so all browsers use same-origin relative `/api/...` requests.
+   * Select environments: **Production**, **Preview**, and **Development**.
+5. **Deploy**:
+   Click **Deploy**. Vercel will build the frontend into `dist` and deploy each endpoint in `api/` as a serverless function.
+
+### 2. Step-by-Step Cloudflare Workers Full-Stack Deployment Guide
+
+The Polar Operations System deploys natively to **Cloudflare Workers with Static Assets** as a full-stack, edge-hosted application with zero external server dependencies:
+
+```text
+Browser / Mobile Field Tablet
+           │
+           ▼
+Cloudflare Edge Deployment
+├── Frontend & Static Assets (/assets/*, index.html) ──► Cloudflare Worker Assets (dist/)
+├── /api/* API Routes                                 ──► Cloudflare Worker Backend (worker/index.ts via Hono)
+│   ├── Authentication & Role Access (/api/auth/*)
+│   ├── Real-Time Telemetry & Health (/api/health, /api/heartbeat)
+│   ├── Persistent State Synchronization (/api/state, /api/action)
+│   ├── Autonomous Search & Rescue (/api/ai/sar/*)
+│   └── -50°C Cold-Soak Maintenance (/api/ai/predictive-maintenance/*)
+└── /ws Real-Time WebSockets                          ──► Durable Objects (PolarStateDurableObject)
+```
+
+#### Why `wrangler deploy` Succeeded:
+* **Root Cause of Previous Failure**: The project originally lacked an explicit Worker entry point (`main`) and used Cloudflare Pages configuration (`pages_build_output_dir = "dist"`), causing `wrangler deploy` to report that it could not find a Worker script or assets directory.
+* **The Solution**: Configured `wrangler.toml` with `main = "worker/index.ts"` alongside `[assets]` binding `ASSETS` pointing to `./dist`. The backend was ported to an edge-native **Hono** framework with **Durable Objects SQLite** persistence and Cloudflare **WebSockets**.
+
+#### Deployment Steps:
+1. **Build the Application**:
+   ```bash
+   npm run build
+   ```
+2. **Deploy to Cloudflare**:
+   ```bash
+   npm run deploy
+   # or
+   npx wrangler deploy
+   ```
+3. **Verify Deployment**:
+   * Navigate to your deployment: `https://<your-project>.workers.dev`
+   * Health Check: `https://<your-project>.workers.dev/api/health`
+   * Login Endpoint: `POST https://<your-project>.workers.dev/api/auth/login` (returns authentic JSON token, never HTML)
+
+---
+
+## 🌐 Two-Environment Architecture: Development vs. Production
+
+The Polar Operations System is architected to seamlessly support two completely distinct runtime environments without code modifications or configuration conflicts:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               1. LOCAL DEVELOPMENT MODE                                │
+│                                                                                        │
+│  [Developer Laptop]                                                                    │
+│  Frontend: http://localhost:3000   ◄───►  Backend: http://localhost:3000 (Express/WS)  │
+│                                                     │                                  │
+│  [Mobile Phones / Remote Field]                     ▼                                  │
+│  https://<ngrok-id>.ngrok-free.app ─────────► [ngrok tunnel]                           │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                      2. PRODUCTION CLOUDFLARE WORKERS MODE                             │
+│                      (LAPTOP COMPLETELY OFF & DISCONNECTED)                            │
+│                                                                                        │
+│  [Any Global Operator / Phone / Tablet]                                                │
+│  https://<cloudflare-domain>                                                           │
+│         │                                                                              │
+│         ├───►  Static UI & Maps (/assets/*, index.html) ──► Cloudflare Worker Assets   │
+│         │                                                   (SPA Fallback enabled)     │
+│         ├───►  API Calls (/api/*)                        ──► Cloudflare Worker (Hono)  │
+│         │                                                   - Auth (/api/auth/*)       │
+│         │                                                   - Health (/api/health)     │
+│         │                                                   - Sync & State (/api/state)│
+│         │                                                   - AI S.A.R. & Maintenance  │
+│         │                                                   - Pathfinding & Inventory  │
+│         └───►  WebSockets (/ws)                          ──► Durable Objects (SQLite)  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔍 Production Diagnostics & Health Verification
+
+Verify your live production deployment by navigating to:
+
+```text
+https://YOUR-APP.vercel.app/api/health
+```
+
+### Sample `/api/health` Response:
 ```json
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "buildCommand": "vite build",
-  "outputDirectory": "dist",
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "status": "ok",
+  "environment": "production",
+  "vercel": true,
+  "timestamp": "2026-10-06T14:00:00.000Z",
+  "database": {
+    "status": "connected",
+    "storageType": "memory_fallback",
+    "usersCount": 16,
+    "assetsCount": 9,
+    "expeditionsCount": 4
+  },
+  "env": {
+    "GEMINI_API_KEY": true,
+    "AUTH_SECRET": true,
+    "DATABASE_URL": false,
+    "DATABASE_PATH": true,
+    "SUPABASE_URL": false,
+    "SUPABASE_SERVICE_ROLE_KEY": false,
+    "NEXT_PUBLIC_SUPABASE_URL": false,
+    "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY": false
+  },
+  "system": {
+    "geminiAiConfigured": true,
+    "supabaseConfigured": false
+  }
 }
 ```
 
-### 2. Operational Modes on Vercel
+#### Field Explanations:
+* `status`: Indicates operations gateway status (`ok`).
+* `environment`: Active deployment runtime (`production` or `development`).
+* `vercel`: `true` when executing in Vercel serverless lambda containers.
+* `database.status`: Connection status of state engine (`connected`).
+* `database.storageType`: Active persistence strategy (`supabase_cloud`, `file_json`, or `memory_fallback`).
+* `env`: **Safe boolean flags only.** Confirms which environment variables are present without leaking sensitive credentials or tokens.
+* `system.geminiAiConfigured`: `true` if Gemini 3.8 Flash is ready for live inference; if `false`, the system seamlessly runs high-precision deterministic heuristic models.
 
-| Deployment Mode | Configuration | Capabilities |
-| :--- | :--- | :--- |
-| **Vercel Serverless Mode** *(Default)* | Leave `VITE_API_URL` blank. | Client-side application uses clean relative paths (`/api/auth/login`, `/api/health`), automatically handled by Vercel serverless functions or proxy. |
-| **Connected External Backend** | Set `VITE_API_URL="https://your-node-backend.app"` | Remote Node/Express backend (`server.ts`) hosted on Railway, Render, Fly.io, or VPS. |
+---
 
-### 3. Vercel Environment Variables
+## 📱 Mobile, Tablet & Multi-Device Testing
 
-Configure these in **Vercel Project Settings > Environment Variables**:
-
-| Variable | Required? | Description |
-| :--- | :---: | :--- |
-| `VITE_API_URL` | *Optional* | Remote base URL for external backend server (`server.ts`). If omitted, POLAR-OS uses relative paths `/api/...` handled directly by Vercel serverless routes. |
-| `VITE_API_BASE_URL` | *Optional* | Backward-compatible alias for `VITE_API_URL`. |
-| `VITE_GEMINI_API_KEY` | *Optional* | Gemini 3.8 Flash API key for client-side waypoint route risk evaluations. |
-| `VITE_GOOGLE_MAPS_API_KEY` | *Optional* | Google Maps platform key (satellite/terrain basemaps). |
-
-### 4. React Production Error Protection (Anti-Error #31)
-Production builds on Vercel are protected by the centralized [`safeFormat.ts`](src/utils/safeFormat.ts) suite:
-* `safeDisplayValue()`: Intercepts raw objects `{ code, message }`, telemetry records, and API errors, safely serializing them before JSX rendering.
-* `formatError()`: Extracts human-readable messages from HTTP, network, and Vercel serverless error objects.
-* `ErrorBoundary`: Automatically translates minified React errors (such as Error #31) into human-readable diagnostic messages with call stack previews and infinite reload protection.
+When testing on mobile phones (Android, iOS Safari) or tablets:
+1. Open the public HTTPS Vercel URL directly in your mobile browser:
+   ```text
+   https://YOUR-APP.vercel.app
+   ```
+2. **Never** attempt to access `http://localhost:3000` or `http://127.0.0.1:3000` from physical mobile devices or remote computers — physical phones cannot resolve the developer's laptop loopback.
+3. Because the frontend uses same-origin relative paths (`/api/auth/login`, `/api/health`, `/api/state`), all API requests are dispatched directly to the same deployment origin with zero CORS friction.
+4. **Offline Resilience**: If connectivity drops in the field, POLAR-OS caches state locally in IndexedDB / LocalStorage, and automatically reconciles changes once link status returns to online.
 
 ---
 
 ## 📄 License
 
-MIT © International Polar Expedition Consortium
+MIT © International Polar Expedition Operations Consortium

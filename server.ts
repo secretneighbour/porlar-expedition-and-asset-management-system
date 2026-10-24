@@ -40,6 +40,8 @@ import {
   DispatchLog,
 } from './src/types.js';
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
+import { findAStarPath } from './src/utils/polarRouteAStar.js';
+import { verifySessionToken } from './src/server/auth.js';
 import os from 'os';
 import { GoogleGenAI } from '@google/genai';
 import { databaseManager } from './src/server/database.js';
@@ -464,7 +466,7 @@ async function startServer() {
       origin &&
       (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
         /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com|vercel\.app)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/([a-zA-Z0-9-]+\.)*(ngrok-free\.app|localtunnel\.me|trycloudflare\.com|vercel\.app|pages\.dev|workers\.dev)(:\d+)?$/.test(origin) ||
         /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)$/.test(origin));
 
     if (origin && (isLocalOrLan || allowedEnvOrigins.includes(origin) || allowedEnvOrigins.length === 0)) {
@@ -542,27 +544,60 @@ async function startServer() {
   // AUTHENTICATION & ROLE-BASED ACCESS CONTROL (POLAR OPS CONSOLE)
   // ============================================================================
   
-  // Phase 2 & Phase 1 Hardening: Reusable Authentication Middleware with Session Expiry Check
-  function requireAuth(req, res, next) {
+  // Phase 2: Reusable Authentication Middleware with Session Expiry Check and Live User Status
+  function requireAuth(req: any, res: any, next: any) {
     const authHeader = req.headers.authorization;
     const token = (authHeader && authHeader.startsWith('Bearer '))
       ? authHeader.slice(7)
       : req.query.token || (req.body && req.body.token);
 
-    if (!token || !authSessions.has(token)) {
+    if (!token) {
       return res.status(401).json({ ok: false, error: 'Unauthorized: Valid session required.' });
     }
 
-    const session = authSessions.get(token)!;
-    if (isSessionExpired(session)) {
-      authSessions.delete(token);
-      if (activeSimSessions.has(token)) activeSimSessions.delete(token);
-      return res.status(401).json({ ok: false, error: 'Unauthorized: Session expired. Please log in again.' });
+    // 1. Check in-memory session cache
+    if (authSessions.has(token)) {
+      const session = authSessions.get(token)!;
+      if (isSessionExpired(session)) {
+        authSessions.delete(token);
+        if (activeSimSessions.has(token)) activeSimSessions.delete(token);
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Session expired. Please log in again.' });
+      }
+
+      // Check live account status
+      const liveUser = databaseManager.findUser(session.userId || (session as any).id);
+      if (!liveUser || liveUser.active === false) {
+        authSessions.delete(token);
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Account deactivated or unavailable.' });
+      }
+
+      session.role = liveUser.role; // Authoritative live role sync
+      req.user = session;
+      (req as any).token = token;
+      return next();
     }
 
-    req.user = session;
-    (req as any).token = token;
-    next();
+    // 2. Stateless token fallback via verifySessionToken
+    const verified = verifySessionToken(token);
+    if (verified.valid && verified.user) {
+      const liveUser = databaseManager.findUser(verified.user.id);
+      if (!liveUser || liveUser.active === false) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Account deactivated or unavailable.' });
+      }
+
+      req.user = {
+        id: liveUser.id,
+        userId: liveUser.id,
+        name: liveUser.name,
+        role: liveUser.role,
+        email: liveUser.email,
+        active: true,
+      };
+      (req as any).token = token;
+      return next();
+    }
+
+    return res.status(401).json({ ok: false, error: verified.error || 'Unauthorized: Valid session required.' });
   }
 
   // Phase 2 & Phase 0: Reusable Role & Action Authorization Engine
@@ -887,6 +922,18 @@ async function startServer() {
   });
 
   // Terminal heartbeat registration (works via HTTP fallback as well)
+  app.get('/api/heartbeat', (req, res) => {
+    const devices = getDeviceList();
+    res.json({
+      status: 'ok',
+      ok: true,
+      timestamp: new Date().toISOString(),
+      serverTime: new Date().toISOString(),
+      connectedClients: devices.length,
+      devices,
+    });
+  });
+
   app.post('/api/heartbeat', (req, res) => {
     const { deviceId, deviceType, deviceName, userAgent, batteryLevel, isCharging } = req.body;
     if (deviceId) {
@@ -2932,6 +2979,34 @@ SCHEMA:
       });
     }
   });
+  // Tactical Polar A* Search endpoint
+  app.post('/api/ai/route-optimizer/astar', (req, res) => {
+    try {
+      const { startNode, goalNode, waypoints, dangerZones, environment, asset } = req.body || {};
+      if (!startNode || !goalNode) {
+        return res.status(400).json({ ok: false, error: 'startNode and goalNode coordinates are required.' });
+      }
+
+      const env = {
+        tempC: -42,
+        windSpeedKts: 22,
+        dangerZones: dangerZones || [],
+        ...environment,
+      };
+
+      const result = findAStarPath(startNode, goalNode, env, asset || {}, waypoints || []);
+
+      res.json({
+        status: 'ok',
+        ok: true,
+        ...result,
+      });
+    } catch (err: any) {
+      console.error('[POLAR-AI] A* route optimization error:', err.message);
+      res.status(500).json({ ok: false, error: err.message || 'A* pathfinding calculation error.' });
+    }
+  });
+
   function syncPolarAssetToPolarisDb(polarAsset: any): any {
     const statusMap: Record<string, string> = {
       operational: 'Available',

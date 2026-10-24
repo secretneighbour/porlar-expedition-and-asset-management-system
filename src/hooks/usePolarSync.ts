@@ -315,6 +315,24 @@ export function usePolarSync() {
     const token = sessionStorage.getItem('polar_auth_token') || localStorage.getItem('polar_auth_token') || '';
     const socketUrl = wsUrl(`/ws?token=${token}`);
 
+    // In serverless hosting without persistent WebSockets (e.g. Vercel Serverless Functions),
+    // fallback cleanly to continuous HTTP REST sync unless an explicit WebSocket gateway is provided.
+    // Cloudflare Workers with Durable Objects (workers.dev) natively supports persistent WebSockets at /ws.
+    const isServerlessWithoutWs =
+      typeof window !== 'undefined' &&
+      window.location.hostname.includes('vercel.app');
+
+    const hasDedicatedWsServer = Boolean(
+      typeof import.meta !== 'undefined' &&
+        ((import.meta as any).env?.VITE_WS_URL || (import.meta as any).env?.NEXT_PUBLIC_WS_URL)
+    );
+
+    if (!socketUrl || (isServerlessWithoutWs && !hasDedicatedWsServer)) {
+      console.log('[SYNC] Operating in Vercel Serverless environment. Active via HTTP REST telemetry sync.');
+      setSyncStatus('connected');
+      return;
+    }
+
     setSyncStatus('connecting');
 
     try {
@@ -459,6 +477,14 @@ export function usePolarSync() {
       const scheduleReconnect = () => {
         if (!reconnectTimerRef.current) {
           const attempts = reconnectAttemptsRef.current;
+          // In Vercel serverless hosting where WebSockets are not native, fallback cleanly to continuous HTTP polling
+          const isVercelOrigin = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+          if (isVercelOrigin && attempts >= 2) {
+            console.log('[SYNC] Active in Vercel Serverless environment. Switched to continuous HTTP REST telemetry polling.');
+            setSyncStatus('connected');
+            return;
+          }
+
           const delay = Math.min(30000, 2000 * Math.pow(1.5, attempts));
           const jitter = delay * 0.2 * (Math.random() * 2 - 1);
           const finalDelay = delay + jitter;
@@ -473,9 +499,15 @@ export function usePolarSync() {
       };
     } catch (err) {
       wsRef.current = null;
-      // If the websocket constructor itself throws
       if (!reconnectTimerRef.current) {
         const attempts = reconnectAttemptsRef.current;
+        const isVercelOrigin = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+        if (isVercelOrigin && attempts >= 2) {
+          console.log('[SYNC] Operating in Vercel Serverless environment via HTTP telemetry polling.');
+          setSyncStatus('connected');
+          return;
+        }
+
         const delay = Math.min(30000, 2000 * Math.pow(1.5, attempts));
         const jitter = delay * 0.2 * (Math.random() * 2 - 1);
         const finalDelay = delay + jitter;
@@ -483,7 +515,7 @@ export function usePolarSync() {
         reconnectTimerRef.current = window.setTimeout(connectWebSocket, finalDelay);
       }
     }
-  }, [applyServerState]);
+  }, [applyServerState, currentDeviceId, currentDeviceType]);
 
   useEffect(() => {
     fetchInitialState();

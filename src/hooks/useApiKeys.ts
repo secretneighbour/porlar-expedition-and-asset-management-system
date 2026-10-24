@@ -32,7 +32,7 @@ export function useApiKeys(): ApiKeysState {
     } catch (e) {
       // Ignore
     }
-    return '';
+    return (import.meta.env.VITE_GEMINI_API_KEY as string) || '';
   });
 
   const saveKeys = useCallback((gmapsKey: string, gemKey: string) => {
