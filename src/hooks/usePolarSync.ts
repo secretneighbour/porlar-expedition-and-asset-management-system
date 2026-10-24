@@ -45,6 +45,7 @@ import {
   stopEmergencyAlarm,
   playTacticalChirp,
   playSuccessChime,
+  getSoundEffectsEnabled,
 } from '../utils/audioAlert';
 import { apiFetch, wsUrl } from '../utils/api';
 
@@ -259,7 +260,7 @@ export function usePolarSync() {
     // Distress state management
     if (state.activeDistress) {
       setActiveDistress(state.activeDistress);
-      if (!state.activeDistress.acknowledgedByHQ && !isAlarmMutedRef.current) {
+      if (!state.activeDistress.acknowledgedByHQ && !isAlarmMutedRef.current && getSoundEffectsEnabled()) {
         startEmergencyAlarm();
       } else if (state.activeDistress.acknowledgedByHQ) {
         stopEmergencyAlarm();
@@ -343,7 +344,6 @@ export function usePolarSync() {
         console.log('[SYNC] Real-time WebSocket channel established with Polar Operations Server');
         setSyncStatus('connected');
         reconnectAttemptsRef.current = 0;
-        playTacticalChirp();
 
         // Immediately register this terminal
         const regMsg = {

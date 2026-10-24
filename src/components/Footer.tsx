@@ -47,18 +47,6 @@ export function Footer({ t, db, currentDeviceId, currentDeviceType }: FooterProp
           </button>
         </div>
 
-        {/* Center: Attribution Line */}
-        <div className="flex items-center gap-1.5 text-xs text-purple-300/70" id="attribution-line">
-          <span>Powered by</span>
-          <a
-            href="https://wondermayank.in"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-purple-300 font-semibold hover:text-white transition-colors underline decoration-purple-400/40"
-          >
-            wondermayank.in
-          </a>
-        </div>
 
         {/* Right: Satellite Uplink & Node info */}
         <div className="flex items-center gap-4">

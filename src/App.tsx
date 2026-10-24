@@ -44,7 +44,7 @@ const SimulationReportModal = React.lazy(() => import('./components/polaris/Simu
 import { usePolarSync } from './hooks/usePolarSync';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useRealtimeWeather } from './hooks/useRealtimeWeather';
-import { playTacticalChirp, playSuccessChime, startEmergencyAlarm, stopEmergencyAlarm } from './utils/audioAlert';
+import { playTacticalChirp, playSuccessChime, startEmergencyAlarm, stopEmergencyAlarm, setSoundEffectsEnabled } from './utils/audioAlert';
 import { ShieldAlert, Radio, Key, Wifi, WifiOff, Bot, Sparkles, Terminal, QrCode, Target, ChevronDown } from 'lucide-react';
 
 export default function App() {
@@ -97,9 +97,7 @@ export default function App() {
   const handleToggleSound = () => {
     setSoundEnabled(prev => {
       const next = !prev;
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('polar_sound_enabled', String(next));
-      }
+      setSoundEffectsEnabled(next);
       if (next) playTacticalChirp();
       return next;
     });
@@ -967,13 +965,13 @@ export default function App() {
                 disabled={isDispatchingMayday}
                 style={{
                   background: activeDistressAlert
-                    ? 'linear-gradient(135deg, #DC2626, #B91C1C)'
-                    : 'linear-gradient(135deg, #EF4444, #9333EA)',
+                    ? 'linear-gradient(135deg, #DC2626, #991B1B)'
+                    : 'linear-gradient(135deg, #EF4444, #DC2626)',
                   boxShadow: activeDistressAlert
                     ? '0 8px 25px rgba(239, 68, 68, 0.65)'
                     : '0 6px 18px rgba(239, 68, 68, 0.35)',
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-l-xl text-white font-mono font-bold tracking-wide cursor-pointer hover:opacity-95 transition-all text-xs ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-l-xl text-white font-mono font-bold tracking-wide cursor-pointer hover:opacity-95 transition-all text-xs outline-none focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 focus:ring-offset-slate-900 ${
                   activeDistressAlert ? 'animate-pulse ring-2 ring-rose-400' : ''
                 }`}
                 title={
@@ -1009,7 +1007,7 @@ export default function App() {
                     : 'rgba(239, 68, 68, 0.85)',
                   borderLeft: '1px solid rgba(255, 255, 255, 0.25)',
                 }}
-                className="px-2 py-1.5 rounded-r-xl text-white hover:bg-rose-700 cursor-pointer transition-colors text-xs flex items-center justify-center"
+                className="px-2 py-1.5 rounded-r-xl text-white hover:bg-rose-700 cursor-pointer transition-colors text-xs flex items-center justify-center outline-none focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 focus:ring-offset-slate-900"
                 title="Open Detailed Manual MAYDAY Form (custom coordinates, soul count, notes)"
                 aria-label="Open Detailed Manual MAYDAY Form"
               >
