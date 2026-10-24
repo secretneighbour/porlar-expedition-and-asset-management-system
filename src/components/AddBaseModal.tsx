@@ -50,14 +50,23 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
       if (initialLng !== undefined && initialLng !== null) {
         setLngInput(initialLng.toFixed(4));
       }
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, initialLat, initialLng]);
+  }, [isOpen, initialLat, initialLng, onClose]);
   const [elevationInput, setElevationInput] = useState<string>('1200');
   const [runwayType, setRunwayType] = useState<ResearchStation['runwayType']>('Skiway (Snow)');
   const [fuelReserveInput, setFuelReserveInput] = useState<string>('250000');
   const [powerStatus, setPowerStatus] = useState<ResearchStation['powerStatus']>('Nominal');
   const [winterPopInput, setWinterPopInput] = useState<string>('18');
   const [summerPopInput, setSummerPopInput] = useState<string>('65');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -79,15 +88,30 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim()) return;
+    setValidationError(null);
+    if (!name.trim() || !code.trim()) {
+      setValidationError('Station Name and Callsign / Code are required.');
+      return;
+    }
+
+    const latNum = parseFloat(latInput);
+    const lngNum = parseFloat(lngInput);
+    if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+      setValidationError('Latitude must be a valid number between -90 and +90.');
+      return;
+    }
+    if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+      setValidationError('Longitude must be a valid number between -180 and +180.');
+      return;
+    }
 
     const newStation: ResearchStation = {
       id: `st-${Date.now()}`,
       name: name.trim(),
       code: code.trim().toUpperCase(),
       country: country.trim() || 'International',
-      lat: parseFloat(latInput) || -78.5,
-      lng: parseFloat(lngInput) || 100.0,
+      lat: latNum,
+      lng: lngNum,
       elevationM: parseFloat(elevationInput) || 0,
       region,
       winterPopulation: parseInt(winterPopInput, 10) || 0,
@@ -102,26 +126,40 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="commission-base-title"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4"
+    >
+      <div
+        className="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950 shrink-0">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-sky-400" />
-            <h2 className="text-lg font-bold text-white font-display tracking-wide uppercase">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-950 shrink-0">
+          <div className="flex items-center gap-2 min-w-0 pr-2">
+            <Building2 className="w-5 h-5 text-sky-400 shrink-0" />
+            <h2 id="commission-base-title" className="text-sm sm:text-base md:text-lg font-bold text-white font-display tracking-wide uppercase truncate">
               COMMISSION NEW POLAR BASE / AWOS STATION
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            aria-label="Close dialog"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs font-mono">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs font-mono">
+          {validationError && (
+            <div className="p-2.5 rounded bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs font-mono">
+              {validationError}
+            </div>
+          )}
           {/* Base Name & Code */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2 space-y-1">
@@ -194,7 +232,7 @@ export const AddBaseModal: React.FC<AddBaseModalProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="space-y-1">
                 <label className="text-slate-500 text-[10px]">LATITUDE (DEG)</label>
                 <input

@@ -16,6 +16,7 @@ import {
   Waypoint,
   PolarisDb,
   PolarPersonnel,
+  PolarInventoryItem,
 } from '../types';
 import {
   INITIAL_ASSETS,
@@ -44,6 +45,7 @@ import {
   stopEmergencyAlarm,
   playTacticalChirp,
   playSuccessChime,
+  getSoundEffectsEnabled,
 } from '../utils/audioAlert';
 import { apiFetch, wsUrl } from '../utils/api';
 
@@ -63,6 +65,53 @@ const getOrCreateDeviceId = (): string => {
   }
 };
 
+
+function convertPolarAssetToPolaris(polarAsset: PolarAsset): any {
+  const statusMap: Record<string, string> = {
+    operational: 'Available',
+    in_transit: 'In Transit',
+    maintenance: 'Under Maintenance',
+    cold_soaked: 'Under Maintenance',
+    standby: 'Available',
+  };
+  return {
+    id: polarAsset.id,
+    name: polarAsset.name,
+    category: polarAsset.category === 'heavy_traverse' ? 'Vehicles' : (polarAsset.category === 'scientific_rig' ? 'Instruments' : 'Equipment'),
+    serial: polarAsset.code || `SN-${polarAsset.id}`,
+    purchaseDate: '2024-01-01',
+    location: polarAsset.currentLocation?.name || 'Maitri Depot',
+    expeditionId: polarAsset.assignedExpeditionId || null,
+    assignedPerson: null,
+    condition: polarAsset.status === 'operational' ? 'Excellent' : (polarAsset.status === 'maintenance' ? 'Fair' : 'Good'),
+    status: statusMap[polarAsset.status] || 'Available',
+    lastMaintenance: polarAsset.lastMaintenanceDate || '2026-01-01',
+    nextMaintenance: '2026-07-01',
+    warranty: 'Under Warranty',
+    currentLocation: polarAsset.currentLocation,
+    telemetry: polarAsset.telemetry,
+  };
+}
+
+function convertExpeditionToPolaris(newExp: Expedition): any {
+  return {
+    id: newExp.id,
+    name: newExp.name,
+    region: newExp.region === 'antarctica' ? 'Antarctica' : 'Arctic',
+    destination: newExp.waypoints?.[newExp.waypoints.length - 1]?.name || 'Field Station',
+    base: newExp.region === 'antarctica' ? 'Maitri' : 'Himadri',
+    start: newExp.departureDate || new Date().toISOString().slice(0, 10),
+    end: newExp.estimatedReturnDate || new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+    status: newExp.phase === 'completed' ? 'Completed' : 'Active',
+    manager: newExp.leader || 'PER-0001',
+    objectives: newExp.objective || 'Scientific traverse and resupply',
+    description: newExp.objective || 'Active polar expedition',
+    currentLat: newExp.currentLat,
+    currentLng: newExp.currentLng,
+    waypoints: newExp.waypoints || [],
+  };
+}
+
 export function usePolarSync() {
   const [region, setRegion] = useState<PolarRegion>('antarctica');
   const [conditionLevel, setConditionLevel] = useState<ConditionLevel>('COND-2_CAUTION');
@@ -72,8 +121,11 @@ export function usePolarSync() {
   const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>(INITIAL_DISPATCH_LOGS);
   const [activeDistress, setActiveDistress] = useState<ActiveDistressAlert | null>(null);
   const [personnel, setPersonnel] = useState<PolarPersonnel[]>(INITIAL_PERSONNEL);
+  const [inventory, setInventory] = useState<PolarInventoryItem[]>(INITIAL_INVENTORY);
   const [stations, setStations] = useState<ResearchStation[]>(INITIAL_STATIONS);
   const [customWaypoints, setCustomWaypoints] = useState<Waypoint[]>([]);
+  const advancingWaypointRef = useRef<Record<string, number>>({});
+  const [lastSyncError, setLastSyncError] = useState<{ action?: string; error?: string; timestamp: string } | null>(null);
 
   // POLARIS Main Database Realtime State
   const [polarisDb, setPolarisDbState] = useState<PolarisDb>(() => ({
@@ -194,6 +246,11 @@ export function usePolarSync() {
     if (Array.isArray(state.supplies)) setSupplies(state.supplies);
     if (Array.isArray(state.dispatchLogs)) setDispatchLogs(state.dispatchLogs);
     if (Array.isArray(state.personnel)) setPersonnel(state.personnel);
+    if (Array.isArray(state.inventory)) {
+      setInventory(state.inventory);
+    } else if (state.polarisDb && Array.isArray(state.polarisDb.inventory)) {
+      setInventory(state.polarisDb.inventory);
+    }
     if (Array.isArray(state.stations)) setStations(state.stations);
     if (Array.isArray(state.customWaypoints)) setCustomWaypoints(state.customWaypoints);
     if (state.polarisDb && typeof state.polarisDb === 'object') {
@@ -203,7 +260,7 @@ export function usePolarSync() {
     // Distress state management
     if (state.activeDistress) {
       setActiveDistress(state.activeDistress);
-      if (!state.activeDistress.acknowledgedByHQ && !isAlarmMutedRef.current) {
+      if (!state.activeDistress.acknowledgedByHQ && !isAlarmMutedRef.current && getSoundEffectsEnabled()) {
         startEmergencyAlarm();
       } else if (state.activeDistress.acknowledgedByHQ) {
         stopEmergencyAlarm();
@@ -287,7 +344,6 @@ export function usePolarSync() {
         console.log('[SYNC] Real-time WebSocket channel established with Polar Operations Server');
         setSyncStatus('connected');
         reconnectAttemptsRef.current = 0;
-        playTacticalChirp();
 
         // Immediately register this terminal
         const regMsg = {
@@ -325,6 +381,50 @@ export function usePolarSync() {
                 applyServerState(msg.payload);
               }
               break;
+            case 'ADD_INVENTORY':
+              if (msg.payload && msg.payload.id) {
+                const added = msg.payload;
+                setInventory((prev) => {
+                  if (prev.some((i) => i.id === added.id)) return prev;
+                  return [added, ...prev];
+                });
+                setPolarisDbState((prev) => {
+                  if ((prev.inventory || []).some((i: any) => i.id === added.id)) return prev;
+                  return { ...prev, inventory: [added, ...(prev.inventory || [])] };
+                });
+              }
+              break;
+            case 'UPDATE_INVENTORY':
+              if (msg.payload && msg.payload.id) {
+                const updated = msg.payload;
+                setInventory((prev) =>
+                  prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+                );
+                setPolarisDbState((prev) => ({
+                  ...prev,
+                  inventory: (prev.inventory || []).map((i: any) =>
+                    i.id === updated.id ? { ...i, ...updated } : i
+                  ),
+                }));
+              }
+              break;
+            case 'ADJUST_INVENTORY_STOCK':
+              if (msg.payload && msg.payload.id) {
+                const targetId = msg.payload.id;
+                const delta = Number(msg.payload.delta) || 0;
+                setInventory((prev) =>
+                  prev.map((i) =>
+                    i.id === targetId ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i
+                  )
+                );
+                setPolarisDbState((prev) => ({
+                  ...prev,
+                  inventory: (prev.inventory || []).map((i: any) =>
+                    i.id === targetId ? { ...i, quantity: Math.max(0, (i.quantity || 0) + delta) } : i
+                  ),
+                }));
+              }
+              break;
             case 'TRIGGER_DISTRESS':
               setActiveDistress(msg.payload);
               setConditionLevel('COND-1_SEVERE_BLIZZARD');
@@ -342,6 +442,18 @@ export function usePolarSync() {
               stopEmergencyAlarm();
               setConditionLevel('COND-2_CAUTION');
               break;
+            case 'ACTION_REJECTED': {
+              const errMsg = (msg as any).error || `Action ${(msg as any).action} was rejected by server.`;
+              console.warn('[SYNC] Action rejected by server:', errMsg);
+              setLastSyncError({
+                action: (msg as any).action,
+                error: errMsg,
+                timestamp: new Date().toISOString(),
+              });
+              // Reconcile optimistic client state with authoritative server state
+              fetchInitialState();
+              break;
+            }
             case 'PRESENCE_UPDATE':
               if (msg.payload?.connectedClients !== undefined) {
                 setConnectedClients(msg.payload.connectedClients);
@@ -570,14 +682,29 @@ export function usePolarSync() {
   }, [sendSyncMessage]);
 
   const updateDistressLocation = useCallback(
-    (lat: number, lng: number) => {
+    (lat: number, lng: number, isVerified: boolean = true) => {
+      if (
+        typeof lat !== 'number' ||
+        typeof lng !== 'number' ||
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        lat < -90 ||
+        lat > 90 ||
+        lng < -180 ||
+        lng > 180
+      ) {
+        console.warn('[usePolarSync] Rejected invalid distress coordinates:', lat, lng);
+        return;
+      }
       if (activeDistress) {
         const updated = {
           ...activeDistress,
           targetLat: lat,
           targetLng: lng,
           coordinates: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-          location: `Device Locked Fix (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`,
+          location: isVerified
+            ? `Device Locked Fix (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`
+            : `UNVERIFIED POSITION (${lat.toFixed(4)}°, ${lng.toFixed(4)}°)`,
         };
         setActiveDistress(updated);
         sendSyncMessage({
@@ -624,6 +751,21 @@ export function usePolarSync() {
       if (!asset) return;
       const updated = { ...asset, status };
       setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+      setPolarisDbState((prev) => ({
+        ...prev,
+        assets: (prev.assets || []).map((a: any) =>
+          a.id === assetId
+            ? {
+                ...a,
+                status: status === 'maintenance' || status === 'cold_soaked'
+                  ? 'Under Maintenance'
+                  : status === 'in_transit'
+                  ? 'In Transit'
+                  : 'Available',
+              }
+            : a
+        ),
+      }));
       sendSyncMessage({ type: 'UPDATE_ASSET', payload: updated });
     },
     [assets, sendSyncMessage]
@@ -640,9 +782,67 @@ export function usePolarSync() {
     [assets, sendSyncMessage]
   );
 
+    const addInventory = useCallback(
+    (newItem: PolarInventoryItem) => {
+      setInventory((prev) => {
+        if (prev.some((i) => i.id === newItem.id)) return prev;
+        return [newItem, ...prev];
+      });
+      setPolarisDbState((prev) => {
+        const exists = (prev.inventory || []).some((i: any) => i.id === newItem.id);
+        if (exists) return prev;
+        return { ...prev, inventory: [newItem, ...(prev.inventory || [])] };
+      });
+      sendSyncMessage({ type: 'ADD_INVENTORY', payload: newItem });
+    },
+    [sendSyncMessage]
+  );
+
+  const updateInventory = useCallback(
+    (item: Partial<PolarInventoryItem> & { id: string }) => {
+      setInventory((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, ...item } : i))
+      );
+      setPolarisDbState((prev) => ({
+        ...prev,
+        inventory: (prev.inventory || []).map((i: any) =>
+          i.id === item.id ? { ...i, ...item } : i
+        ),
+      }));
+      sendSyncMessage({ type: 'UPDATE_INVENTORY', payload: item });
+    },
+    [sendSyncMessage]
+  );
+
+  const adjustInventoryStock = useCallback(
+    (id: string, delta: number) => {
+      setInventory((prev) =>
+        prev.map((i) =>
+          i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i
+        )
+      );
+      setPolarisDbState((prev) => ({
+        ...prev,
+        inventory: (prev.inventory || []).map((i: any) =>
+          i.id === id ? { ...i, quantity: Math.max(0, (i.quantity || 0) + delta) } : i
+        ),
+      }));
+      sendSyncMessage({
+        type: 'ADJUST_INVENTORY_STOCK',
+        payload: { id, delta },
+      });
+    },
+    [sendSyncMessage]
+  );
+
   const addPersonnel = useCallback(
     (newPerson: PolarPersonnel) => {
       setPersonnel((prev) => [newPerson, ...prev]);
+      setPolarisDbState((prev) => {
+        const exists = (prev.personnel || []).some((p: any) => p.id === newPerson.id);
+        if (exists) return prev;
+        return { ...prev, personnel: [newPerson, ...(prev.personnel || [])] };
+      });
       sendSyncMessage({ type: 'ADD_PERSONNEL', payload: newPerson });
       const log: DispatchLog = {
         id: `log-${Date.now()}`,
@@ -660,6 +860,11 @@ export function usePolarSync() {
   const addAsset = useCallback(
     (newAsset: PolarAsset) => {
       setAssets((prev) => [newAsset, ...prev]);
+      setPolarisDbState((prev) => {
+        const exists = (prev.assets || []).some((a: any) => a.id === newAsset.id);
+        if (exists) return prev;
+        return { ...prev, assets: [convertPolarAssetToPolaris(newAsset), ...(prev.assets || [])] };
+      });
       sendSyncMessage({ type: 'ADD_ASSET', payload: newAsset });
       // Add log
       const log: DispatchLog = {
@@ -678,10 +883,16 @@ export function usePolarSync() {
 
   const advanceWaypoint = useCallback(
     (expeditionId: string) => {
+      const now = Date.now();
+      if (advancingWaypointRef.current[expeditionId] && now - advancingWaypointRef.current[expeditionId] < 1000) {
+        return; // Guard against rapid duplicate arrival events
+      }
       const exp = expeditions.find((e) => e.id === expeditionId);
       if (!exp) return;
       const nextWpIndex = exp.waypoints.findIndex((w) => !w.passed);
       if (nextWpIndex === -1) return;
+
+      advancingWaypointRef.current[expeditionId] = now;
 
       const updatedWaypoints = exp.waypoints.map((w, i) =>
         i === nextWpIndex ? { ...w, passed: true } : w
@@ -703,6 +914,20 @@ export function usePolarSync() {
       };
 
       setExpeditions((prev) => prev.map((e) => (e.id === expeditionId ? updatedExp : e)));
+      setPolarisDbState((prev) => ({
+        ...prev,
+        expeditions: (prev.expeditions || []).map((pe: any) =>
+          pe.id === expeditionId
+            ? {
+                ...pe,
+                waypoints: updatedWaypoints,
+                currentLat: advancedWp.lat,
+                currentLng: advancedWp.lng,
+                status: newDistance >= exp.totalDistanceKm ? 'Completed' : pe.status,
+              }
+            : pe
+        ),
+      }));
       sendSyncMessage({ type: 'UPDATE_EXPEDITION', payload: updatedExp });
     },
     [expeditions, sendSyncMessage]
@@ -722,6 +947,11 @@ export function usePolarSync() {
   const addExpedition = useCallback(
     (newExp: Expedition) => {
       setExpeditions((prev) => [newExp, ...prev]);
+      setPolarisDbState((prev) => {
+        const exists = (prev.expeditions || []).some((e: any) => e.id === newExp.id);
+        if (exists) return prev;
+        return { ...prev, expeditions: [convertExpeditionToPolaris(newExp), ...(prev.expeditions || [])] };
+      });
       sendSyncMessage({ type: 'UPDATE_EXPEDITION', payload: newExp });
       const log: DispatchLog = {
         id: `log-${Date.now()}`,
@@ -768,6 +998,14 @@ export function usePolarSync() {
   const addStation = useCallback(
     (newStation: ResearchStation) => {
       setStations((prev) => [newStation, ...prev]);
+      setPolarisDbState((prev: any) => {
+        const existing = Array.isArray(prev?.customStations) ? prev.customStations : [];
+        if (existing.some((s: any) => s.id === newStation.id)) return prev;
+        return {
+          ...prev,
+          customStations: [newStation, ...existing],
+        };
+      });
       sendSyncMessage({ type: 'ADD_STATION', payload: newStation });
       const log: DispatchLog = {
         id: `log-${Date.now()}`,
@@ -848,6 +1086,14 @@ export function usePolarSync() {
             };
           })
         );
+        setPolarisDbState((prev) => ({
+          ...prev,
+          expeditions: (prev.expeditions || []).map((pe: any) =>
+            pe.id === expeditionId
+              ? { ...pe, waypoints: (pe.waypoints || []).filter((w: any) => w.id !== waypointId) }
+              : pe
+          ),
+        }));
         sendSyncMessage({
           type: 'DELETE_WAYPOINT',
           payload: { waypointId, expeditionId },
@@ -876,15 +1122,28 @@ export function usePolarSync() {
         setExpeditions((prev) =>
           prev.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = e.waypoints.map((w) =>
-              w.id === updatedWaypoint.id ? updatedWaypoint : w
-            );
+            const updatedWaypoints = e.waypoints
+              .map((w) => (w.id === updatedWaypoint.id ? updatedWaypoint : w))
+              .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
             return {
               ...e,
               waypoints: updatedWaypoints,
             };
           })
         );
+        setPolarisDbState((prev) => ({
+          ...prev,
+          expeditions: (prev.expeditions || []).map((pe: any) =>
+            pe.id === expeditionId
+              ? {
+                  ...pe,
+                  waypoints: (pe.waypoints || []).map((w: any) =>
+                    w.id === updatedWaypoint.id ? updatedWaypoint : w
+                  ),
+                }
+              : pe
+          ),
+        }));
         sendSyncMessage({
           type: 'UPDATE_WAYPOINT',
           payload: { waypoint: updatedWaypoint, expeditionId },
@@ -907,6 +1166,74 @@ export function usePolarSync() {
       playSuccessChime();
     },
     [sendSyncMessage]
+  );
+
+  const reorderWaypoints = useCallback(
+    (orderedWaypoints: Waypoint[], expeditionId: string) => {
+      const normalized = orderedWaypoints.map((w, idx) => ({ ...w, sequence: idx + 1 }));
+      setExpeditions((prev) =>
+        prev.map((e) => {
+          if (e.id !== expeditionId) return e;
+          return {
+            ...e,
+            waypoints: normalized,
+          };
+        })
+      );
+      setPolarisDbState((prev) => ({
+        ...prev,
+        expeditions: (prev.expeditions || []).map((pe: any) =>
+          pe.id === expeditionId ? { ...pe, waypoints: normalized } : pe
+        ),
+      }));
+      sendSyncMessage({
+        type: 'REORDER_WAYPOINTS',
+        payload: { waypoints: normalized, expeditionId },
+      });
+      playSuccessChime();
+    },
+    [sendSyncMessage]
+  );
+
+  const updateAsset = useCallback(
+    (assetId: string, updates: Partial<PolarAsset>) => {
+      const asset = assets.find((a) => a.id === assetId);
+      if (!asset) return;
+      const updated = { ...asset, ...updates };
+      setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+      setPolarisDbState((prev) => ({
+        ...prev,
+        assets: (prev.assets || []).map((a: any) =>
+          a.id === assetId
+            ? {
+                ...a,
+                ...(updates.name ? { name: updates.name } : {}),
+                ...(updates.status ? {
+                  status: updates.status === 'maintenance' || updates.status === 'cold_soaked'
+                    ? 'Under Maintenance'
+                    : updates.status === 'in_transit'
+                    ? 'In Transit'
+                    : updates.status === 'standby' || updates.status === 'operational'
+                    ? 'Available'
+                    : updates.status
+                } : {}),
+                ...(updates.currentLocation ? {
+                  location: updates.currentLocation.name || a.location,
+                  currentLocation: updates.currentLocation,
+                } : {}),
+                ...(updates.assignedExpeditionId !== undefined ? {
+                  expeditionId: updates.assignedExpeditionId,
+                } : {}),
+                ...(updates.lastMaintenanceDate ? {
+                  lastMaintenance: updates.lastMaintenanceDate,
+                } : {}),
+              }
+            : a
+        ),
+      }));
+      sendSyncMessage({ type: 'UPDATE_ASSET', payload: updated });
+    },
+    [assets, sendSyncMessage]
   );
 
   const resetData = useCallback(() => {
@@ -932,12 +1259,17 @@ export function usePolarSync() {
     customWaypoints,
     connectedClients,
     syncStatus,
+    lastSyncError,
     isAlarmMuted,
     toggleMuteAlarm,
     updateRegion,
     updateConditionLevel,
     personnel,
     addPersonnel,
+    inventory,
+    addInventory,
+    updateInventory,
+    adjustInventoryStock,
     updateAssetStatus,
     refuelAsset,
     addAsset,
@@ -945,6 +1277,8 @@ export function usePolarSync() {
     addWaypoint,
     deleteWaypoint,
     updateWaypoint,
+    reorderWaypoints,
+    updateAsset,
     advanceWaypoint,
     updateExpeditionPhase,
     addExpedition,

@@ -5,7 +5,36 @@
 
 let audioCtx: AudioContext | null = null;
 let alarmInterval: number | null = null;
+let alarmAutoStopTimeout: number | null = null;
 let isAlarmPlaying = false;
+
+let lastChirpTime = 0;
+const CHIRP_THROTTLE_MS = 250;
+
+let lastChimeTime = 0;
+const CHIME_THROTTLE_MS = 500;
+
+/**
+ * Global audio configuration backed by localStorage
+ */
+export function getSoundEffectsEnabled(): boolean {
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('polar_sound_enabled');
+    if (saved !== null) {
+      return saved !== 'false';
+    }
+  }
+  return true;
+}
+
+export function setSoundEffectsEnabled(enabled: boolean): void {
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    localStorage.setItem('polar_sound_enabled', String(enabled));
+  }
+  if (!enabled) {
+    stopEmergencyAlarm();
+  }
+}
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -20,8 +49,10 @@ function getAudioContext(): AudioContext {
 
 /**
  * Start the pulsating two-tone polar emergency alarm (880Hz - 660Hz)
+ * Respects sound setting and auto-silences after 30s to prevent runaway loops.
  */
 export function startEmergencyAlarm(): void {
+  if (!getSoundEffectsEnabled()) return;
   if (isAlarmPlaying) return;
   try {
     const ctx = getAudioContext();
@@ -52,13 +83,21 @@ export function startEmergencyAlarm(): void {
 
     playPulse();
     alarmInterval = window.setInterval(playPulse, 400);
+
+    // Auto-silence safety timeout (30 seconds) to prevent infinite alarm playback
+    if (alarmAutoStopTimeout !== null) {
+      clearTimeout(alarmAutoStopTimeout);
+    }
+    alarmAutoStopTimeout = window.setTimeout(() => {
+      stopEmergencyAlarm();
+    }, 30000);
   } catch (e) {
     console.warn('[AUDIO] Audio alert failed to initialize:', e);
   }
 }
 
 /**
- * Stop the emergency alarm
+ * Stop the emergency alarm and clear repeating intervals
  */
 export function stopEmergencyAlarm(): void {
   isAlarmPlaying = false;
@@ -66,12 +105,22 @@ export function stopEmergencyAlarm(): void {
     clearInterval(alarmInterval);
     alarmInterval = null;
   }
+  if (alarmAutoStopTimeout !== null) {
+    clearTimeout(alarmAutoStopTimeout);
+    alarmAutoStopTimeout = null;
+  }
 }
 
 /**
- * Play single tactical chirp (e.g. for message incoming or status change)
+ * Play single tactical chirp (throttled and user-controllable)
  */
 export function playTacticalChirp(): void {
+  if (!getSoundEffectsEnabled()) return;
+
+  const now = Date.now();
+  if (now - lastChirpTime < CHIRP_THROTTLE_MS) return;
+  lastChirpTime = now;
+
   try {
     const ctx = getAudioContext();
     const osc = ctx.createOscillator();
@@ -95,9 +144,15 @@ export function playTacticalChirp(): void {
 }
 
 /**
- * Play reassurance / success chime (e.g. HQ Acknowledged or SAR Arrived)
+ * Play reassurance / success chime (throttled and user-controllable)
  */
 export function playSuccessChime(): void {
+  if (!getSoundEffectsEnabled()) return;
+
+  const now = Date.now();
+  if (now - lastChimeTime < CHIME_THROTTLE_MS) return;
+  lastChimeTime = now;
+
   try {
     const ctx = getAudioContext();
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 - E5 - G5 - C6

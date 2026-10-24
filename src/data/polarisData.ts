@@ -411,7 +411,7 @@ export const INITIAL_INVENTORY = [
     const min = 20 + (seed % 5) * 10;
     const qty = seed % 4 === 0 ? Math.floor(min * 0.6) : min + (seed % 6) * 15;
     return {
-      id: uid("INV", i + 2),
+      id: i === 0 ? uid("INV", 30) : uid("INV", i + 2),
       name: pick(group.items, seed * 3),
       category: group.cat,
       quantity: qty,
@@ -1071,19 +1071,54 @@ export function buildAlerts() {
 }
 
 export function computeReadiness(exp: any, db?: any) {
-  const currentAssets = db?.assets || INITIAL_ASSETS;
-  const currentPersonnel = db?.personnel || INITIAL_PERSONNEL;
-  const currentShipments = db?.shipments || INITIAL_SHIPMENTS;
-  const currentInventory = db?.inventory || INITIAL_INVENTORY;
+  const currentAssets = Array.isArray(db?.assets) ? db.assets : INITIAL_ASSETS;
+  const currentPersonnel = Array.isArray(db?.personnel) ? db.personnel : INITIAL_PERSONNEL;
+  const currentShipments = Array.isArray(db?.shipments) ? db.shipments : INITIAL_SHIPMENTS;
+  const currentInventory = Array.isArray(db?.inventory) ? db.inventory : INITIAL_INVENTORY;
 
-  const linkedAssets = currentAssets.filter((a: any) => a.expeditionId === exp.id);
-  const linkedPersonnel = currentPersonnel.filter((p: any) => p.expeditionId === exp.id);
-  const linkedShipments = currentShipments.filter((s: any) => s.expeditionId === exp.id);
-  const personnelScore = Math.min(100, 60 + linkedPersonnel.length * 6);
-  const assetsReady = linkedAssets.length ? Math.round((linkedAssets.filter((a: any) => ["Assigned","In Use","Available"].includes(a.status)).length / linkedAssets.length) * 100) : 70;
-  const invScore = Math.round((currentInventory.filter((i: any) => i.quantity > i.minStock).length / currentInventory.length) * 100);
-  const transportScore = linkedShipments.length ? Math.round((linkedShipments.filter((s: any) => ["Delivered","In Transit","Dispatched"].includes(s.status)).length / linkedShipments.length) * 100) : 65;
-  const maintScore = Math.round((currentAssets.filter((a: any) => a.status !== "Under Maintenance" && a.status !== "Damaged").length / currentAssets.length) * 100);
+  const linkedAssets = currentAssets.filter((a: any) => a.expeditionId === exp?.id);
+  const linkedPersonnel = currentPersonnel.filter((p: any) => p.expeditionId === exp?.id);
+  const linkedShipments = currentShipments.filter((s: any) => s.expeditionId === exp?.id);
+
+  const personnelScore = linkedPersonnel.length > 0 ? Math.min(100, 60 + linkedPersonnel.length * 6) : 0;
+  const assetsReady = linkedAssets.length > 0
+    ? Math.round(
+        (linkedAssets.filter((a: any) =>
+          ["Assigned", "In Use", "Available", "operational", "in_transit"].includes(a.status)
+        ).length /
+          linkedAssets.length) *
+          100
+      )
+    : 0;
+
+  const invScore = currentInventory.length > 0
+    ? Math.round((currentInventory.filter((i: any) => typeof i.quantity === 'number' && typeof i.minStock === 'number' && i.quantity > i.minStock).length / currentInventory.length) * 100)
+    : 0;
+
+  const transportScore = linkedShipments.length > 0
+    ? Math.round(
+        (linkedShipments.filter((s: any) =>
+          ["Delivered", "In Transit", "Dispatched"].includes(s.status)
+        ).length /
+          linkedShipments.length) *
+          100
+      )
+    : 0;
+
+  const maintScore = currentAssets.length > 0
+    ? Math.round(
+        (currentAssets.filter(
+          (a: any) =>
+            a.status !== "Under Maintenance" &&
+            a.status !== "maintenance" &&
+            a.status !== "Damaged" &&
+            a.status !== "cold_soaked"
+        ).length /
+          currentAssets.length) *
+          100
+      )
+    : 0;
+
   const overall = Math.round((personnelScore + assetsReady + invScore + transportScore + maintScore) / 5);
   return { overall, personnel: personnelScore, assets: assetsReady, inventory: invScore, transport: transportScore, maintenance: maintScore };
 }

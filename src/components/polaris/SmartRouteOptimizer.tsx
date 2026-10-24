@@ -277,14 +277,20 @@ export function SmartRouteOptimizer({
       });
 
       const data = await res.json();
-      if (data.success && data.result) {
-        setGeminiPlan(data.result);
+      const plan = data.result || data.plan;
+      if ((data.success || data.status === 'ok') && plan) {
+        const normalizedPlan = {
+          ...plan,
+          estimatedDistance: typeof plan.estimatedDistance === 'number' ? plan.estimatedDistance : (plan.estimatedDistanceKm || 0),
+        };
+        setGeminiPlan(normalizedPlan);
         setOperatorDecision('pending');
+        const engineLabel = normalizedPlan.mode === 'gemini_ai_live' ? 'Gemini 3.8 Flash AI' : (normalizedPlan.mode === 'gemini_ai_cached' ? 'Gemini AI (Cached)' : 'Deterministic Polar Pathfinder');
         emitAiActionBroadcast({
           category: 'logistics',
-          message: `Gemini Route Recommendation ready: ${data.result.recommendedOrder.join(' → ')} (${data.result.estimatedDistance.toFixed(1)} km, Risk: ${data.result.riskLevel}). Pending operator review.`,
+          message: `Route Recommendation ready via ${engineLabel}: ${normalizedPlan.recommendedOrder.join(' → ')} (${normalizedPlan.estimatedDistance.toFixed(1)} km, Risk: ${normalizedPlan.riskLevel}). Pending operator review.`,
           stationOrAsset: activeAsset.name,
-          impact: data.result.reasoning[0] || 'Safe polar waypoint sequence',
+          impact: normalizedPlan.reasoning[0] || 'Safe polar waypoint sequence',
         });
       } else {
         throw new Error(formatError(data?.error || data?.message, 'Optimization calculation failed.'));

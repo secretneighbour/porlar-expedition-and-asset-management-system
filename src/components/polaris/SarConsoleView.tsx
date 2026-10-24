@@ -306,7 +306,7 @@ export function SarConsoleView({
                 color: '#FDA4AF'
               }}
               className="px-4 py-2.5 rounded-xl border text-xs font-mono font-bold hover:bg-rose-950/40 transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-              title="Test Crevasse Fall distress scenario"
+              title="Launch Crevasse Fall simulation drill in isolated sandbox"
             >
               <AlertTriangle className="w-4 h-4 text-rose-400" />
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/25 text-rose-300 border border-rose-500/35">SIM DRILL</span>
@@ -454,24 +454,16 @@ export function SarConsoleView({
               onClick={onTriggerCrevasseFall}
               style={{ background: 'rgba(239, 68, 68, 0.18)', borderColor: 'rgba(239, 68, 68, 0.4)', color: '#FDA4AF' }}
               className="w-full py-2.5 px-3 rounded-xl border font-bold text-left flex items-center justify-between hover:bg-rose-950/40 transition-all cursor-pointer"
+              title="Launch Crevasse Fall simulation drill in isolated sandbox"
             >
               <div>
-                <p className="font-bold">SIM CREVASSE FALL (AUTO S.A.R.)</p>
-                <p className="text-[10px] text-slate-400">Triggers Leverett Glacier -85.25°, 151.10° breach</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1 py-0.2 rounded text-[9px] font-bold uppercase bg-rose-500/25 text-rose-300 border border-rose-500/35">SIM DRILL</span>
+                  <p className="font-bold">CREVASSE FALL MAYDAY (SCEN-05)</p>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">Leverett Glacier -85.25°, 151.10° slot void drill</p>
               </div>
               <Play className="w-4 h-4 text-rose-400" />
-            </button>
-
-            <button
-              onClick={onTriggerCrevasseFall}
-              style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.35)', color: '#FDE68A' }}
-              className="w-full py-2 px-3 rounded-xl border text-left flex items-center justify-between hover:bg-amber-950/40 transition-all cursor-pointer"
-            >
-              <div>
-                <p className="font-bold text-[11px]">RE-TEST CREVASSE FALL</p>
-                <p className="text-[9px] text-slate-400">Re-evaluates geodesic route & scrambles support</p>
-              </div>
-              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
             </button>
 
             {!isMarkedSafe ? (

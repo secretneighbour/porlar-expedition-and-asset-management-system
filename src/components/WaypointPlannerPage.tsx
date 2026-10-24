@@ -24,6 +24,8 @@ import {
   X,
   RefreshCw,
   XCircle,
+  ChevronUp,
+  ChevronDown,
   ArrowRight
 } from 'lucide-react';
 import { Expedition, Waypoint, WaypointOptimizationResult, WaypointOptimizationRequest } from '../types';
@@ -36,6 +38,7 @@ interface WaypointPlannerPageProps {
   onAddWaypoint: (waypoint: Waypoint, expeditionId?: string) => void;
   onDeleteWaypoint: (waypointId: string, expeditionId?: string) => void;
   onUpdateWaypoint: (waypoint: Waypoint, expeditionId?: string) => void;
+  onReorderWaypoints?: (waypoints: Waypoint[], expeditionId: string) => void;
   userLat?: number | null;
   userLng?: number | null;
   userCityName?: string | null;
@@ -120,6 +123,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
   onAddWaypoint,
   onDeleteWaypoint,
   onUpdateWaypoint,
+  onReorderWaypoints,
   userLat,
   userLng,
   userCityName,
@@ -215,9 +219,13 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
   const handleAcceptAiRoute = () => {
     if (!aiProposal || !activeExpedition) return;
 
-    aiProposal.orderedWaypoints.forEach((wp) => {
-      onUpdateWaypoint(wp, activeExpedition.id);
-    });
+    if (onReorderWaypoints) {
+      onReorderWaypoints(aiProposal.orderedWaypoints, activeExpedition.id);
+    } else {
+      aiProposal.orderedWaypoints.forEach((wp) => {
+        onUpdateWaypoint(wp, activeExpedition.id);
+      });
+    }
 
     emitAiActionBroadcast({
       category: 'logistics',
@@ -376,6 +384,21 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
       return;
     }
 
+    const handleMoveWaypoint = (fromIdx: number, toIdx: number) => {
+      if (!activeExpedition || !activeExpedition.waypoints) return;
+      const wps = [...activeExpedition.waypoints];
+      if (toIdx < 0 || toIdx >= wps.length) return;
+      const temp = wps[fromIdx];
+      wps[fromIdx] = wps[toIdx];
+      wps[toIdx] = temp;
+      const reordered = wps.map((w, i) => ({ ...w, sequence: i + 1 }));
+      if (onReorderWaypoints) {
+        onReorderWaypoints(reordered, activeExpedition.id);
+      } else {
+        reordered.forEach((w) => onUpdateWaypoint(w, activeExpedition.id));
+      }
+    };
+
     const newWp: Waypoint = {
       id: `wp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: name.trim(),
@@ -387,6 +410,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
       hazardNote: hazardNote.trim() || undefined,
       priority: priorityInput,
       isMandatory: isMandatoryInput || priorityInput === 'mandatory',
+      sequence: (targetType === 'expedition' && activeExpedition?.waypoints) ? activeExpedition.waypoints.length + 1 : 1,
     };
 
     const expId = targetType === 'expedition' && selectedExpId ? selectedExpId : undefined;
@@ -591,7 +615,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
               <label className="text-slate-400 uppercase font-bold text-[10px] sm:text-[11px] block">
                 WAYPOINT TARGET CATEGORY:
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setTargetType('expedition')}
@@ -942,18 +966,64 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onDeleteWaypoint(wp.id, activeExpedition?.id);
-                      setSuccessToast(`Waypoint "${wp.name}" removed.`);
-                      setTimeout(() => setSuccessToast(null), 3000);
-                    }}
+                  <div className="flex items-center gap-1 shrink-0 self-end sm:self-start">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => {
+                        const wps = [...(activeExpedition?.waypoints || [])];
+                        if (idx > 0) {
+                          const temp = wps[idx];
+                          wps[idx] = wps[idx - 1];
+                          wps[idx - 1] = temp;
+                          const reordered = wps.map((w, i) => ({ ...w, sequence: i + 1 }));
+                          if (onReorderWaypoints) {
+                            onReorderWaypoints(reordered, activeExpedition.id);
+                          } else {
+                            reordered.forEach(w => onUpdateWaypoint(w, activeExpedition.id));
+                          }
+                        }
+                      }}
+                      className="p-2 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="Move Waypoint Up"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === filteredWaypoints.length - 1}
+                      onClick={() => {
+                        const wps = [...(activeExpedition?.waypoints || [])];
+                        if (idx < wps.length - 1) {
+                          const temp = wps[idx];
+                          wps[idx] = wps[idx + 1];
+                          wps[idx + 1] = temp;
+                          const reordered = wps.map((w, i) => ({ ...w, sequence: i + 1 }));
+                          if (onReorderWaypoints) {
+                            onReorderWaypoints(reordered, activeExpedition.id);
+                          } else {
+                            reordered.forEach(w => onUpdateWaypoint(w, activeExpedition.id));
+                          }
+                        }
+                      }}
+                      className="p-2 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="Move Waypoint Down"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteWaypoint(wp.id, activeExpedition?.id);
+                        setSuccessToast(`Waypoint "${wp.name}" removed.`);
+                        setTimeout(() => setSuccessToast(null), 3000);
+                      }}
                     className="p-2.5 rounded-lg bg-rose-950/40 text-rose-400 hover:text-white hover:bg-rose-600 transition-colors shrink-0 cursor-pointer self-end sm:self-start min-w-[38px] min-h-[38px] flex items-center justify-center border border-rose-800/60"
                     title="Instant remove waypoint"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                </div>
                 </div>
               ))}
             </div>
@@ -1045,7 +1115,7 @@ export const WaypointPlannerPage: React.FC<WaypointPlannerPageProps> = ({
             </div>
 
             {/* Metrics */}
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
               <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
                 <div className="text-[10px] text-slate-400 uppercase">EST. DISTANCE</div>
                 <div className="text-sm font-bold text-white mt-0.5">{aiProposal.estimatedDistanceKm} km</div>

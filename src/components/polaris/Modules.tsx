@@ -14,8 +14,10 @@ import {
 import {
   Badge, Modal, Field, Toolbar, Table, PageHeader, StatCard, ReadinessBar, inputClass, inputStyle
 } from './SharedUI';
-import { PredictiveMaintenance } from './PredictiveMaintenance';
-import { DynamicWeatherInventory } from './DynamicWeatherInventory';
+import { TacticalLoadingFallback } from '../TacticalLoadingFallback';
+
+const PredictiveMaintenance = React.lazy(() => import('./PredictiveMaintenance').then(m => ({ default: m.PredictiveMaintenance })));
+const DynamicWeatherInventory = React.lazy(() => import('./DynamicWeatherInventory').then(m => ({ default: m.DynamicWeatherInventory })));
 
 /* ============================== PERSONNEL ============================== */
 export function Personnel({ t, db, setDb, canEdit, personnel, onAddPersonnel }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean; personnel?: any[]; onAddPersonnel?: (p: any) => void; }) {
@@ -48,7 +50,7 @@ export function Personnel({ t, db, setDb, canEdit, personnel, onAddPersonnel }: 
       ]} />
       {showForm && (
         <Modal title="Add Personnel" onClose={() => setShowForm(false)} t={t} wide>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field t={t} label="Full Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Role"><input value={f.role} onChange={e => setF({ ...f, role: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Department"><select value={f.department} onChange={e => setF({ ...f, department: e.target.value })} style={inputStyle(t)} className={inputClass}><option>Science</option><option>Logistics</option><option>Medical</option><option>Engineering</option><option>Communications</option><option>Administration</option></select></Field>
@@ -67,7 +69,7 @@ export function Personnel({ t, db, setDb, canEdit, personnel, onAddPersonnel }: 
 }
 
 /* ============================== ASSETS (FLEET TELEMETRY) ============================== */
-export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAssetStatus }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean; assets?: any[]; onAddAsset?: (a: any) => void; onUpdateAssetStatus?: (id: string, s: string) => void; }) {
+export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAssetStatus, onUpdateAsset }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean; assets?: any[]; onAddAsset?: (a: any) => void; onUpdateAssetStatus?: (id: string, s: string) => void; onUpdateAsset?: (id: string, updates: any) => void; }) {
   const activeAssets = assets || db.assets || [];
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -78,10 +80,10 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
   const [f, setF] = useState({ name: "", category: ASSET_CATS[0].cat, serial: "", location: "Goa HQ Store", status: "Available", condition: "Good" });
 
   const totalAssets = activeAssets.length;
-  const inField = activeAssets.filter((a: any) => a.status === 'In Use' || a.status === 'Assigned').length;
-  const underMaint = activeAssets.filter((a: any) => a.status === 'Under Maintenance').length;
-  const operationalCount = activeAssets.filter((a: any) => a.status !== 'Under Maintenance' && a.condition !== 'Poor').length;
-  const overallReadiness = totalAssets > 0 ? Math.round((operationalCount / totalAssets) * 100) : 100;
+  const inField = activeAssets.filter((a: any) => a.status === 'In Use' || a.status === 'Assigned' || a.status === 'in_transit' || a.status === 'operational').length;
+  const underMaint = activeAssets.filter((a: any) => a.status === 'Under Maintenance' || a.status === 'maintenance' || a.status === 'Damaged' || a.status === 'cold_soaked').length;
+  const operationalCount = activeAssets.filter((a: any) => a.status !== 'Under Maintenance' && a.status !== 'maintenance' && a.status !== 'Damaged' && a.status !== 'cold_soaked' && a.condition !== 'Poor').length;
+  const overallReadiness = totalAssets > 0 ? Math.round((operationalCount / totalAssets) * 100) : 0;
 
   const conditionDist = [
     { name: 'Excellent', count: activeAssets.filter((a: any) => a.condition === 'Excellent').length, fill: '#10B981' },
@@ -92,8 +94,8 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
 
   const categoryReadiness = ASSET_CATS.slice(0, 5).map(catObj => {
     const catAssets = activeAssets.filter((a: any) => a.category === catObj.cat);
-    const catOperational = catAssets.filter((a: any) => a.status !== 'Under Maintenance' && a.condition !== 'Poor').length;
-    const rate = catAssets.length > 0 ? Math.round((catOperational / catAssets.length) * 100) : 100;
+    const catOperational = catAssets.filter((a: any) => a.status !== 'Under Maintenance' && a.status !== 'maintenance' && a.status !== 'Damaged' && a.status !== 'cold_soaked' && a.condition !== 'Poor').length;
+    const rate = catAssets.length > 0 ? Math.round((catOperational / catAssets.length) * 100) : 0;
     return {
       category: catObj.cat,
       total: catAssets.length,
@@ -102,13 +104,132 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
   });
 
   const add = () => {
-    const newAsset = { ...f, id: uid("AST", activeAssets.length + 1), purchaseDate: "2026-01-01", lastMaintenance: "2026-01-01", nextMaintenance: "2026-07-01", warranty: "Under Warranty", expeditionId: null, assignedPerson: null, currentLocation: { name: f.location || "Goa HQ", lat: -70.76, lng: 11.73 }, telemetry: { tempC: -10, engineHealthPercent: 100 } };
+    let maxNum = 0;
+    for (const a of activeAssets) {
+      const match = a?.id?.match(/AST-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+    const nextNum = Math.max(maxNum + 1, activeAssets.length + 1);
+    const candidateId = uid("AST", nextNum);
+    const newId = activeAssets.some((a: any) => a.id === candidateId)
+      ? `AST-${Date.now().toString().slice(-4)}`
+      : candidateId;
+
+    const newAsset = {
+      ...f,
+      id: newId,
+      purchaseDate: "2026-01-01",
+      lastMaintenance: "2026-01-01",
+      nextMaintenance: "2026-07-01",
+      warranty: "Under Warranty",
+      expeditionId: null,
+      assignedPerson: null,
+      currentLocation: { name: f.location || "Goa HQ", lat: -70.76, lng: 11.73 },
+      telemetry: { tempC: -10, engineHealthPercent: 100 }
+    };
     if (onAddAsset) {
       onAddAsset(newAsset);
     } else {
       setDb((d: any) => ({ ...d, assets: [...d.assets, newAsset] }));
     }
     setShowForm(false);
+  };
+
+  const handleAssignLocation = (locName: string) => {
+    if (!detail) return;
+    const station = STATIONS.find(s => s.name === locName) || (db.customStations || []).find((s: any) => s.name === locName);
+    const lat = station ? (station.lat || -70.76) : -70.76;
+    const lng = station ? (station.lng || 11.73) : 11.73;
+    const updates = {
+      location: locName,
+      currentLocation: { name: locName, lat, lng }
+    };
+    setDetail((prev: any) => ({ ...prev, ...updates }));
+    setDb((d: any) => ({
+      ...d,
+      assets: d.assets.map((a: any) => a.id === detail.id ? { ...a, ...updates } : a)
+    }));
+    if (onUpdateAsset) {
+      onUpdateAsset(detail.id, updates);
+    }
+  };
+
+  const handleAssignExpedition = (expId: string) => {
+    if (!detail) return;
+    const updates = {
+      expeditionId: expId || null,
+      status: expId ? 'Assigned' : 'Available'
+    };
+    setDetail((prev: any) => ({ ...prev, ...updates }));
+    setDb((d: any) => ({
+      ...d,
+      assets: d.assets.map((a: any) => a.id === detail.id ? { ...a, ...updates } : a)
+    }));
+    if (onUpdateAsset) {
+      onUpdateAsset(detail.id, updates);
+    }
+  };
+
+  const handleRecordMaintenance = () => {
+    if (!detail) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const nextDate = new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10);
+    const updates = {
+      lastMaintenance: today,
+      nextMaintenance: nextDate,
+      condition: 'Excellent',
+      status: detail.status === 'Under Maintenance' || detail.status === 'Damaged' ? 'Available' : detail.status
+    };
+    setDetail((prev: any) => ({ ...prev, ...updates }));
+    setDb((d: any) => ({
+      ...d,
+      assets: d.assets.map((a: any) => a.id === detail.id ? { ...a, ...updates } : a),
+      auditLog: [
+        {
+          id: `AUD-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString(),
+          user: 'Maintenance Officer',
+          action: 'MAINTENANCE_RECORDED',
+          entity: 'Asset',
+          details: `Scheduled maintenance completed for ${detail.name} (${detail.id}). Condition restored to Excellent.`
+        },
+        ...(d.auditLog || [])
+      ]
+    }));
+    if (onUpdateAsset) {
+      onUpdateAsset(detail.id, updates);
+    }
+  };
+
+  const handleDecommissionAsset = () => {
+    if (!detail) return;
+    const updates = {
+      status: 'Retired',
+      condition: 'Poor',
+      expeditionId: null
+    };
+    setDetail((prev: any) => ({ ...prev, ...updates }));
+    setDb((d: any) => ({
+      ...d,
+      assets: d.assets.map((a: any) => a.id === detail.id ? { ...a, ...updates } : a),
+      auditLog: [
+        {
+          id: `AUD-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString(),
+          user: 'Asset Manager',
+          action: 'ASSET_DECOMMISSIONED',
+          entity: 'Asset',
+          details: `Asset ${detail.name} (${detail.id}) decommissioned and retired from active polar operations.`
+        },
+        ...(d.auditLog || [])
+      ]
+    }));
+    if (onUpdateAsset) {
+      onUpdateAsset(detail.id, updates);
+    }
   };
 
   const updateStatus = (id: string, status: string) => {
@@ -229,7 +350,7 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
       ]} />
       {showForm && (
         <Modal title="Register Asset" onClose={() => setShowForm(false)} t={t} wide>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field t={t} label="Asset Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Category"><select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={inputStyle(t)} className={inputClass}>{ASSET_CATS.map(c => <option key={c.cat}>{c.cat}</option>)}</select></Field>
             <Field t={t} label="Serial Number"><input value={f.serial} onChange={e => setF({ ...f, serial: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
@@ -245,7 +366,7 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
       )}
       {detail && (
         <Modal title={detail.name} onClose={() => setDetail(null)} t={t} wide>
-          <div className="grid grid-cols-2 gap-3 text-sm mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-5">
             <div><span style={{ color: t.textDim }} className="text-xs">Asset ID</span><p style={{ color: t.text }}>{detail.id}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Category</span><p style={{ color: t.text }}>{detail.category}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Serial</span><p style={{ color: t.text }}>{detail.serial}</p></div>
@@ -253,12 +374,58 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
             <div><span style={{ color: t.textDim }} className="text-xs">Condition</span><p style={{ color: t.text }}>{detail.condition}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Warranty</span><p style={{ color: t.text }}>{detail.warranty}</p></div>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
+            <div><span style={{ color: t.textDim }} className="text-xs">Assigned Expedition</span><p style={{ color: t.text }}>{detail.expeditionId ? ((db.expeditions || []).find((e: any) => e.id === detail.expeditionId)?.name || detail.expeditionId) : 'Unassigned'}</p></div>
+            <div><span style={{ color: t.textDim }} className="text-xs">Last Overhaul</span><p style={{ color: t.text }}>{detail.lastMaintenance || 'None'}</p></div>
+          </div>
+
           {canEdit && (
-            <Field t={t} label="Update Status">
-              <select value={detail.status} onChange={e => { updateStatus(detail.id, e.target.value); setDetail({ ...detail, status: e.target.value }); }} style={inputStyle(t)} className={inputClass}>
-                {ASSET_STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
+            <div className="space-y-3.5 p-3.5 rounded-xl border mb-4" style={{ background: t.bgAlt, borderColor: t.border }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field t={t} label="Operational Status">
+                  <select value={detail.status} onChange={e => { updateStatus(detail.id, e.target.value); setDetail({ ...detail, status: e.target.value }); }} style={inputStyle(t)} className={inputClass}>
+                    {ASSET_STATUSES.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+
+                <Field t={t} label="Station / Outpost Assignment">
+                  <select value={detail.location || ''} onChange={e => handleAssignLocation(e.target.value)} style={inputStyle(t)} className={inputClass}>
+                    <option value="Goa HQ Store">Goa HQ Store</option>
+                    {STATIONS.map(s => <option key={s.name} value={s.name}>{s.name} Station</option>)}
+                    {(db.customStations || []).map((cs: any) => <option key={cs.id} value={cs.name}>{cs.name} Outpost</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <Field t={t} label="Expedition Deployment">
+                <select value={detail.expeditionId || ''} onChange={e => handleAssignExpedition(e.target.value)} style={inputStyle(t)} className={inputClass}>
+                  <option value="">Unassigned (Reserve Fleet)</option>
+                  {(db.expeditions || []).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </Field>
+
+              <div className="flex gap-2.5 pt-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleRecordMaintenance}
+                  style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34D399' }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-emerald-500/25 transition-colors"
+                >
+                  <Wrench size={13} />
+                  <span>Record Scheduled Overhaul</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDecommissionAsset}
+                  style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#F87171' }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-rose-500/25 transition-colors ml-auto"
+                >
+                  <Archive size={13} />
+                  <span>Decommission Asset (Retire)</span>
+                </button>
+              </div>
+            </div>
           )}
           <div className="mt-5">
             <span style={{ color: t.textDim }} className="text-xs">Lifecycle History</span>
@@ -278,24 +445,73 @@ export function Assets({ t, db, setDb, canEdit, assets, onAddAsset, onUpdateAsse
 }
 
 /* ============================== INVENTORY ============================== */
-export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React.Dispatch<React.SetStateAction<any>>; canEdit: boolean }) {
+export function Inventory({
+  t,
+  db,
+  setDb,
+  canEdit,
+  inventory,
+  onAddInventory,
+  onUpdateInventory,
+  onAdjustInventoryStock,
+  isSimulation = false,
+}: {
+  t: any;
+  db: any;
+  setDb: React.Dispatch<React.SetStateAction<any>>;
+  canEdit: boolean;
+  inventory?: any[];
+  onAddInventory?: (item: any) => void;
+  onUpdateInventory?: (item: any) => void;
+  onAdjustInventoryStock?: (id: string, delta: number) => void;
+  isSimulation?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [txnItem, setTxnItem] = useState<any>(null);
-  const rows = db.inventory.filter((i: any) => (i.name + i.category + i.location).toLowerCase().includes(search.toLowerCase()));
+  const activeInventory = inventory || db.inventory || [];
+  const rows = activeInventory.filter((i: any) => (i.name + i.category + i.location).toLowerCase().includes(search.toLowerCase()));
   const [f, setF] = useState({ name: "", category: INV_CATS[0].cat, quantity: 0, unit: "kg", minStock: 10, location: "Goa Warehouse", supplier: "", cost: 0 });
 
   const add = () => {
-    setDb((d: any) => ({ ...d, inventory: [...d.inventory, { ...f, id: uid("INV", d.inventory.length + 1), quantity: Number(f.quantity), minStock: Number(f.minStock), cost: Number(f.cost), expiry: null }] }));
+    const newItem = {
+      ...f,
+      id: uid("INV", activeInventory.length + 1),
+      quantity: Number(f.quantity),
+      minStock: Number(f.minStock),
+      cost: Number(f.cost),
+      expiry: null
+    };
+    if (onAddInventory) {
+      onAddInventory(newItem);
+    } else {
+      setDb((d: any) => ({ ...d, inventory: [...(d.inventory || []), newItem] }));
+    }
     setShowForm(false);
   };
 
-  const applyTxn = (id: string, delta: number) => setDb((d: any) => ({ ...d, inventory: d.inventory.map((i: any) => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i) }));
+  const applyTxn = (id: string, delta: number) => {
+    if (onAdjustInventoryStock) {
+      onAdjustInventoryStock(id, delta);
+    } else {
+      setDb((d: any) => ({
+        ...d,
+        inventory: (d.inventory || []).map((i: any) => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i)
+      }));
+    }
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader t={t} title="Inventory & Supplies" subtitle="Track stock levels for food, fuel, medical, and scientific consumables across all stations." />
-      <DynamicWeatherInventory t={t} db={db} setDb={setDb} />
+      <DynamicWeatherInventory
+        t={t}
+        db={db}
+        setDb={setDb}
+        inventory={activeInventory}
+        onUpdateInventory={onUpdateInventory}
+        isSimulation={isSimulation}
+      />
       <Toolbar t={t} search={search} setSearch={setSearch} onAdd={canEdit ? () => setShowForm(true) : null} addLabel="Add Item" />
       <Table t={t} rows={rows} columns={[
         { key: "id", label: "ID" }, { key: "name", label: "Item" }, { key: "category", label: "Category" },
@@ -306,7 +522,7 @@ export function Inventory({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
       ]} />
       {showForm && (
         <Modal title="Add Inventory Item" onClose={() => setShowForm(false)} t={t} wide>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field t={t} label="Item Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Category"><select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} style={inputStyle(t)} className={inputClass}>{INV_CATS.map(c => <option key={c.cat}>{c.cat}</option>)}</select></Field>
             <Field t={t} label="Quantity"><input type="number" value={f.quantity} onChange={e => setF({ ...f, quantity: Number(e.target.value) })} style={inputStyle(t)} className={inputClass} /></Field>
@@ -368,7 +584,7 @@ export function Shipments({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
       ]} />
       {showForm && (
         <Modal title="New Shipment" onClose={() => setShowForm(false)} t={t} wide>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field t={t} label="Origin"><input value={f.origin} onChange={e => setF({ ...f, origin: e.target.value })} style={inputStyle(t)} className={inputClass} /></Field>
             <Field t={t} label="Destination"><select value={f.destination} onChange={e => setF({ ...f, destination: e.target.value })} style={inputStyle(t)} className={inputClass}>{STATIONS.map(s => <option key={s.id}>{s.name}</option>)}</select></Field>
             <Field t={t} label="Expedition"><select value={f.expeditionId} onChange={e => setF({ ...f, expeditionId: e.target.value })} style={inputStyle(t)} className={inputClass}>{db.expeditions.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
@@ -392,7 +608,7 @@ export function Shipments({ t, db, setDb, canEdit }: { t: any; db: any; setDb: R
               return <React.Fragment key={s}><span style={{ background: active ? t.accentSoft : t.bgAlt, color: active ? t.accent : t.textFaint }} className="text-xs px-2.5 py-1 rounded-md">{s}</span>{i < arr.length - 1 && <ChevronRight size={12} color={t.textFaint} />}</React.Fragment>;
             })}
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-5">
             <div><span style={{ color: t.textDim }} className="text-xs">Cargo</span><p style={{ color: t.text }}>{detail.cargo} ({detail.quantity} units, {detail.weight}kg)</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Mode</span><p style={{ color: t.text }}>{detail.mode}</p></div>
             <div><span style={{ color: t.textDim }} className="text-xs">Departure</span><p style={{ color: t.text }}>{detail.departure}</p></div>
@@ -1010,7 +1226,7 @@ export function Tasks({ t, db, setDb, canEdit }: { t: any; db: any; setDb: React
       {/* New Task Form Modal */}
       {showForm && (
         <Modal title="New Task" onClose={() => setShowForm(false)} t={t} wide>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field t={t} label="Task Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} style={inputStyle(t)} className={inputClass} placeholder="e.g. Calibrate wind speed anemometer" /></Field>
             <Field t={t} label="Expedition"><select value={f.expeditionId} onChange={e => setF({ ...f, expeditionId: e.target.value })} style={inputStyle(t)} className={inputClass}>{db.expeditions.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
             <Field t={t} label="Assign To"><select value={f.assignedTo} onChange={e => setF({ ...f, assignedTo: e.target.value })} style={inputStyle(t)} className={inputClass}>{db.personnel.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>

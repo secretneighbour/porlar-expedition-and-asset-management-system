@@ -15,8 +15,10 @@ import {
 import {
   Badge, StatCard, Toolbar, Table, PageHeader, Modal, Field
 } from './SharedUI';
-import { SmartRouteOptimizer } from './SmartRouteOptimizer';
-import { RealMapView } from '../RealMapView';
+import { TacticalLoadingFallback } from '../TacticalLoadingFallback';
+
+const SmartRouteOptimizer = React.lazy(() => import('./SmartRouteOptimizer').then(m => ({ default: m.SmartRouteOptimizer })));
+const RealMapView = React.lazy(() => import('../RealMapView').then(m => ({ default: m.RealMapView })));
 import { AddBaseModal } from '../AddBaseModal';
 import { AddWaypointModal } from '../AddWaypointModal';
 import {
@@ -180,18 +182,22 @@ export function MapView({
   onAddWaypoint,
   onUpdateWaypoint,
   onDeleteWaypoint,
+  onReorderWaypoints,
+  onAddStation,
 }: {
   t: any;
   db: any;
   setDb?: React.Dispatch<React.SetStateAction<any>>;
   activeDistress?: any;
-  updateDistressLocation?: (lat: number, lng: number) => void;
+  updateDistressLocation?: (lat: number, lng: number, isVerified?: boolean) => void;
   googleMapsApiKey?: string;
   onOpenApiKeyModal?: () => void;
   isSimulation?: boolean;
   onAddWaypoint?: (waypoint: any, expeditionId?: string) => void;
   onUpdateWaypoint?: (waypoint: any, expeditionId?: string) => void;
   onDeleteWaypoint?: (waypointId: string, expeditionId?: string) => void;
+  onReorderWaypoints?: (waypoints: any[], expeditionId?: string) => void;
+  onAddStation?: (station: ResearchStation) => void;
 }) {
   const [selected, setSelected] = useState<any>(null);
   const [mapMode, setMapMode] = useState<'satellite' | 'radar' | 'smart_route'>('satellite');
@@ -199,6 +205,18 @@ export function MapView({
   const [showShipments, setShowShipments] = useState(true);
   const [showAssets, setShowAssets] = useState(true);
   const [sideTab, setSideTab] = useState<'telemetry' | 'waypoints' | 'bases' | 'danger_zones'>('telemetry');
+
+  useEffect(() => {
+    if (Array.isArray(db?.customStations)) {
+      setCustomStations(db.customStations);
+    }
+  }, [db?.customStations]);
+
+  useEffect(() => {
+    if (Array.isArray(db?.customWaypoints)) {
+      setCustomWaypoints(db.customWaypoints);
+    }
+  }, [db?.customWaypoints]);
 
   // Modal states with map coordinate passing
   const [isAddBaseOpen, setIsAddBaseOpen] = useState(false);
@@ -260,11 +278,7 @@ export function MapView({
         }
       }
       if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
-        setUserLat(lat);
-        setUserLng(lng);
-        setUserAccuracy(3.2);
-        setUserAlt(40.0);
-        setUserSpeed(0.0);
+        // Focus map and open telemetry for the distress alert without modifying the operator's personal GPS
         setFocusCoords({ lat, lng });
         setSelected({
           kind: 'distress',
@@ -285,20 +299,8 @@ export function MapView({
     setGeoError(null);
 
     if (!('geolocation' in navigator)) {
-      setTimeout(() => {
-        const fallbackLat = -77.846;
-        const fallbackLng = 166.668;
-        setUserLat(fallbackLat);
-        setUserLng(fallbackLng);
-        setUserAccuracy(4.2);
-        setUserAlt(35.0);
-        setUserSpeed(0.0);
-        setFocusCoords({ lat: fallbackLat, lng: fallbackLng });
-        if (activeDistress && updateDistressLocation) {
-          updateDistressLocation(fallbackLat, fallbackLng);
-        }
-        setGeoLoading(false);
-      }, 400);
+      setGeoError('GPS Fix Failed: Geolocation sensor is not supported by this terminal. Position unverified.');
+      setGeoLoading(false);
       return;
     }
 
@@ -312,37 +314,29 @@ export function MapView({
         setUserAlt(pos.coords.altitude);
         setUserSpeed(pos.coords.speed);
         setFocusCoords({ lat, lng });
-        if (activeDistress && updateDistressLocation) {
-          updateDistressLocation(lat, lng);
-        }
+        // NOTE: Operator acquiring their own laptop/device GPS MUST NEVER overwrite the field Mayday distress beacon!
         setGeoLoading(false);
       },
       (err) => {
-        console.warn('Geolocation fallback triggered:', err);
-        setTimeout(() => {
-          const fallbackLat = -77.846;
-          const fallbackLng = 166.668;
-          setUserLat(fallbackLat);
-          setUserLng(fallbackLng);
-          setUserAccuracy(3.5);
-          setUserAlt(35.0);
-          setUserSpeed(0.0);
-          setFocusCoords({ lat: fallbackLat, lng: fallbackLng });
-          if (activeDistress && updateDistressLocation) {
-            updateDistressLocation(fallbackLat, fallbackLng);
-          }
-          setGeoLoading(false);
-        }, 400);
+        console.warn('Geolocation acquisition failed:', err);
+        const reason = err.code === 1 ? 'Permission denied by operator' : err.code === 3 ? 'Hardware satellite acquisition timed out' : err.message;
+        setGeoError(`GPS Fix Failed: ${reason}. Hardware position unverified. Real distress coordinates not overwritten.`);
+        setUserAccuracy(null);
+        setGeoLoading(false);
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
   };
 
-  // Combine default and custom stations
-  const allStations: ResearchStation[] = [
-    ...DEFAULT_RESEARCH_STATIONS,
-    ...customStations,
-  ];
+  // Combine default and custom stations with strict deduplication by ID
+  const stationMap = new Map<string, ResearchStation>();
+  for (const st of DEFAULT_RESEARCH_STATIONS) {
+    if (st && st.id) stationMap.set(st.id, st);
+  }
+  for (const st of customStations) {
+    if (st && st.id) stationMap.set(st.id, st);
+  }
+  const allStations: ResearchStation[] = Array.from(stationMap.values());
 
   // Convert db assets into PolarAsset models for RealMapView
   const mappedAssets: PolarAsset[] = (db.assets || []).map((a: any, i: number) => ({
@@ -416,6 +410,7 @@ export function MapView({
 
   const handleAddStation = (newStation: ResearchStation) => {
     setCustomStations((prev) => [...prev, newStation]);
+    if (onAddStation) onAddStation(newStation);
     if (setDb) {
       setDb((prev: any) => ({
         ...prev,
@@ -514,9 +509,12 @@ export function MapView({
           if (expeditionId && exp.id !== expeditionId) return exp;
           const hasWp = (exp.waypoints || []).some((w: any) => w.id === updatedWp.id);
           if (hasWp) {
+            const updatedWaypoints = (exp.waypoints || [])
+              .map((w: any) => (w.id === updatedWp.id ? { ...w, ...updatedWp } : w))
+              .sort((a: any, b: any) => (a.sequence ?? 0) - (b.sequence ?? 0));
             return {
               ...exp,
-              waypoints: (exp.waypoints || []).map((w: any) => (w.id === updatedWp.id ? { ...w, ...updatedWp } : w)),
+              waypoints: updatedWaypoints,
             };
           }
           return exp;
@@ -683,7 +681,9 @@ export function MapView({
       {/* Smart Route Optimizer full panel if active */}
       {mapMode === 'smart_route' && (
         <div className="mb-4">
-          <SmartRouteOptimizer t={t} db={db} setDb={setDb} isSimulation={isSimulation} />
+          <React.Suspense fallback={<TacticalLoadingFallback label="INITIALIZING AI ROUTE OPTIMIZER..." />}>
+              <SmartRouteOptimizer t={t} db={db} setDb={setDb} isSimulation={isSimulation} />
+            </React.Suspense>
         </div>
       )}
 
@@ -733,6 +733,7 @@ export function MapView({
                 onOpenAddWaypointWithCoords={handleOpenAddWaypointWithCoords}
                 onAddWaypoint={handleAddWaypoint}
                 onUpdateWaypoint={handleUpdateWaypoint}
+                onReorderWaypoints={onReorderWaypoints}
                 onDeleteWaypoint={handleDeleteWaypoint}
                 showDangerHeatmap={isHeatmapActive}
                 onToggleDangerHeatmap={() => setIsHeatmapActive(!isHeatmapActive)}

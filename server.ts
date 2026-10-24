@@ -36,6 +36,8 @@ import {
   WaypointOptimizationRequest,
   WaypointOptimizationResult,
   Waypoint,
+  PolarInventoryItem,
+  DispatchLog,
 } from './src/types.js';
 import { runDeterministicWaypointOptimizer } from './src/utils/deterministicRouteOptimizer.js';
 import { findAStarPath } from './src/utils/polarRouteAStar.js';
@@ -247,10 +249,45 @@ interface AuthSession {
   role: string;
   email: string;
   createdAt: number;
+  expiresAt: number;
   remember: boolean;
 }
 
 const authSessions = new Map<string, AuthSession>();
+
+// Configurable Session Expiration (Default: 12 Hours = 43,200,000 ms)
+const SESSION_TTL_MS = parseInt(process.env.SESSION_TTL_MS || '43200000', 10);
+// Remember-Me Extended TTL (Default: 30 Days = 2,592,000,000 ms)
+const REMEMBER_TTL_MS = parseInt(process.env.REMEMBER_TTL_MS || '2592000000', 10);
+
+function isSessionExpired(session: AuthSession | undefined | null): boolean {
+  if (!session || typeof session.expiresAt !== 'number') return true;
+  return Date.now() > session.expiresAt;
+}
+
+// Active session-bound simulation sandboxes (Server-Authoritative Isolation)
+interface SimulationSession {
+  sessionId: string;
+  token: string;
+  userId: string;
+  userName: string;
+  role: string;
+  scenarioId: string;
+  startedAt: number;
+  sandboxState: PolarSystemState;
+}
+
+const activeSimSessions = new Map<string, SimulationSession>();
+
+function getSessionSimulation(token: string | null | undefined): SimulationSession | undefined {
+  if (!token) return undefined;
+  return activeSimSessions.get(token);
+}
+
+function isSessionInSimulation(token: string | null | undefined): boolean {
+  if (!token) return false;
+  return activeSimSessions.has(token);
+}
 
 let systemState: PolarSystemState = databaseManager.getState();
 
@@ -475,6 +512,17 @@ async function startServer() {
     });
   }
 
+  // Periodic expired session garbage collection (every 60s)
+  setInterval(() => {
+    const now = Date.now();
+    for (const [tok, sess] of authSessions.entries()) {
+      if (sess.expiresAt && now > sess.expiresAt) {
+        authSessions.delete(tok);
+        if (activeSimSessions.has(tok)) activeSimSessions.delete(tok);
+      }
+    }
+  }, 60000);
+
   // Periodic inactive terminal cleanup (runs every 2.5s)
   setInterval(() => {
     const now = Date.now();
@@ -496,7 +544,7 @@ async function startServer() {
   // AUTHENTICATION & ROLE-BASED ACCESS CONTROL (POLAR OPS CONSOLE)
   // ============================================================================
   
-  // Phase 2: Reusable Authentication Middleware
+  // Phase 2: Reusable Authentication Middleware with Session Expiry Check and Live User Status
   function requireAuth(req: any, res: any, next: any) {
     const authHeader = req.headers.authorization;
     const token = (authHeader && authHeader.startsWith('Bearer '))
@@ -507,45 +555,104 @@ async function startServer() {
       return res.status(401).json({ ok: false, error: 'Unauthorized: Valid session required.' });
     }
 
+    // 1. Check in-memory session cache
     if (authSessions.has(token)) {
-      req.user = authSessions.get(token);
+      const session = authSessions.get(token)!;
+      if (isSessionExpired(session)) {
+        authSessions.delete(token);
+        if (activeSimSessions.has(token)) activeSimSessions.delete(token);
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Session expired. Please log in again.' });
+      }
+
+      // Check live account status
+      const liveUser = databaseManager.findUser(session.userId || (session as any).id);
+      if (!liveUser || liveUser.active === false) {
+        authSessions.delete(token);
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Account deactivated or unavailable.' });
+      }
+
+      session.role = liveUser.role; // Authoritative live role sync
+      req.user = session;
+      (req as any).token = token;
       return next();
     }
 
+    // 2. Stateless token fallback via verifySessionToken
     const verified = verifySessionToken(token);
     if (verified.valid && verified.user) {
-      req.user = verified.user;
+      const liveUser = databaseManager.findUser(verified.user.id);
+      if (!liveUser || liveUser.active === false) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Account deactivated or unavailable.' });
+      }
+
+      req.user = {
+        id: liveUser.id,
+        userId: liveUser.id,
+        name: liveUser.name,
+        role: liveUser.role,
+        email: liveUser.email,
+        active: true,
+      };
+      (req as any).token = token;
       return next();
     }
 
     return res.status(401).json({ ok: false, error: verified.error || 'Unauthorized: Valid session required.' });
   }
 
-  // Phase 2: Reusable RBAC Middleware
-  function requireRole(allowedRoles) {
-    return (req, res, next) => {
+  // Phase 2 & Phase 0: Reusable Role & Action Authorization Engine
+  const ROLE_AUTHORIZATION_MAP: Record<string, string[]> = {
+    researcher: ['Scientist / Team Member', 'Researcher', 'Super Admin'],
+    asset: ['Asset Manager', 'Asset Management', 'Maintenance Officer', 'Super Admin'],
+    transport: ['Logistics Officer', 'Transportation', 'Expedition Manager', 'Super Admin'],
+    admin: ['Super Admin']
+  };
+
+  function userHasAnyRole(userRole: string | undefined, allowedRoles: string[]): boolean {
+    if (!userRole) return false;
+    for (const requiredRole of allowedRoles) {
+      const allowed = ROLE_AUTHORIZATION_MAP[requiredRole] || ['Super Admin'];
+      if (allowed.some(r => r.toLowerCase() === userRole.toLowerCase())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const ACTION_PERMISSIONS: Record<string, string[]> = {
+    RESET_STATE: ['admin'],
+    UPDATE_POLARIS_DB: ['admin'],
+    UPDATE_POLARIS_COLLECTION: ['admin'],
+    ADD_STATION: ['admin', 'transport'],
+    UPDATE_STATIONS: ['admin', 'transport'],
+    ADD_EXPEDITION: ['admin', 'transport'],
+    UPDATE_EXPEDITION: ['admin', 'transport'],
+    ADD_WAYPOINT: ['admin', 'transport'],
+    UPDATE_WAYPOINT: ['admin', 'transport'],
+    DELETE_WAYPOINT: ['admin', 'transport'],
+    REORDER_WAYPOINTS: ['admin', 'transport'],
+    ADD_ASSET: ['admin', 'asset'],
+    UPDATE_ASSET: ['admin', 'asset'],
+    ADD_PERSONNEL: ['admin', 'transport', 'asset'],
+    ADD_INVENTORY: ['admin', 'asset', 'transport'],
+    UPDATE_INVENTORY: ['admin', 'asset', 'transport'],
+    ADJUST_INVENTORY_STOCK: ['admin', 'asset', 'transport'],
+    RESTOCK_SUPPLY: ['admin', 'transport', 'asset'],
+    UPDATE_REGION: ['admin', 'transport', 'asset', 'researcher'],
+    UPDATE_CONDITION: ['admin', 'transport', 'asset', 'researcher'],
+    ADD_DISPATCH_LOG: ['admin', 'transport', 'asset', 'researcher'],
+    ACKNOWLEDGE_DISTRESS: ['admin', 'transport'],
+    RESOLVE_DISTRESS: ['admin', 'transport'],
+  };
+
+  function requireRole(allowedRoles: string[]) {
+    return (req: any, res: any, next: any) => {
       const user = req.user;
       if (!user) {
         return res.status(401).json({ ok: false, error: 'Unauthorized: Session required for role check.' });
       }
 
-      const roleAuthorizationMap = {
-        researcher: ['Scientist / Team Member', 'Researcher', 'Super Admin'],
-        asset: ['Asset Manager', 'Asset Management', 'Maintenance Officer', 'Super Admin'],
-        transport: ['Logistics Officer', 'Transportation', 'Expedition Manager', 'Super Admin'],
-        admin: ['Super Admin']
-      };
-
-      let userHasPermission = false;
-      for (const requiredRole of allowedRoles) {
-        const allowed = roleAuthorizationMap[requiredRole] || ['Super Admin'];
-        if (allowed.some(r => r.toLowerCase() === (user.role || '').toLowerCase())) {
-          userHasPermission = true;
-          break;
-        }
-      }
-
-      if (!userHasPermission) {
+      if (!userHasAnyRole(user.role, allowedRoles)) {
         return res.status(403).json({ ok: false, error: `Role authorization mismatch. Required: ${allowedRoles.join(', ')}` });
       }
       next();
@@ -602,15 +709,18 @@ async function startServer() {
       });
     }
 
-    // Issue session token
-    const token = `polar-sess-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+    // Issue session token with configurable expiration
+    const now = Date.now();
+    const sessionTtl = remember ? REMEMBER_TTL_MS : SESSION_TTL_MS;
+    const token = `polar-sess-${now.toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
     const session: AuthSession = {
       token,
       userId: foundUser.id,
       name: foundUser.name,
       role: foundUser.role,
       email: foundUser.email,
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: now + sessionTtl,
       remember: !!remember,
     };
     authSessions.set(token, session);
@@ -645,6 +755,7 @@ async function startServer() {
         email: foundUser.email,
       },
       dashboardRoute: targetRoute,
+      expiresAt: session.expiresAt,
     });
   });
 
@@ -659,6 +770,12 @@ async function startServer() {
     }
 
     const session = authSessions.get(token)!;
+    if (isSessionExpired(session)) {
+      authSessions.delete(token);
+      if (activeSimSessions.has(token)) activeSimSessions.delete(token);
+      return res.status(401).json({ ok: false, error: 'Session expired. Please log in again.' });
+    }
+
     res.json({
       ok: true,
       user: {
@@ -667,20 +784,101 @@ async function startServer() {
         role: session.role,
         email: session.email,
       },
+      expiresAt: session.expiresAt,
     });
   });
 
   app.post('/api/auth/logout', (req, res) => {
-    const { token } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const token = (authHeader && authHeader.startsWith('Bearer '))
+      ? authHeader.slice(7)
+      : (req.body && req.body.token);
     if (token && authSessions.has(token)) {
       authSessions.delete(token);
+    }
+    if (token && activeSimSessions.has(token)) {
+      activeSimSessions.delete(token);
     }
     res.json({ ok: true });
   });
 
+  // ============================================================================
+  // SERVER-AUTHORITATIVE SIMULATION LIFECYCLE (PHASE 0 SECURITY GATE)
+  // ============================================================================
+  app.post('/api/simulation/start', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    const user = (req as any).user;
+    const scenarioId = req.body?.scenarioId || 'convoy_storm_traverse';
+
+    // Initialize session-bound sandbox as a deep clone of current systemState
+    const simSession: SimulationSession = {
+      sessionId: `sim-sess-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      token,
+      userId: user.userId,
+      userName: user.name,
+      role: user.role,
+      scenarioId,
+      startedAt: Date.now(),
+      sandboxState: JSON.parse(JSON.stringify(systemState)),
+    };
+
+    activeSimSessions.set(token, simSession);
+    console.log(`[POLAR-SERVER] 🛡️ Simulation sandbox started for user ${user.name} (${user.role}), session: ${simSession.sessionId}`);
+
+    res.json({
+      ok: true,
+      status: 'active',
+      sessionId: simSession.sessionId,
+      scenarioId: simSession.scenarioId,
+      startedAt: simSession.startedAt,
+    });
+  });
+
+  app.post('/api/simulation/stop', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    if (activeSimSessions.has(token)) {
+      const simSession = activeSimSessions.get(token);
+      activeSimSessions.delete(token);
+      console.log(`[POLAR-SERVER] 🛡️ Simulation sandbox terminated for session: ${simSession?.sessionId}`);
+    }
+    res.json({ ok: true, status: 'terminated' });
+  });
+
+  app.get('/api/simulation/status', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    if (simSession) {
+      return res.json({
+        ok: true,
+        active: true,
+        session: {
+          sessionId: simSession.sessionId,
+          scenarioId: simSession.scenarioId,
+          startedAt: simSession.startedAt,
+          userName: simSession.userName,
+          role: simSession.role,
+        },
+      });
+    }
+    res.json({ ok: true, active: false });
+  });
+
   // REST API Endpoints for State & Distress Actions
   app.get('/api/state', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
     const devices = getDeviceList();
+
+    if (simSession) {
+      return res.json({
+        status: 'ok',
+        simulation: true,
+        connectedClients: devices.length,
+        devices,
+        state: simSession.sandboxState,
+      });
+    }
+
     res.json({
       status: 'ok',
       connectedClients: devices.length,
@@ -850,6 +1048,10 @@ async function startServer() {
 
   // Quick scenario trigger: "Crevasse Fall" distress beacon with autonomous dispatch
   app.post('/api/ai/sar/dispatch-crevasse-fall', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSimulation = Boolean(simSession || req.body?.isSimulation === true);
+
     const crevassePayload = {
       incidentType: 'Crevasse Fall / Structural Ice Breach',
       location: 'Leverett Glacier Approach (85.2°S, 151.1°E)',
@@ -868,6 +1070,30 @@ async function startServer() {
       active: true,
       acknowledgedByHQ: false,
     };
+
+    if (isSimulation) {
+      if (simSession) {
+        simSession.sandboxState.conditionLevel = 'COND-1_SEVERE_BLIZZARD';
+        if (autoSarDispatchEnabled) {
+          distressAlert = executeAutonomousSAR(distressAlert);
+        }
+        simSession.sandboxState.activeDistress = distressAlert;
+      } else {
+        if (autoSarDispatchEnabled) {
+          distressAlert = executeAutonomousSAR(distressAlert);
+        }
+      }
+      console.log(`[POLAR-SERVER] [SIMULATION SANDBOX] Crevasse Fall drill executed in sandbox (no production mutation).`);
+      return res.json({ success: true, alert: distressAlert, autoDispatched: Boolean(distressAlert.autonomousSAR), isSimulation: true });
+    }
+
+    // Safety guard: To prevent accidental live distress triggering, explicit confirmation is mandatory
+    if (!req.body?.confirmLiveEmergency) {
+      return res.status(400).json({
+        error: 'Confirmation required: Live crevasse fall emergency dispatch requires confirmLiveEmergency: true. For drills, activate simulation mode or pass isSimulation: true.',
+        requiresConfirmation: true,
+      });
+    }
 
     systemState.conditionLevel = 'COND-1_SEVERE_BLIZZARD';
 
@@ -906,7 +1132,30 @@ async function startServer() {
 
   // HQ Manager acknowledges distress and dispatches SAR asset
   app.post('/api/distress/acknowledge', requireAuth, requireRole(['transport']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+
     if (!systemState.activeDistress) {
+      if (simSession) {
+        if (simSession.sandboxState?.activeDistress) {
+          simSession.sandboxState.activeDistress.acknowledgedByHQ = true;
+          simSession.sandboxState.activeDistress.acknowledgedAt = new Date().toISOString();
+          simSession.sandboxState.activeDistress.acknowledgedBy = req.body?.acknowledgedBy || 'Base Operations Director';
+          simSession.sandboxState.activeDistress.dispatchedSARAssetId = req.body?.dispatchedSARAssetId;
+          simSession.sandboxState.activeDistress.dispatchedSARName = req.body?.dispatchedSARName;
+          if (req.body?.dispatchedSARAssetId && Array.isArray(simSession.sandboxState.assets)) {
+            simSession.sandboxState.assets = simSession.sandboxState.assets.map((a: any) =>
+              a.id === req.body.dispatchedSARAssetId ? { ...a, status: 'in_transit' } : a
+            );
+          }
+        }
+        return res.json({
+          success: true,
+          simulation: true,
+          alert: simSession.sandboxState?.activeDistress,
+          message: '[SIMULATION] Simulated distress state handled in isolated sandbox.',
+        });
+      }
       return res.status(404).json({ error: 'No active distress beacon to acknowledge' });
     }
 
@@ -957,7 +1206,21 @@ async function startServer() {
 
   // Stand down / resolve distress
   app.post('/api/distress/resolve', requireAuth, requireRole(['transport']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+
     if (!systemState.activeDistress) {
+      if (simSession) {
+        if (simSession.sandboxState) {
+          simSession.sandboxState.activeDistress = null;
+          simSession.sandboxState.conditionLevel = 'COND-2_CAUTION';
+        }
+        return res.json({
+          success: true,
+          simulation: true,
+          message: '[SIMULATION] Simulated distress state handled in isolated sandbox.',
+        });
+      }
       return res.status(404).json({ error: 'No active distress beacon' });
     }
 
@@ -992,8 +1255,24 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // Reset entire simulation to master manifest
-  app.post('/api/reset', requireAuth, (req, res) => {
+  // Reset entire simulation to master manifest (Protected: Super Admin only)
+  app.post('/api/reset', requireAuth, requireRole(['admin']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSim = Boolean(simSession || req.body?.isSimulation === true);
+
+    if (isSim) {
+      if (simSession) {
+        simSession.sandboxState = JSON.parse(JSON.stringify(databaseManager.getState()));
+      }
+      return res.json({
+        success: true,
+        simulation: true,
+        message: '[SIMULATION] Sandbox state reset to default template.',
+        state: simSession ? simSession.sandboxState : systemState,
+      });
+    }
+
     systemState = databaseManager.resetToDefaults();
 
     broadcast({
@@ -1001,14 +1280,97 @@ async function startServer() {
       payload: systemState,
       timestamp: new Date().toISOString(),
     });
+    broadcast({
+      type: 'STATE_UPDATE',
+      payload: systemState,
+      timestamp: new Date().toISOString(),
+    });
 
     res.json({ success: true, state: systemState });
   });
 
-  // General state update handler
+  // General state update handler with authoritative RBAC enforcement
   app.post('/api/action', requireAuth, (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSim = Boolean(simSession || req.body?.isSimulation === true);
+
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Bad Request: Request body must be a valid JSON object.',
+      });
+    }
+
     const { action, payload } = req.body;
-    handleClientAction(action, payload);
+
+    if (!action || typeof action !== 'string' || !action.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Bad Request: Missing or invalid action name.',
+      });
+    }
+
+    const trimmedAction = action.trim();
+    if (!Object.prototype.hasOwnProperty.call(ACTION_PERMISSIONS, trimmedAction)) {
+      return res.status(400).json({
+        ok: false,
+        error: `Bad Request: Unrecognized action '${trimmedAction.slice(0, 50)}'.`,
+      });
+    }
+
+    const allowedRoles = ACTION_PERMISSIONS[trimmedAction];
+    const userRole = (req as any).user?.role;
+
+    if (allowedRoles && !userHasAnyRole(userRole, allowedRoles)) {
+      return res.status(403).json({
+        ok: false,
+        error: `Forbidden: Role '${userRole}' is not authorized to execute action '${trimmedAction}'.`,
+      });
+    }
+
+    if (trimmedAction === 'RESET_STATE') {
+      if (!userHasAnyRole(userRole, ['admin'])) {
+        return res.status(403).json({ ok: false, error: 'Forbidden: Super Admin role required to reset state.' });
+      }
+      if (isSim) {
+        if (simSession) {
+          simSession.sandboxState = JSON.parse(JSON.stringify(databaseManager.getState()));
+        }
+        return res.json({
+          success: true,
+          simulation: true,
+          message: '[SIMULATION] Sandbox state reset to default template.',
+          state: simSession ? simSession.sandboxState : systemState,
+        });
+      }
+      systemState = databaseManager.resetToDefaults();
+      broadcast({
+        type: 'RESET_STATE',
+        payload: systemState,
+        timestamp: new Date().toISOString(),
+      });
+      broadcast({
+        type: 'STATE_UPDATE',
+        payload: systemState,
+        timestamp: new Date().toISOString(),
+      });
+      return res.json({ success: true, state: systemState });
+    }
+
+    if (isSim) {
+      if (simSession) {
+        applyActionToState(simSession.sandboxState, trimmedAction, payload);
+      }
+      return res.json({
+        success: true,
+        simulation: true,
+        message: '[SIMULATION] Action applied to isolated sandbox state.',
+        state: simSession ? simSession.sandboxState : systemState,
+      });
+    }
+
+    handleClientAction(trimmedAction, payload);
     res.json({ success: true, state: systemState });
   });
 
@@ -1084,7 +1446,7 @@ async function startServer() {
   });
 
   // AI Tactical Polar Reconnaissance & Hazard Assessment (Token-Optimized)
-  app.post('/api/ai/recon-eval', async (req, res) => {
+  app.post('/api/ai/recon-eval', requireAuth, async (req, res) => {
     const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
@@ -1150,7 +1512,7 @@ async function startServer() {
   });
 
   // AI Predictive Maintenance & Pre-Failure Forecast Engine (Token & Resource Optimized)
-  app.post('/api/ai/predictive-maintenance', async (req, res) => {
+  app.post('/api/ai/predictive-maintenance', requireAuth, async (req, res) => {
     const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
@@ -1289,16 +1651,165 @@ JSON STRUCTURE:
 
   // Execute Predictive Maintenance Action (Dispatches technician, consumes belt, updates asset)
   app.post('/api/ai/predictive-maintenance/execute', requireAuth, requireRole(['asset']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    // Server-Authoritative: server determines simulation mode via session, or honors explicit client simulation flag
+    const isSimulation = Boolean(simSession || req.body?.isSimulation === true);
+
     const {
       assetId = 'AST-0001',
       technician = 'Manoj Joshi (PER-0007)',
-      partConsumed = 'Heavy-Duty Serpentine Engine Belts'
+      partConsumed = 'Heavy-Duty Serpentine Engine Belts',
     } = req.body || {};
 
+    const partQuery = (partConsumed || '').toLowerCase().trim();
+    const partWords = partQuery.split(/[\s\-_]+/).filter((w: string) => w.length >= 4);
+
+    const matchesPart = (inv: any) => {
+      if (!inv || !inv.name) return false;
+      const invNameLower = inv.name.toLowerCase();
+      return (
+        invNameLower.includes(partQuery) ||
+        partQuery.includes(invNameLower) ||
+        (partWords.length > 0 && partWords.some((w: string) => invNameLower.includes(w)))
+      );
+    };
+
+    // Simulation Isolation: Never mutate live production assets, inventory, or logs during simulation
+    if (isSimulation) {
+      if (simSession && simSession.sandboxState?.polarisDb) {
+        const db = simSession.sandboxState.polarisDb;
+        const simInventory = db.inventory || [];
+        const matchingParts = simInventory.filter(matchesPart);
+        const availablePart = matchingParts.find((inv: any) => (inv.quantity || 0) >= 1);
+
+        if (!availablePart) {
+          const totalAvailable = matchingParts.reduce((sum: number, p: any) => sum + (p.quantity || 0), 0);
+          return res.status(400).json({
+            ok: false,
+            status: 'error',
+            simulation: true,
+            error: `Insufficient spare-part stock: '${partConsumed}' is out of stock in simulation scenario (available: ${totalAvailable} units). Maintenance cannot be executed.`,
+            requiredStock: 1,
+            availableStock: totalAvailable,
+          });
+        }
+
+        // Simulation Idempotency Check
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const alreadyRunTodaySim = (db.auditLog || []).some(
+          (log: any) =>
+            (log.action === 'SIMULATION_PREDICTIVE_MAINTENANCE' || log.action === 'PREDICTIVE_MAINTENANCE_EXECUTED') &&
+            typeof log.timestamp === 'string' &&
+            log.timestamp.startsWith(todayStr) &&
+            log.details &&
+            log.details.includes(assetId)
+        );
+
+        if (alreadyRunTodaySim) {
+          return res.json({
+            status: 'ok',
+            simulation: true,
+            alreadyExecuted: true,
+            message: `[SIMULATION] Preventive maintenance for asset ${assetId} already performed today in scenario.`,
+            downtimeSavedHours: 48,
+            costSavedUsd: 18500,
+          });
+        }
+
+        db.assets = (db.assets || []).map((a: any) => {
+          if (a.id === assetId || (a.name && a.name.toLowerCase().includes('snowcat'))) {
+            return {
+              ...a,
+              condition: 'Excellent',
+              status: 'Available',
+              lastMaintenance: new Date().toISOString().slice(0, 10),
+              nextMaintenance: '2027-03-10',
+            };
+          }
+          return a;
+        });
+
+        let simDeducted = false;
+        db.inventory = (db.inventory || []).map((inv: any) => {
+          if (!simDeducted && inv.id === availablePart.id) {
+            simDeducted = true;
+            return {
+              ...inv,
+              quantity: Math.max(0, (inv.quantity || 0) - 1),
+            };
+          }
+          return inv;
+        });
+        if (db.inventory) {
+          simSession.sandboxState.inventory = db.inventory;
+        }
+
+        db.auditLog = db.auditLog || [];
+        db.auditLog.unshift({
+          id: `AUD-SIM-${Date.now().toString().slice(-4)}`,
+          timestamp: new Date().toISOString(),
+          user: technician,
+          action: 'SIMULATION_PREDICTIVE_MAINTENANCE',
+          entity: 'Asset / Maintenance',
+          details: `[SIMULATION] Preventive maintenance executed on asset ${assetId}. Replaced ${partConsumed}.`,
+        });
+      }
+      return res.json({
+        status: 'ok',
+        simulation: true,
+        message: '[SIMULATION] Preventive maintenance action executed in isolated scenario state.',
+        downtimeSavedHours: 48,
+        costSavedUsd: 18500,
+      });
+    }
+
     if (systemState.polarisDb) {
-      // 1. Update Asset
+      // 1. Authoritative Spare-Part Stock Safety Check
+      // Reject when required spare-part stock is insufficient; do not report success or mark asset Excellent
+      const currentInventory = systemState.polarisDb.inventory || systemState.inventory || [];
+      const matchingParts = currentInventory.filter(matchesPart);
+      const availablePart = matchingParts.find((inv: any) => (inv.quantity || 0) >= 1);
+
+      if (!availablePart) {
+        const totalAvailable = matchingParts.reduce((sum: number, p: any) => sum + (p.quantity || 0), 0);
+        return res.status(400).json({
+          ok: false,
+          status: 'error',
+          error: `Insufficient spare-part stock: '${partConsumed}' is out of stock (available: ${totalAvailable} units). Maintenance cannot be executed.`,
+          requiredStock: 1,
+          availableStock: totalAvailable,
+        });
+      }
+
+      // 2. Authoritative Idempotency Check: prevent duplicate execution on same day for same asset
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const alreadyRunToday = (systemState.polarisDb.auditLog || []).some(
+        (log: any) =>
+          log.action === 'PREDICTIVE_MAINTENANCE_EXECUTED' &&
+          typeof log.timestamp === 'string' &&
+          log.timestamp.startsWith(todayStr) &&
+          log.details &&
+          log.details.includes(assetId)
+      );
+
+      if (alreadyRunToday) {
+        return res.json({
+          status: 'ok',
+          alreadyExecuted: true,
+          message: `Preventive maintenance for asset ${assetId} already performed today.`,
+          downtimeSavedHours: 48,
+          costSavedUsd: 18500,
+        });
+      }
+
+      const targetAsset = (systemState.polarisDb.assets || []).find((a: any) => a.id === assetId) ||
+        systemState.assets.find((a: any) => a.id === assetId);
+      const resolvedAssetName = targetAsset?.name || 'Heavy Traverse Asset';
+
+      // 3. Update Asset in polarisDb AND root systemState
       systemState.polarisDb.assets = systemState.polarisDb.assets.map((a: any) => {
-        if (a.id === assetId || (a.name && a.name.toLowerCase().includes('snowcat'))) {
+        if (a.id === assetId || (targetAsset && a.name === targetAsset.name)) {
           return {
             ...a,
             condition: 'Excellent',
@@ -1310,15 +1821,26 @@ JSON STRUCTURE:
         return a;
       });
 
-      // 2. Update Maintenance record
+      systemState.assets = systemState.assets.map((a) => {
+        if (a.id === assetId || (targetAsset && a.name === targetAsset.name)) {
+          return {
+            ...a,
+            status: 'operational' as const,
+            lastMaintenanceDate: new Date().toISOString().slice(0, 10),
+          };
+        }
+        return a;
+      });
+
+      // 4. Update Maintenance record
       let mntFound = false;
       systemState.polarisDb.maintenance = systemState.polarisDb.maintenance.map((m: any) => {
-        if (m.assetId === assetId || (m.assetName && m.assetName.toLowerCase().includes('snowcat'))) {
+        if (m.assetId === assetId || (targetAsset && m.assetName === targetAsset.name)) {
           mntFound = true;
           return {
             ...m,
             status: 'Completed',
-            notes: `[PREVENTIVE AI SUCCESS] Serpentine belt replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500. Technician: ${technician}.`,
+            notes: `[PREVENTIVE AI SUCCESS] ${partConsumed} replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500. Technician: ${technician}.`,
           };
         }
         return m;
@@ -1328,7 +1850,7 @@ JSON STRUCTURE:
         systemState.polarisDb.maintenance.unshift({
           id: `MNT-${Date.now().toString().slice(-4)}`,
           assetId,
-          assetName: 'Snowcat Heavy Tractor (Arctic Spec)',
+          assetName: resolvedAssetName,
           type: 'Preventive',
           reportedBy: 'AI-PREDICTIVE-CORE',
           technician,
@@ -1336,39 +1858,46 @@ JSON STRUCTURE:
           downtimeHours: 2,
           status: 'Completed',
           dueDate: new Date().toISOString().slice(0, 10),
-          notes: `[PREVENTIVE AI SUCCESS] Serpentine belt replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500.`,
+          notes: `[PREVENTIVE AI SUCCESS] ${partConsumed} replaced today prior to traverse under -50°C cold stress. Downtime averted: 48h. Cost saved: $18,500.`,
         });
       }
 
-      // 3. Deduct from inventory
+      // 5. Deduct exactly 1 unit from inventory (deductedPart flag ensures single authoritative deduction)
+      let deductedPart = false;
       systemState.polarisDb.inventory = systemState.polarisDb.inventory.map((inv: any) => {
-        if (inv.name && (inv.name.toLowerCase().includes('belt') || inv.name.toLowerCase().includes('serpentine'))) {
+        if (!deductedPart && inv.id === availablePart.id) {
+          deductedPart = true;
           return {
             ...inv,
-            quantity: Math.max(0, inv.quantity - 1),
+            quantity: Math.max(0, (inv.quantity || 0) - 1),
           };
         }
         return inv;
       });
 
-      // 4. Append to Audit Log
+      // Synchronize root systemState.inventory with polarisDb.inventory
+      if (systemState.polarisDb.inventory) {
+        systemState.inventory = systemState.polarisDb.inventory;
+      }
+
+      // 6. Append to Audit Log
       systemState.polarisDb.auditLog.unshift({
         id: `AUD-${Date.now().toString().slice(-4)}`,
         timestamp: new Date().toISOString(),
         user: technician,
         action: 'PREDICTIVE_MAINTENANCE_EXECUTED',
         entity: 'Asset / Maintenance',
-        details: `Preventive belt replacement executed on Snowcat Tractor. Pre-failure intercept averted 48h field downtime and $18,500 repair recovery expense.`,
+        details: `Preventive maintenance executed on ${resolvedAssetName} (${assetId}). Replaced ${partConsumed}. Pre-failure intercept averted 48h field downtime and $18,500 expense.`,
       });
 
-      // 5. Add dispatch log
+      // 7. Add dispatch log
       systemState.dispatchLogs.unshift({
         id: `LOG-${Date.now().toString().slice(-4)}`,
         timestamp: new Date().toISOString(),
         callsign: 'MAITRI-MECH-01',
-        severity: 'routine',
+        severity: 'routine' as const,
         sector: 'Maitri Depot',
-        message: `PREDICTIVE SERVICE COMPLETE: Snowcat Tractor serpentine belt replaced today. Machine cleared for -50°C traverse.`,
+        message: `PREDICTIVE SERVICE COMPLETE: ${resolvedAssetName} (${assetId}) maintenance completed today. Machine cleared for -50°C traverse.`,
       });
     }
 
@@ -1390,8 +1919,12 @@ JSON STRUCTURE:
   // =========================================================================
   // AI DYNAMIC WEATHER-BASED INVENTORY CONSUMPTION ENGINE
   // =========================================================================
-  app.post('/api/ai/weather-inventory/evaluate', async (req, res) => {
-    const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
+  app.post('/api/ai/weather-inventory/evaluate', requireAuth, async (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSimulation = Boolean(simSession || req.body?.isSimulation === true);
+
+    const customKey = req.body?.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
     const {
@@ -1404,6 +1937,17 @@ JSON STRUCTURE:
       autoAdjustMinStock = true,
       autoRequestShip = false,
     } = req.body || {};
+
+    // Authoritative authorization check for inventory mutation
+    if (autoAdjustMinStock) {
+      const userRole = (req as any).user?.role;
+      if (!userHasAnyRole(userRole, ['admin', 'asset', 'transport'])) {
+        return res.status(403).json({
+          ok: false,
+          error: `Forbidden: Role '${userRole}' is not authorized to adjust inventory minimum stock threshold.`,
+        });
+      }
+    }
 
     const standardBurnRate = 500; // L/day normal
     const blizzardBurnRate = 1450; // L/day under blizzard heating stress
@@ -1457,10 +2001,14 @@ JSON STRUCTURE:
       }
     };
 
-    // Update inventory minimum stock in PolarisDb if requested
-    if (autoAdjustMinStock && systemState.polarisDb) {
+    // Update inventory minimum stock in PolarisDb if requested and NOT in simulation mode
+    if (autoAdjustMinStock && !isSimulation && systemState.polarisDb) {
+      let thresholdChanged = false;
       systemState.polarisDb.inventory = systemState.polarisDb.inventory.map((inv: any) => {
         if (inv.id === 'INV-0002' || (inv.name && inv.name.toLowerCase().includes('diesel')) || (inv.name && inv.name.toLowerCase().includes('fuel'))) {
+          if (inv.minStock !== dynamicMin) {
+            thresholdChanged = true;
+          }
           return {
             ...inv,
             minStock: dynamicMin,
@@ -1469,6 +2017,44 @@ JSON STRUCTURE:
         }
         return inv;
       });
+      if (Array.isArray(systemState.supplies)) {
+        systemState.supplies = systemState.supplies.map((s) => {
+          if (s.category === 'fuel' || (s.name && s.name.toLowerCase().includes('fuel'))) {
+            if (s.minThreshold !== dynamicMin) {
+              thresholdChanged = true;
+            }
+            return { ...s, minThreshold: dynamicMin };
+          }
+          return s;
+        });
+      }
+      if (systemState.polarisDb.inventory) {
+        systemState.inventory = systemState.polarisDb.inventory;
+      }
+
+      // Persist state to disk and broadcast update ONLY when authoritative threshold actually changed
+      if (thresholdChanged) {
+        persistState();
+        broadcast({
+          type: 'STATE_UPDATE',
+          payload: systemState,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } else if (autoAdjustMinStock && isSimulation && simSession?.sandboxState?.polarisDb) {
+      simSession.sandboxState.polarisDb.inventory = simSession.sandboxState.polarisDb.inventory.map((inv: any) => {
+        if (inv.id === 'INV-0002' || (inv.name && inv.name.toLowerCase().includes('diesel')) || (inv.name && inv.name.toLowerCase().includes('fuel'))) {
+          return {
+            ...inv,
+            minStock: dynamicMin,
+            notes: `[SIMULATION DYNAMIC ADJUSTMENT] Minimum stock threshold raised from 4,000L to 8,500L due to 3-day severe blizzard (-52°C).`
+          };
+        }
+        return inv;
+      });
+      if (simSession?.sandboxState?.polarisDb?.inventory) {
+        simSession.sandboxState.inventory = simSession.sandboxState.polarisDb.inventory;
+      }
     }
 
     if (!keyToUse) {
@@ -1589,22 +2175,113 @@ JSON STRUCTURE:
 
   // Early Supply Ship Dispatch Request Handler
   app.post('/api/ai/weather-inventory/request-ship', requireAuth, requireRole(['transport']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSimulation = Boolean(simSession || req.body?.isSimulation === true);
+
     const {
       shipName = 'MV Vasiliy Golovnin (Polar Icebreaker & Tanker)',
       cargoVolumeLiters = 45000,
       cargoType = 'Arctic Diesel Fuel F-34 / JP-8',
       station = 'Maitri Station',
-      urgency = 'CRITICAL_EARLY_BLIZZARD_DISPATCH'
+      urgency = 'CRITICAL_EARLY_BLIZZARD_DISPATCH',
     } = req.body || {};
 
-    const shipmentId = `SHP-FUEL-${Date.now().toString().slice(-4)}`;
+    const targetStation = (station || 'Maitri').toLowerCase();
+    const destName = targetStation.includes('bharati') ? 'Bharati' : 'Maitri';
+
+    // Simulation Isolation: Never mutate live production shipments, audit log, or broadcast during simulation
+    if (isSimulation) {
+      if (simSession && simSession.sandboxState?.polarisDb) {
+        const simShipments = simSession.sandboxState.polarisDb.shipments || [];
+        const existingSimShipment = simShipments.find((s: any) => {
+          const isActive = s.status !== 'Delivered' && s.status !== 'Cancelled';
+          if (!isActive) return false;
+          const destMatches = (s.destination && s.destination.toLowerCase().includes(destName.toLowerCase())) ||
+            (s.destination && targetStation.includes(s.destination.toLowerCase()));
+          const vesselMatches = s.notes && s.notes.includes(shipName);
+          return destMatches && vesselMatches;
+        });
+
+        if (existingSimShipment) {
+          return res.json({
+            status: 'ok',
+            simulation: true,
+            alreadyRequested: true,
+            shipmentId: existingSimShipment.id,
+            message: `[SIMULATION] Supply ship '${shipName}' to ${destName} has already been requested in scenario (${existingSimShipment.id}). Duplicate simulation shipment prevented.`,
+            etaDays: 8,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        const shipmentId = `SIM-SHP-FUEL-${Date.now().toString().slice(-4)}`;
+        simSession.sandboxState.polarisDb.shipments.unshift({
+          id: shipmentId,
+          origin: 'Cape Town Logistics Hub',
+          destination: destName,
+          expeditionId: 'EXP-0003',
+          cargo: `${cargoVolumeLiters.toLocaleString()}L ${cargoType}`,
+          weight: Math.round(cargoVolumeLiters * 0.84),
+          quantity: Math.round(cargoVolumeLiters / 208),
+          mode: 'Ship',
+          departure: new Date().toISOString().slice(0, 10),
+          expectedArrival: new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10),
+          actualArrival: null,
+          status: 'Dispatched',
+          notes: `[SIMULATION] Early resupply requested for ${shipName}.`,
+        });
+
+        return res.json({
+          status: 'ok',
+          simulation: true,
+          shipmentId,
+          message: `[SIMULATION] Early supply ship request confirmed for ${shipName} in isolated training environment.`,
+          etaDays: 8,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return res.json({
+        status: 'ok',
+        simulation: true,
+        shipmentId: `SIM-SHP-FUEL-${Date.now().toString().slice(-4)}`,
+        message: `[SIMULATION] Early supply ship request confirmed for ${shipName} in isolated training environment.`,
+        etaDays: 8,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     if (systemState.polarisDb) {
-      // 1. Create or update expedited fuel shipment
+      // Server-side Deduplication: Prevent repeated identical active/pending requests from creating duplicate shipments
+      const activeShipments = systemState.polarisDb.shipments || [];
+      const existingShipment = activeShipments.find((s: any) => {
+        const isActive = s.status !== 'Delivered' && s.status !== 'Cancelled';
+        if (!isActive) return false;
+        const destMatches = (s.destination && s.destination.toLowerCase().includes(destName.toLowerCase())) ||
+          (s.destination && targetStation.includes(s.destination.toLowerCase()));
+        const vesselMatches = s.notes && s.notes.includes(shipName);
+        const cargoMatches = s.cargo && s.cargo.toLowerCase().includes(cargoType.toLowerCase().slice(0, 10));
+        return destMatches && (vesselMatches || cargoMatches);
+      });
+
+      if (existingShipment) {
+        return res.json({
+          status: 'ok',
+          alreadyRequested: true,
+          shipmentId: existingShipment.id,
+          message: `Supply ship '${shipName}' to ${destName} has already been dispatched (${existingShipment.id}). Duplicate shipment creation prevented.`,
+          etaDays: 8,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const shipmentId = `SHP-FUEL-${Date.now().toString().slice(-4)}`;
+
+      // 1. Create expedited fuel shipment
       const newShipment = {
         id: shipmentId,
         origin: 'Cape Town Logistics Hub',
-        destination: 'Maitri',
+        destination: destName,
         expeditionId: 'EXP-0003',
         cargo: `${cargoVolumeLiters.toLocaleString()}L ${cargoType}`,
         weight: Math.round(cargoVolumeLiters * 0.84), // kg
@@ -1626,7 +2303,7 @@ JSON STRUCTURE:
         user: 'AI-WEATHER-LOGISTICS-ENGINE',
         action: 'EARLY_SUPPLY_SHIP_REQUEST_SENT',
         entity: 'Shipment / Inventory',
-        details: `Automated early request sent to ${shipName} for ${cargoVolumeLiters.toLocaleString()}L fuel delivery to Maitri before blizzard sea-ice lock-out.`,
+        details: `Automated early request sent to ${shipName} for ${cargoVolumeLiters.toLocaleString()}L fuel delivery to ${destName} before blizzard sea-ice lock-out.`,
       });
 
       // 3. Add Dispatch Log
@@ -1635,8 +2312,8 @@ JSON STRUCTURE:
         timestamp: new Date().toISOString(),
         callsign: 'POLARIS-AI-LOGISTICS',
         severity: 'urgent_distress',
-        sector: 'Maitri Port Lead',
-        message: `🚢 EARLY SUPPLY SHIP DISPATCHED: ${shipName} booked with ${cargoVolumeLiters.toLocaleString()}L Arctic Diesel. ETA 8 days. Triggered early by AI blizzard forecast.`,
+        sector: `${destName} Port Lead`,
+        message: `?? EARLY SUPPLY SHIP DISPATCHED: ${shipName} booked with ${cargoVolumeLiters.toLocaleString()}L Arctic Diesel. ETA 8 days. Triggered early by AI blizzard forecast.`,
       });
     }
 
@@ -1649,8 +2326,8 @@ JSON STRUCTURE:
 
     res.json({
       status: 'ok',
-      shipmentId,
-      message: `Early request confirmed! ${shipName} dispatched from Cape Town with ${cargoVolumeLiters.toLocaleString()}L fuel for ${station}.`,
+      shipmentId: (systemState.polarisDb?.shipments && systemState.polarisDb.shipments[0]?.id) || 'SHP-CONFIRMED',
+      message: `Early request confirmed! ${shipName} dispatched from Cape Town with ${cargoVolumeLiters.toLocaleString()}L fuel for ${destName}.`,
       etaDays: 8,
       timestamp: new Date().toISOString(),
     });
@@ -1659,7 +2336,7 @@ JSON STRUCTURE:
   // =========================================================================
   // AI SMART ROUTE OPTIMIZATION (DYNAMIC SATELLITE COMPUTER VISION PATHFINDING)
   // =========================================================================
-  app.post('/api/ai/smart-route/optimize', async (req, res) => {
+  app.post('/api/ai/smart-route/optimize', requireAuth, async (req, res) => {
     const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
@@ -1882,12 +2559,39 @@ JSON STRUCTURE:
 
   // Push Dynamic Safe Route to Supply Trucks
   app.post('/api/ai/smart-route/push-to-trucks', requireAuth, requireRole(['transport']), (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
+    const isSimulation = Boolean(simSession || req.body?.isSimulation === true);
+
     const {
       routeId = 'RTE-OPT-SAFE',
       routeName = 'AI Dynamic Safe Blue-Ice Route (Daily CV Satellite Mapped)',
       truckCount = 2,
       truckNames = ['TRK-Alpha Heavy Snowcat (AST-0001)', 'P300 Supply Hauler Convoy-1'],
     } = req.body || {};
+
+    if (isSimulation) {
+      if (simSession && simSession.sandboxState) {
+        simSession.sandboxState.dispatchLogs = [
+          {
+            id: `SIM-LOG-${Date.now().toString().slice(-4)}`,
+            timestamp: new Date().toISOString(),
+            callsign: 'AI SATELLITE ROUTER (SIM)',
+            severity: 'routine',
+            sector: 'South Traverse Corridor',
+            message: `🛰️ [SIMULATION] DYNAMIC SAFE ROUTE SYNCED: ${truckNames.join(', ')} updated with daily satellite CV route.`,
+          },
+          ...(simSession.sandboxState.dispatchLogs || []),
+        ];
+      }
+      return res.json({
+        status: 'ok',
+        simulation: true,
+        message: `[SIMULATION] Safe dynamic route successfully transmitted to ${truckCount} supply trucks in isolated scenario.`,
+        trucks: truckNames,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     if (systemState.polarisDb) {
       // 1. Audit Log
@@ -1929,7 +2633,9 @@ JSON STRUCTURE:
   // =========================================================================
   // GEMINI-POWERED WAYPOINT ROUTE OPTIMIZATION (VALIDATED HYBRID ENGINE)
   // =========================================================================
-  app.post('/api/ai/waypoints/optimize', async (req, res) => {
+  app.post('/api/ai/waypoints/optimize', requireAuth, async (req, res) => {
+    const token = (req as any).token;
+    const simSession = getSessionSimulation(token);
     const customKey = req.body.geminiApiKey || req.headers['x-gemini-api-key'];
     const keyToUse = (typeof customKey === 'string' && customKey.trim()) || process.env.GEMINI_API_KEY;
 
@@ -1938,8 +2644,11 @@ JSON STRUCTURE:
       asset,
       environment = {},
       constraints = {},
-      isSimulation = false,
+      isSimulation: clientSimFlag,
     } = (req.body as WaypointOptimizationRequest) || {};
+
+    // Server-Authoritative: active simulation session always takes precedence over client flag
+    const isSimulation = Boolean(simSession || clientSimFlag === true);
 
     if (!Array.isArray(waypoints) || waypoints.length === 0) {
       return res.status(400).json({
@@ -1960,15 +2669,21 @@ JSON STRUCTURE:
         { waypoints, asset, environment, constraints, isSimulation },
         reason
       );
-      if (systemState.polarisDb) {
-        systemState.polarisDb.auditLog.unshift({
-          id: `AUD-${Date.now().toString().slice(-4)}`,
-          timestamp: new Date().toISOString(),
-          user: 'POLAR-ROUTE-ENGINE',
-          action: 'DETERMINISTIC_FALLBACK_ROUTING',
-          entity: 'Waypoints / Traverses',
-          details: `Deterministic geodesic fallback engaged (${reason}). Preserved all ${mandatorySet.size} mandatory waypoints across ${waypoints.length} total candidates.`,
-        });
+      const fallbackAuditEntry = {
+        id: `AUD-${Date.now().toString().slice(-4)}`,
+        timestamp: new Date().toISOString(),
+        user: isSimulation ? 'SIMULATION-ROUTE-ENGINE' : 'POLAR-ROUTE-ENGINE',
+        action: 'DETERMINISTIC_FALLBACK_ROUTING',
+        entity: 'Waypoints / Traverses',
+        details: `${isSimulation ? '[SIMULATION] ' : ''}Deterministic geodesic fallback engaged (${reason}). Preserved all ${mandatorySet.size} mandatory waypoints across ${waypoints.length} total candidates.`,
+      };
+
+      if (isSimulation) {
+        if (simSession && simSession.sandboxState?.polarisDb) {
+          simSession.sandboxState.polarisDb.auditLog.unshift(fallbackAuditEntry);
+        }
+      } else if (systemState.polarisDb) {
+        systemState.polarisDb.auditLog.unshift(fallbackAuditEntry);
       }
       return plan;
     };
@@ -1976,9 +2691,15 @@ JSON STRUCTURE:
     // If no API key is available, run deterministic fallback immediately
     if (!keyToUse) {
       const fallbackPlan = executeFallback('No Gemini API Key supplied. Running deterministic polar pathfinder.');
+      const fallbackResolved = {
+        ...fallbackPlan,
+        estimatedDistance: fallbackPlan.estimatedDistance ?? fallbackPlan.estimatedDistanceKm,
+      };
       return res.json({
         status: 'ok',
-        plan: fallbackPlan,
+        success: true,
+        plan: fallbackResolved,
+        result: fallbackResolved,
         mode: 'cv_heuristic_fallback',
         model: 'Polar Deterministic Geodesic Engine',
         cached: false,
@@ -2197,25 +2918,35 @@ SCHEMA:
         return finalResult;
       });
 
-      // Audit log on server state
-      if (systemState.polarisDb) {
-        systemState.polarisDb.auditLog.unshift({
-          id: `AUD-${Date.now().toString().slice(-4)}`,
-          timestamp: new Date().toISOString(),
-          user: isSimulation ? 'SIMULATION-GEMINI-NAV' : 'GEMINI-WAYPOINT-AI',
-          action: 'AI_WAYPOINT_ROUTE_OPTIMIZED',
-          entity: 'Waypoints / Traverses',
-          details: `${isSimulation ? '[SIMULATION] ' : ''}Gemini 3.8 Flash analyzed ${waypoints.length} waypoints. Validated sequence: ${execution.data.recommendedOrder.join(' → ')}. Risk: ${execution.data.riskLevel}. Mode: ${execution.cached ? 'CACHED' : 'LIVE'}.`,
-        });
+      // Audit log on server state (isolated during simulation)
+      const aiAuditEntry = {
+        id: `AUD-${Date.now().toString().slice(-4)}`,
+        timestamp: new Date().toISOString(),
+        user: isSimulation ? 'SIMULATION-GEMINI-NAV' : 'GEMINI-WAYPOINT-AI',
+        action: 'AI_WAYPOINT_ROUTE_OPTIMIZED',
+        entity: 'Waypoints / Traverses',
+        details: `${isSimulation ? '[SIMULATION] ' : ''}Gemini 3.8 Flash analyzed ${waypoints.length} waypoints. Validated sequence: ${execution.data.recommendedOrder.join(' → ')}. Risk: ${execution.data.riskLevel}. Mode: ${execution.cached ? 'CACHED' : 'LIVE'}.`,
+      };
+
+      if (isSimulation) {
+        if (simSession && simSession.sandboxState?.polarisDb) {
+          simSession.sandboxState.polarisDb.auditLog.unshift(aiAuditEntry);
+        }
+      } else if (systemState.polarisDb) {
+        systemState.polarisDb.auditLog.unshift(aiAuditEntry);
       }
 
+      const resolvedPlan = {
+        ...execution.data,
+        estimatedDistance: execution.data?.estimatedDistance ?? execution.data?.estimatedDistanceKm,
+        mode: execution.cached ? 'gemini_ai_cached' : 'gemini_ai_live',
+        cached: execution.cached,
+      };
       res.json({
         status: 'ok',
-        plan: {
-          ...execution.data,
-          mode: execution.cached ? 'gemini_ai_cached' : 'gemini_ai_live',
-          cached: execution.cached,
-        },
+        success: true,
+        plan: resolvedPlan,
+        result: resolvedPlan,
         mode: execution.cached ? 'gemini_ai_cached' : 'gemini_ai_live',
         model: 'gemini-3.8-flash',
         cached: execution.cached,
@@ -2228,9 +2959,15 @@ SCHEMA:
     } catch (err: any) {
       console.warn('[POLAR-AI] Gemini Waypoint Optimization failed or rejected by validation:', err.message);
       const fallbackPlan = executeFallback(`Validation / AI Failure: ${err.message}`);
+      const fallbackResolved = {
+        ...fallbackPlan,
+        estimatedDistance: fallbackPlan.estimatedDistance ?? fallbackPlan.estimatedDistanceKm,
+      };
       res.json({
         status: 'ok',
-        plan: fallbackPlan,
+        success: true,
+        plan: fallbackResolved,
+        result: fallbackResolved,
         mode: 'cv_heuristic_fallback',
         error: err.message,
         cached: false,
@@ -2242,7 +2979,6 @@ SCHEMA:
       });
     }
   });
-
   // Tactical Polar A* Search endpoint
   app.post('/api/ai/route-optimizer/astar', (req, res) => {
     try {
@@ -2271,70 +3007,469 @@ SCHEMA:
     }
   });
 
-  function handleClientAction(action: string, payload: any) {
+  function syncPolarAssetToPolarisDb(polarAsset: any): any {
+    const statusMap: Record<string, string> = {
+      operational: 'Available',
+      in_transit: 'In Transit',
+      maintenance: 'Under Maintenance',
+      cold_soaked: 'Under Maintenance',
+      standby: 'Available',
+    };
+    return {
+      id: polarAsset.id,
+      name: polarAsset.name,
+      category: polarAsset.category === 'heavy_traverse' ? 'Vehicles' : (polarAsset.category === 'scientific_rig' ? 'Instruments' : 'Equipment'),
+      serial: polarAsset.code || `SN-${polarAsset.id}`,
+      purchaseDate: '2024-01-01',
+      location: polarAsset.currentLocation?.name || 'Maitri Depot',
+      expeditionId: polarAsset.assignedExpeditionId || null,
+      assignedPerson: null,
+      condition: polarAsset.status === 'operational' ? 'Excellent' : (polarAsset.status === 'maintenance' ? 'Fair' : 'Good'),
+      status: statusMap[polarAsset.status] || 'Available',
+      lastMaintenance: polarAsset.lastMaintenanceDate || '2026-01-01',
+      nextMaintenance: '2026-07-01',
+      warranty: 'Under Warranty',
+      currentLocation: polarAsset.currentLocation,
+      telemetry: polarAsset.telemetry,
+    };
+  }
+
+  function syncExpeditionToPolarisDb(newExp: any): any {
+    return {
+      id: newExp.id,
+      name: newExp.name,
+      region: newExp.region === 'antarctica' ? 'Antarctica' : 'Arctic',
+      destination: newExp.waypoints?.[newExp.waypoints.length - 1]?.name || 'Field Station',
+      base: newExp.region === 'antarctica' ? 'Maitri' : 'Himadri',
+      start: newExp.departureDate || new Date().toISOString().slice(0, 10),
+      end: newExp.estimatedReturnDate || new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+      status: newExp.phase === 'completed' ? 'Completed' : 'Active',
+      manager: newExp.leader || 'PER-0001',
+      objectives: newExp.objective || 'Scientific traverse and resupply',
+      description: newExp.objective || 'Active polar expedition',
+      currentLat: newExp.currentLat,
+      currentLng: newExp.currentLng,
+      waypoints: newExp.waypoints || [],
+    };
+  }
+
+  function generateUniqueInventoryId(existingList: Array<{ id?: string }>): string {
+  let maxNum = 0;
+  for (const item of existingList) {
+    const match = item?.id?.match(/^INV-(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  const nextNum = maxNum + 1;
+  const candidate = `INV-${String(nextNum).padStart(4, '0')}`;
+  if (!existingList.some((i) => i?.id === candidate)) {
+    return candidate;
+  }
+  return `INV-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+}
+
+function applyActionToState(targetState: PolarSystemState, action: string, payload: any): PolarSystemState {
     switch (action) {
       case 'UPDATE_REGION':
-        systemState.region = payload;
+        targetState.region = payload;
         break;
       case 'UPDATE_CONDITION':
-        systemState.conditionLevel = payload;
+        targetState.conditionLevel = payload;
         break;
-      case 'UPDATE_ASSET':
-        systemState.assets = systemState.assets.map((a) => (a.id === payload.id ? payload : a));
+      case 'UPDATE_ASSET': {
+        if (!payload || !payload.id) {
+          console.warn('[SERVER] Invalid UPDATE_ASSET payload received:', payload);
+          return targetState;
+        }
+        targetState.assets = targetState.assets.map((a) => (a.id === payload.id ? { ...a, ...payload } : a));
+        if (targetState.polarisDb && Array.isArray(targetState.polarisDb.assets)) {
+          const statusMap: Record<string, string> = {
+            operational: 'Available',
+            in_transit: 'In Transit',
+            maintenance: 'Under Maintenance',
+            cold_soaked: 'Under Maintenance',
+            standby: 'Available',
+          };
+          targetState.polarisDb.assets = targetState.polarisDb.assets.map((a: any) => {
+            if (a.id === payload.id) {
+              return {
+                ...a,
+                status: payload.status ? (statusMap[payload.status] || payload.status) : a.status,
+                condition: payload.status === 'operational' ? 'Excellent' : (payload.status === 'maintenance' ? 'Fair' : a.condition),
+                location: payload.currentLocation?.name || a.location,
+                telemetry: payload.telemetry || a.telemetry,
+              };
+            }
+            return a;
+          });
+        }
         break;
-      case 'ADD_ASSET':
-        systemState.assets = [payload, ...systemState.assets];
+      }
+      case 'ADD_ASSET': {
+        if (!payload || !payload.id || !payload.name) {
+          console.warn('[SERVER] Invalid ADD_ASSET payload received:', payload);
+          return targetState;
+        }
+        targetState.assets = [payload, ...targetState.assets];
+        if (targetState.polarisDb) {
+          if (!Array.isArray(targetState.polarisDb.assets)) targetState.polarisDb.assets = [];
+          const exists = targetState.polarisDb.assets.some((a: any) => a.id === payload.id);
+          if (!exists) {
+            targetState.polarisDb.assets = [syncPolarAssetToPolarisDb(payload), ...targetState.polarisDb.assets];
+          }
+        }
         break;
-      case 'UPDATE_EXPEDITION':
-        systemState.expeditions = systemState.expeditions.map((e) => (e.id === payload.id ? payload : e));
+      }
+      case 'UPDATE_EXPEDITION': {
+        if (!payload || !payload.id) {
+          console.warn('[SERVER] Invalid UPDATE_EXPEDITION payload received:', payload);
+          return targetState;
+        }
+        targetState.expeditions = targetState.expeditions.map((e) => (e.id === payload.id ? { ...e, ...payload } : e));
+        if (targetState.polarisDb && Array.isArray(targetState.polarisDb.expeditions)) {
+          targetState.polarisDb.expeditions = targetState.polarisDb.expeditions.map((pe: any) => {
+            if (pe.id === payload.id) {
+              return {
+                ...pe,
+                currentLat: payload.currentLat ?? pe.currentLat,
+                currentLng: payload.currentLng ?? pe.currentLng,
+                waypoints: payload.waypoints ?? pe.waypoints,
+                status: payload.phase === 'completed' ? 'Completed' : (payload.status || pe.status),
+              };
+            }
+            return pe;
+          });
+        }
         break;
-      case 'ADD_EXPEDITION':
-        systemState.expeditions = [payload, ...systemState.expeditions];
+      }
+      case 'ADD_EXPEDITION': {
+        if (!payload || !payload.id || !payload.name) {
+          console.warn('[SERVER] Invalid ADD_EXPEDITION payload received:', payload);
+          return targetState;
+        }
+        targetState.expeditions = [payload, ...targetState.expeditions];
+        if (targetState.polarisDb) {
+          if (!Array.isArray(targetState.polarisDb.expeditions)) targetState.polarisDb.expeditions = [];
+          const exists = targetState.polarisDb.expeditions.some((e: any) => e.id === payload.id);
+          if (!exists) {
+            targetState.polarisDb.expeditions = [syncExpeditionToPolarisDb(payload), ...targetState.polarisDb.expeditions];
+          }
+        }
         break;
-      case 'ADD_PERSONNEL':
+      }
+      case 'ADD_PERSONNEL': {
         if (!payload || !payload.id || !payload.name) {
           console.warn('[SERVER] Invalid ADD_PERSONNEL payload received:', payload);
-          return;
+          return targetState;
         }
-        systemState.personnel = [payload, ...(systemState.personnel || INITIAL_PERSONNEL)];
+        targetState.personnel = [payload, ...(targetState.personnel || INITIAL_PERSONNEL)];
+        if (targetState.polarisDb) {
+          if (!Array.isArray(targetState.polarisDb.personnel)) targetState.polarisDb.personnel = [];
+          const exists = targetState.polarisDb.personnel.some((p: any) => p.id === payload.id);
+          if (!exists) {
+            targetState.polarisDb.personnel = [payload, ...targetState.polarisDb.personnel];
+          }
+        }
         break;
-      case 'ADD_STATION':
-        systemState.stations = [payload, ...(systemState.stations || INITIAL_STATIONS)];
+      }
+      case 'ADD_INVENTORY': {
+        if (!payload || typeof payload !== 'object' || !payload.name || typeof payload.name !== 'string' || !payload.name.trim()) {
+          console.warn('[SERVER] Invalid ADD_INVENTORY payload received:', payload);
+          return targetState;
+        }
+
+        const currentInventory = Array.isArray(targetState.inventory)
+          ? targetState.inventory
+          : (Array.isArray(targetState.polarisDb?.inventory) ? targetState.polarisDb.inventory : [...INITIAL_INVENTORY]);
+
+        let itemId = (typeof payload.id === 'string' && payload.id.trim()) ? payload.id.trim() : '';
+        if (!itemId || currentInventory.some((i) => i.id === itemId)) {
+          itemId = generateUniqueInventoryId(currentInventory);
+        }
+
+        const rawQty = Number(payload.quantity);
+        const quantity = (!isNaN(rawQty) && rawQty >= 0) ? rawQty : 0;
+        const rawMin = Number(payload.minStock);
+        const minStock = (!isNaN(rawMin) && rawMin >= 0) ? rawMin : 0;
+        const rawCost = Number(payload.cost);
+        const cost = (!isNaN(rawCost) && rawCost >= 0) ? rawCost : 0;
+
+        const newItem = {
+          id: itemId,
+          name: payload.name.trim(),
+          category: (typeof payload.category === 'string' && payload.category.trim()) ? payload.category.trim() : 'General Supplies',
+          quantity,
+          unit: (typeof payload.unit === 'string' && payload.unit.trim()) ? payload.unit.trim() : 'units',
+          minStock,
+          location: (typeof payload.location === 'string' && payload.location.trim()) ? payload.location.trim() : 'Goa Warehouse',
+          supplier: typeof payload.supplier === 'string' ? payload.supplier.trim() : '',
+          cost,
+          expiry: typeof payload.expiry === 'string' ? payload.expiry : null,
+          notes: typeof payload.notes === 'string' ? payload.notes : undefined,
+        };
+
+        targetState.inventory = [newItem, ...currentInventory];
+        if (targetState.polarisDb) {
+          targetState.polarisDb.inventory = targetState.inventory;
+        }
+
+        const log: DispatchLog = {
+          id: 'log-inv-' + Date.now(),
+          timestamp: new Date().toUTCString().replace('GMT', 'UTC').slice(17, 25) + ' UTC',
+          callsign: 'HQ Supply Command',
+          severity: 'routine',
+          sector: newItem.location,
+          message: 'Inventory item ' + newItem.name + ' (' + newItem.id + ') registered into active stock [Qty: ' + newItem.quantity + ' ' + newItem.unit + '].',
+        };
+        targetState.dispatchLogs = [log, ...(targetState.dispatchLogs || [])];
         break;
+      }
+      case 'UPDATE_INVENTORY': {
+        if (!payload || typeof payload !== 'object' || !payload.id || typeof payload.id !== 'string') {
+          console.warn('[SERVER] Invalid UPDATE_INVENTORY payload received:', payload);
+          return targetState;
+        }
+
+        const currentInventory = Array.isArray(targetState.inventory)
+          ? targetState.inventory
+          : (Array.isArray(targetState.polarisDb?.inventory) ? targetState.polarisDb.inventory : [...INITIAL_INVENTORY]);
+
+        const targetId = payload.id.trim();
+        const existingIndex = currentInventory.findIndex((i) => i.id === targetId);
+        if (existingIndex === -1) {
+          console.warn('[SERVER] UPDATE_INVENTORY item ' + targetId + ' not found.');
+          return targetState;
+        }
+
+        const existingItem = currentInventory[existingIndex];
+        let qty = existingItem.quantity;
+        if (payload.quantity !== undefined) {
+          const parsed = Number(payload.quantity);
+          if (!isNaN(parsed) && parsed >= 0) {
+            qty = parsed;
+          }
+        }
+
+        let min = existingItem.minStock;
+        if (payload.minStock !== undefined) {
+          const parsed = Number(payload.minStock);
+          if (!isNaN(parsed) && parsed >= 0) {
+            min = parsed;
+          }
+        }
+
+        let costVal = existingItem.cost;
+        if (payload.cost !== undefined) {
+          const parsed = Number(payload.cost);
+          if (!isNaN(parsed) && parsed >= 0) {
+            costVal = parsed;
+          }
+        }
+
+        const updatedItem = {
+          ...existingItem,
+          ...(payload.name && typeof payload.name === 'string' && payload.name.trim() ? { name: payload.name.trim() } : {}),
+          ...(payload.category && typeof payload.category === 'string' && payload.category.trim() ? { category: payload.category.trim() } : {}),
+          ...(payload.unit && typeof payload.unit === 'string' && payload.unit.trim() ? { unit: payload.unit.trim() } : {}),
+          ...(payload.location && typeof payload.location === 'string' && payload.location.trim() ? { location: payload.location.trim() } : {}),
+          ...(payload.supplier !== undefined ? { supplier: String(payload.supplier).trim() } : {}),
+          ...(payload.expiry !== undefined ? { expiry: payload.expiry } : {}),
+          ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+          quantity: qty,
+          minStock: min,
+          cost: costVal,
+        };
+
+        const updatedList = [...currentInventory];
+        updatedList[existingIndex] = updatedItem;
+
+        targetState.inventory = updatedList;
+        if (targetState.polarisDb) {
+          targetState.polarisDb.inventory = updatedList;
+        }
+        break;
+      }
+      case 'ADJUST_INVENTORY_STOCK': {
+        if (!payload || typeof payload !== 'object' || !payload.id || typeof payload.id !== 'string') {
+          console.warn('[SERVER] Invalid ADJUST_INVENTORY_STOCK payload received:', payload);
+          return targetState;
+        }
+
+        const targetId = payload.id.trim();
+        const delta = Number(payload.delta);
+        if (isNaN(delta)) {
+          console.warn('[SERVER] ADJUST_INVENTORY_STOCK delta is NaN for item ' + targetId + ':', payload.delta);
+          return targetState;
+        }
+
+        const currentInventory = Array.isArray(targetState.inventory)
+          ? targetState.inventory
+          : (Array.isArray(targetState.polarisDb?.inventory) ? targetState.polarisDb.inventory : [...INITIAL_INVENTORY]);
+
+        const existingIndex = currentInventory.findIndex((i) => i.id === targetId);
+        if (existingIndex === -1) {
+          console.warn('[SERVER] ADJUST_INVENTORY_STOCK item ' + targetId + ' not found.');
+          return targetState;
+        }
+
+        const existingItem = currentInventory[existingIndex];
+        const newQuantity = Math.max(0, existingItem.quantity + delta);
+
+        const updatedItem = {
+          ...existingItem,
+          quantity: newQuantity,
+        };
+
+        const updatedList = [...currentInventory];
+        updatedList[existingIndex] = updatedItem;
+
+        targetState.inventory = updatedList;
+        if (targetState.polarisDb) {
+          targetState.polarisDb.inventory = updatedList;
+        }
+
+        if (delta < 0 && newQuantity <= existingItem.minStock) {
+          const log: DispatchLog = {
+            id: 'log-inv-' + Date.now(),
+            timestamp: new Date().toUTCString().replace('GMT', 'UTC').slice(17, 25) + ' UTC',
+            callsign: 'HQ Supply Command',
+            severity: newQuantity === 0 ? 'warning' : 'advisory',
+            sector: existingItem.location,
+            message: 'CRITICAL INVENTORY ALERT: ' + existingItem.name + ' (' + existingItem.id + ') depleted to ' + newQuantity + ' ' + existingItem.unit + ' (Min: ' + existingItem.minStock + ').',
+          };
+          targetState.dispatchLogs = [log, ...(targetState.dispatchLogs || [])];
+        }
+        break;
+      }
+      case 'ADD_STATION': {
+        const lat = typeof payload?.lat === 'number' ? payload.lat : (Array.isArray(payload?.coordinates) ? payload.coordinates[0] : NaN);
+        const lng = typeof payload?.lng === 'number' ? payload.lng : (Array.isArray(payload?.coordinates) ? payload.coordinates[1] : NaN);
+        if (
+          !payload ||
+          !payload.name ||
+          typeof lat !== 'number' ||
+          isNaN(lat) ||
+          Math.abs(lat) > 90 ||
+          typeof lng !== 'number' ||
+          isNaN(lng) ||
+          Math.abs(lng) > 180
+        ) {
+          console.warn('[SERVER] Invalid ADD_STATION payload coordinates received:', payload);
+          return targetState;
+        }
+        const normalizedStation = {
+          ...payload,
+          lat,
+          lng,
+          coordinates: [lat, lng],
+          location: payload.location || `${lat.toFixed(2)}, ${lng.toFixed(2)}`
+        };
+        targetState.stations = [normalizedStation, ...(targetState.stations || INITIAL_STATIONS)];
+        if (targetState.polarisDb) {
+          if (!Array.isArray((targetState.polarisDb as any).customStations)) {
+            (targetState.polarisDb as any).customStations = [];
+          }
+          const exists = (targetState.polarisDb as any).customStations.some((s: any) => s.id === payload.id);
+          if (!exists) {
+            (targetState.polarisDb as any).customStations = [normalizedStation, ...(targetState.polarisDb as any).customStations];
+          }
+        }
+        break;
+      }
       case 'UPDATE_STATIONS':
-        systemState.stations = payload;
+        targetState.stations = payload;
         break;
       case 'ADD_WAYPOINT': {
         const { waypoint, expeditionId } = payload || {};
         const wp = waypoint || payload;
+        const lat = typeof wp?.lat === 'number' ? wp.lat : (Array.isArray(wp?.coordinates) ? wp.coordinates[0] : NaN);
+        const lng = typeof wp?.lng === 'number' ? wp.lng : (Array.isArray(wp?.coordinates) ? wp.coordinates[1] : NaN);
+        if (!wp || typeof lat !== 'number' || isNaN(lat) || typeof lng !== 'number' || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+          console.warn('[SERVER] Invalid ADD_WAYPOINT coordinates received:', wp);
+          return targetState;
+        }
+        const normalizedWp = {
+          ...wp,
+          lat,
+          lng,
+          coordinates: [lat, lng]
+        };
         if (expeditionId) {
-          systemState.expeditions = systemState.expeditions.map((e) => {
+          const expExists = (targetState.expeditions || []).some((e) => e.id === expeditionId);
+          if (!expExists) {
+            console.warn('[SERVER] ADD_WAYPOINT targeted nonexistent expedition:', expeditionId);
+            return targetState;
+          }
+          targetState.expeditions = targetState.expeditions.map((e) => {
             if (e.id !== expeditionId) return e;
-            const updatedWaypoints = [...(e.waypoints || []), wp];
-            const addedDist = Number(wp.distanceFromPrevKm) || 45;
+            const updatedWaypoints = [...(e.waypoints || []), normalizedWp].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+            const addedDist = Number(normalizedWp.distanceFromPrevKm) || 45;
             return {
               ...e,
               waypoints: updatedWaypoints,
               totalDistanceKm: e.totalDistanceKm + addedDist,
             };
           });
+          if (targetState.polarisDb && Array.isArray(targetState.polarisDb.expeditions)) {
+            const rootExp = targetState.expeditions.find((e) => e.id === expeditionId);
+            const rootExpIdx = targetState.expeditions.findIndex((e) => e.id === expeditionId);
+            targetState.polarisDb.expeditions = targetState.polarisDb.expeditions.map((pe: any, idx: number) => {
+              if (
+                pe.id === expeditionId ||
+                (rootExp && (pe.name === rootExp.name || pe.id.toLowerCase() === rootExp.id.toLowerCase())) ||
+                (rootExpIdx !== -1 && idx === rootExpIdx)
+              ) {
+                return {
+                  ...pe,
+                  waypoints: [...(pe.waypoints || []), normalizedWp],
+                };
+              }
+              return pe;
+            });
+          }
         } else {
-          systemState.customWaypoints = [wp, ...(systemState.customWaypoints || [])];
+          targetState.customWaypoints = [normalizedWp, ...(targetState.customWaypoints || [])];
         }
         break;
       }
       case 'DELETE_WAYPOINT': {
         const { waypointId, expeditionId } = payload || {};
         if (expeditionId) {
-          systemState.expeditions = systemState.expeditions.map((e) => {
+          const expExists = (targetState.expeditions || []).some((e) => e.id === expeditionId);
+          if (!expExists) {
+            console.warn('[SERVER] DELETE_WAYPOINT targeted nonexistent expedition:', expeditionId);
+            return targetState;
+          }
+          targetState.expeditions = targetState.expeditions.map((e) => {
             if (e.id !== expeditionId) return e;
             return {
               ...e,
               waypoints: (e.waypoints || []).filter((w) => w.id !== waypointId),
             };
           });
+          if (targetState.polarisDb && Array.isArray(targetState.polarisDb.expeditions)) {
+            const rootExp = targetState.expeditions.find((e) => e.id === expeditionId);
+            const rootExpIdx = targetState.expeditions.findIndex((e) => e.id === expeditionId);
+            targetState.polarisDb.expeditions = targetState.polarisDb.expeditions.map((pe: any, idx: number) => {
+              if (
+                pe.id === expeditionId ||
+                (rootExp && (pe.name === rootExp.name || pe.id.toLowerCase() === rootExp.id.toLowerCase())) ||
+                (rootExpIdx !== -1 && idx === rootExpIdx)
+              ) {
+                return {
+                  ...pe,
+                  waypoints: (pe.waypoints || []).filter((w: any) => w.id !== waypointId),
+                };
+              }
+              return pe;
+            });
+          }
         } else {
-          systemState.customWaypoints = (systemState.customWaypoints || []).filter(
+          targetState.customWaypoints = (targetState.customWaypoints || []).filter(
             (w) => w.id !== waypointId
           );
         }
@@ -2344,39 +3479,136 @@ SCHEMA:
         const { waypoint, expeditionId } = payload || {};
         if (!waypoint) break;
         if (expeditionId) {
-          systemState.expeditions = systemState.expeditions.map((e) => {
+          const expExists = (targetState.expeditions || []).some((e) => e.id === expeditionId);
+          if (!expExists) {
+            console.warn('[SERVER] UPDATE_WAYPOINT targeted nonexistent expedition:', expeditionId);
+            return targetState;
+          }
+          targetState.expeditions = targetState.expeditions.map((e) => {
             if (e.id !== expeditionId) return e;
             return {
               ...e,
-              waypoints: (e.waypoints || []).map((w) => (w.id === waypoint.id ? waypoint : w)),
+              waypoints: (e.waypoints || [])
+                .map((w) => (w.id === waypoint.id ? waypoint : w))
+                .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
             };
           });
+          if (targetState.polarisDb && Array.isArray(targetState.polarisDb.expeditions)) {
+            targetState.polarisDb.expeditions = targetState.polarisDb.expeditions.map((pe: any) => {
+              if (pe.id === expeditionId) {
+                return {
+                  ...pe,
+                  waypoints: (pe.waypoints || []).map((w: any) => (w.id === waypoint.id ? waypoint : w)),
+                };
+              }
+              return pe;
+            });
+          }
         } else {
-          systemState.customWaypoints = (systemState.customWaypoints || []).map((w) =>
+          targetState.customWaypoints = (targetState.customWaypoints || []).map((w) =>
             w.id === waypoint.id ? waypoint : w
           );
         }
         break;
       }
+      case 'REORDER_WAYPOINTS': {
+        const { waypoints, expeditionId } = payload || {};
+        if (!Array.isArray(waypoints) || !expeditionId) {
+          console.warn('[SERVER] Invalid REORDER_WAYPOINTS payload received:', payload);
+          return targetState;
+        }
+        const expExists = (targetState.expeditions || []).some((e) => e.id === expeditionId);
+        if (!expExists) {
+          console.warn('[SERVER] REORDER_WAYPOINTS targeted nonexistent expedition:', expeditionId);
+          return targetState;
+        }
+        const normalized = waypoints.map((w: any, idx: number) => ({
+          ...w,
+          sequence: idx + 1,
+        }));
+        targetState.expeditions = targetState.expeditions.map((e) => {
+          if (e.id !== expeditionId) return e;
+          return {
+            ...e,
+            waypoints: normalized,
+          };
+        });
+        if (targetState.polarisDb && Array.isArray(targetState.polarisDb.expeditions)) {
+          targetState.polarisDb.expeditions = targetState.polarisDb.expeditions.map((pe: any) => {
+            if (pe.id === expeditionId) {
+              return {
+                ...pe,
+                waypoints: normalized,
+              };
+            }
+            return pe;
+          });
+        }
+        break;
+      }
       case 'RESTOCK_SUPPLY':
-        systemState.supplies = systemState.supplies.map((s) => (s.id === payload.id ? payload : s));
+        targetState.supplies = targetState.supplies.map((s) => (s.id === payload.id ? payload : s));
         break;
       case 'ADD_DISPATCH_LOG':
-        systemState.dispatchLogs = [payload, ...systemState.dispatchLogs];
+        targetState.dispatchLogs = [payload, ...targetState.dispatchLogs];
         break;
       case 'UPDATE_POLARIS_DB':
         if (payload && typeof payload === 'object') {
-          systemState.polarisDb = payload;
+          targetState.polarisDb = payload;
+          if (Array.isArray(payload.expeditions)) {
+            targetState.expeditions = targetState.expeditions.map((e) => {
+              const matched = payload.expeditions.find((pe: any) => pe.id === e.id);
+              if (matched) {
+                return {
+                  ...e,
+                  currentLat: matched.currentLat ?? e.currentLat,
+                  currentLng: matched.currentLng ?? e.currentLng,
+                  waypoints: matched.waypoints ?? e.waypoints,
+                };
+              }
+              return e;
+            });
+          }
+          if (Array.isArray(payload.personnel)) {
+            targetState.personnel = payload.personnel;
+          }
+          if (Array.isArray(payload.inventory)) {
+            targetState.inventory = payload.inventory;
+          }
         }
         break;
       case 'UPDATE_POLARIS_COLLECTION':
-        if (payload && payload.collectionName && Array.isArray(payload.data) && systemState.polarisDb) {
-          (systemState.polarisDb as any)[payload.collectionName] = payload.data;
+        if (payload && payload.collectionName && Array.isArray(payload.data) && targetState.polarisDb) {
+          (targetState.polarisDb as any)[payload.collectionName] = payload.data;
+          if (payload.collectionName === 'expeditions') {
+            targetState.expeditions = targetState.expeditions.map((e) => {
+              const matched = payload.data.find((pe: any) => pe.id === e.id);
+              return matched
+                ? {
+                    ...e,
+                    currentLat: matched.currentLat ?? e.currentLat,
+                    currentLng: matched.currentLng ?? e.currentLng,
+                    waypoints: matched.waypoints ?? e.waypoints,
+                  }
+                : e;
+            });
+          }
+          if (payload.collectionName === 'personnel') {
+            targetState.personnel = payload.data;
+          }
+          if (payload.collectionName === 'inventory') {
+            targetState.inventory = payload.data;
+          }
         }
         break;
       default:
         break;
     }
+    return targetState;
+  }
+
+  function handleClientAction(action: string, payload: any) {
+    applyActionToState(systemState, action, payload);
     persistState();
     broadcast({
       type: 'STATE_UPDATE',
@@ -2391,12 +3623,15 @@ SCHEMA:
     try {
       const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
       const token = url.searchParams.get('token');
+      const session = token ? authSessions.get(token) : null;
       
-      if (!token || !authSessions.has(token)) {
-        console.log(`[POLAR-SERVER] Rejected unauthenticated WS connection from ${req.socket.remoteAddress}`);
+      if (!token || !session || isSessionExpired(session)) {
+        if (session && token) authSessions.delete(token);
+        console.log(`[POLAR-SERVER] Rejected unauthenticated or expired WS connection from ${req.socket.remoteAddress}`);
         ws.close(4001, 'Unauthorized');
         return;
       }
+      (ws as any).token = token;
     } catch (e) {
       ws.close(4001, 'Unauthorized');
       return;
@@ -2406,14 +3641,17 @@ SCHEMA:
 
     // Send full current state immediately upon connection
     const devices = getDeviceList();
+    const sessionTokenOnConnect = (ws as any).token;
+    const simSessionOnConnect = getSessionSimulation(sessionTokenOnConnect);
     ws.send(
       JSON.stringify({
         type: 'INIT_STATE',
         payload: {
-          ...systemState,
+          ...(simSessionOnConnect ? simSessionOnConnect.sandboxState : systemState),
           connectedClients: devices.length,
           devices,
         },
+        simulation: Boolean(simSessionOnConnect),
         timestamp: new Date().toISOString(),
       })
     );
@@ -2421,6 +3659,36 @@ SCHEMA:
     ws.on('message', (messageBuffer) => {
       try {
         const msg: SyncMessage = JSON.parse(messageBuffer.toString());
+        const sessionToken = (ws as any).token;
+        const session = sessionToken ? authSessions.get(sessionToken) : null;
+        const simSession = getSessionSimulation(sessionToken);
+
+        if (!session || isSessionExpired(session)) {
+          if (session && sessionToken) authSessions.delete(sessionToken);
+          console.warn('[POLAR-SERVER] WebSocket message rejected: Session expired or invalid.');
+          ws.send(
+            JSON.stringify({
+              type: 'ACTION_REJECTED',
+              action: msg?.type,
+              error: 'Unauthorized: Session expired or invalid.',
+              timestamp: new Date().toISOString(),
+            })
+          );
+          return;
+        }
+
+        if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string' || !msg.type.trim()) {
+          ws.send(
+            JSON.stringify({
+              type: 'ACTION_REJECTED',
+              action: 'MALFORMED_FRAME',
+              error: 'Bad Request: Missing or invalid action type.',
+              timestamp: new Date().toISOString(),
+            })
+          );
+          return;
+        }
+
         switch (msg.type) {
           case 'REGISTER_DEVICE':
           case 'HEARTBEAT': {
@@ -2443,7 +3711,7 @@ SCHEMA:
             break;
           }
           case 'TRIGGER_DISTRESS': {
-            const data = msg.payload;
+            const data = msg.payload || {};
             let distressAlert: ActiveDistressAlert = {
               id: `distress-${Date.now()}`,
               timestamp: new Date().toISOString(),
@@ -2458,6 +3726,31 @@ SCHEMA:
               targetLat: data.targetLat,
               targetLng: data.targetLng,
             };
+
+            if (simSession) {
+              simSession.sandboxState.conditionLevel = 'COND-1_SEVERE_BLIZZARD';
+              if (autoSarDispatchEnabled) {
+                distressAlert = executeAutonomousSAR(distressAlert);
+              }
+              simSession.sandboxState.activeDistress = distressAlert;
+              ws.send(
+                JSON.stringify({
+                  type: 'TRIGGER_DISTRESS',
+                  payload: distressAlert,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              ws.send(
+                JSON.stringify({
+                  type: 'STATE_UPDATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
 
             systemState.conditionLevel = 'COND-1_SEVERE_BLIZZARD';
 
@@ -2490,7 +3783,20 @@ SCHEMA:
             });
             break;
           }
-          case 'ACKNOWLEDGE_DISTRESS': {
+                    case 'ACKNOWLEDGE_DISTRESS': {
+            if (!userHasAnyRole(session.role, ['admin', 'transport'])) {
+              ws.send(
+                JSON.stringify({
+                  type: 'ACTION_REJECTED',
+                  action: msg.type,
+                  error: `Forbidden: Role '${session.role}' is not authorized to acknowledge distress alerts.`,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+
+            // Real life-safety distress always takes precedence over simulation
             if (systemState.activeDistress) {
               systemState.activeDistress.acknowledgedByHQ = true;
               systemState.activeDistress.acknowledgedAt = new Date().toISOString();
@@ -2502,6 +3808,11 @@ SCHEMA:
                 systemState.assets = systemState.assets.map((a) =>
                   a.id === msg.payload.dispatchedSARAssetId ? { ...a, status: 'in_transit' } : a
                 );
+                if (systemState.polarisDb && Array.isArray(systemState.polarisDb.assets)) {
+                  systemState.polarisDb.assets = systemState.polarisDb.assets.map((a: any) =>
+                    a.id === msg.payload.dispatchedSARAssetId ? { ...a, status: 'In Transit' } : a
+                  );
+                }
               }
 
               const logEntry = {
@@ -2527,15 +3838,144 @@ SCHEMA:
                 payload: systemState,
                 timestamp: new Date().toISOString(),
               });
+              break;
             }
-            break;
+
+            // Simulation Isolation: If caller is in simulation and no live distress exists, acknowledge sandbox only
+            if (simSession) {
+              if (simSession.sandboxState?.activeDistress) {
+                simSession.sandboxState.activeDistress.acknowledgedByHQ = true;
+                simSession.sandboxState.activeDistress.acknowledgedAt = new Date().toISOString();
+                simSession.sandboxState.activeDistress.acknowledgedBy = msg.payload?.acknowledgedBy || 'Station Operations Director';
+                simSession.sandboxState.activeDistress.dispatchedSARAssetId = msg.payload?.dispatchedSARAssetId;
+                simSession.sandboxState.activeDistress.dispatchedSARName = msg.payload?.dispatchedSARName;
+                if (msg.payload?.dispatchedSARAssetId && Array.isArray(simSession.sandboxState.assets)) {
+                  simSession.sandboxState.assets = simSession.sandboxState.assets.map((a: any) =>
+                    a.id === msg.payload.dispatchedSARAssetId ? { ...a, status: 'in_transit' } : a
+                  );
+                }
+              }
+              ws.send(
+                JSON.stringify({
+                  type: 'ACKNOWLEDGE_DISTRESS',
+                  payload: simSession.sandboxState?.activeDistress,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              ws.send(
+                JSON.stringify({
+                  type: 'STATE_UPDATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
           }
           case 'RESOLVE_DISTRESS': {
-            systemState.activeDistress = null;
-            systemState.conditionLevel = 'COND-2_CAUTION';
+            if (!userHasAnyRole(session.role, ['admin', 'transport'])) {
+              ws.send(
+                JSON.stringify({
+                  type: 'ACTION_REJECTED',
+                  action: msg.type,
+                  error: `Forbidden: Role '${session.role}' is not authorized to resolve distress beacons.`,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+
+            // Real life-safety distress always takes precedence over simulation
+            if (systemState.activeDistress) {
+              systemState.activeDistress = null;
+              systemState.conditionLevel = 'COND-2_CAUTION';
+              persistState();
+              broadcast({
+                type: 'RESOLVE_DISTRESS',
+                timestamp: new Date().toISOString(),
+              });
+              broadcast({
+                type: 'STATE_UPDATE',
+                payload: systemState,
+                timestamp: new Date().toISOString(),
+              });
+              break;
+            }
+
+            // Simulation Isolation: If caller is in simulation and no live distress exists, resolve sandbox only
+            if (simSession) {
+              if (simSession.sandboxState) {
+                simSession.sandboxState.activeDistress = null;
+                simSession.sandboxState.conditionLevel = 'COND-2_CAUTION';
+              }
+              ws.send(
+                JSON.stringify({
+                  type: 'RESOLVE_DISTRESS',
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              ws.send(
+                JSON.stringify({
+                  type: 'STATE_UPDATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+
+            // If caller has no simulation session and no genuine live distress is active, reject to prevent accidental condition downgrade
+            ws.send(
+              JSON.stringify({
+                type: 'ACTION_REJECTED',
+                action: msg.type,
+                error: 'No active distress beacon to resolve.',
+                timestamp: new Date().toISOString(),
+              })
+            );
+            break;
+          }
+          case 'RESET_STATE': {
+            if (!userHasAnyRole(session.role, ['admin'])) {
+              ws.send(
+                JSON.stringify({
+                  type: 'ACTION_REJECTED',
+                  action: msg.type,
+                  error: 'Forbidden: Super Admin role required to reset system state.',
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+            if (simSession) {
+              simSession.sandboxState = JSON.parse(JSON.stringify(databaseManager.getState()));
+              ws.send(
+                JSON.stringify({
+                  type: 'RESET_STATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              ws.send(
+                JSON.stringify({
+                  type: 'STATE_UPDATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+            systemState = databaseManager.resetToDefaults();
             persistState();
             broadcast({
-              type: 'RESOLVE_DISTRESS',
+              type: 'RESET_STATE',
+              payload: systemState,
               timestamp: new Date().toISOString(),
             });
             broadcast({
@@ -2548,22 +3988,74 @@ SCHEMA:
           case 'UPDATE_REGION':
           case 'UPDATE_CONDITION':
           case 'UPDATE_ASSET':
+          case 'ADD_ASSET':
           case 'UPDATE_EXPEDITION':
+          case 'ADD_EXPEDITION':
           case 'ADD_PERSONNEL':
+          case 'ADD_INVENTORY':
+          case 'UPDATE_INVENTORY':
+          case 'ADJUST_INVENTORY_STOCK':
+          case 'ADD_STATION':
+          case 'UPDATE_STATIONS':
           case 'ADD_WAYPOINT':
           case 'DELETE_WAYPOINT':
           case 'UPDATE_WAYPOINT':
+          case 'REORDER_WAYPOINTS':
           case 'RESTOCK_SUPPLY':
           case 'ADD_DISPATCH_LOG':
-          case 'RESET_STATE': {
+          case 'UPDATE_POLARIS_DB':
+          case 'UPDATE_POLARIS_COLLECTION': {
+            const requiredRoles = ACTION_PERMISSIONS[msg.type];
+            if (requiredRoles && !userHasAnyRole(session.role, requiredRoles)) {
+              ws.send(
+                JSON.stringify({
+                  type: 'ACTION_REJECTED',
+                  action: msg.type,
+                  error: `Forbidden: Role '${session.role}' is not authorized to perform '${msg.type}'.`,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
+            if (simSession) {
+              applyActionToState(simSession.sandboxState, msg.type, msg.payload);
+              ws.send(
+                JSON.stringify({
+                  type: 'STATE_UPDATE',
+                  payload: simSession.sandboxState,
+                  simulation: true,
+                  timestamp: new Date().toISOString(),
+                })
+              );
+              break;
+            }
             handleClientAction(msg.type, msg.payload);
             break;
           }
           default:
+            console.warn(`[POLAR-SERVER] Rejected unrecognized WebSocket action '${String(msg.type).slice(0, 50)}' from user '${session.userId}'.`);
+            ws.send(
+              JSON.stringify({
+                type: 'ACTION_REJECTED',
+                action: typeof msg.type === 'string' ? msg.type.slice(0, 50) : 'UNKNOWN',
+                error: `Bad Request: Unrecognized action type '${typeof msg.type === 'string' ? msg.type.slice(0, 50) : 'UNKNOWN'}'.`,
+                timestamp: new Date().toISOString(),
+              })
+            );
             break;
         }
       } catch (err: any) {
         console.error('[POLAR-SERVER] Error processing websocket message:', err.message);
+        try {
+          ws.send(
+            JSON.stringify({
+              type: 'ACTION_REJECTED',
+              action: 'INVALID_JSON',
+              error: 'Bad Request: Malformed JSON frame.',
+              timestamp: new Date().toISOString(),
+            })
+          );
+        } catch (_) {}
       }
     });
 

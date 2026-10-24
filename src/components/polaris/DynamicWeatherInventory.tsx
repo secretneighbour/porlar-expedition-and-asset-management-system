@@ -37,6 +37,9 @@ interface DynamicWeatherInventoryProps {
   setDb?: React.Dispatch<React.SetStateAction<any>>;
   geminiApiKey?: string;
   onNavigateShipments?: () => void;
+  isSimulation?: boolean;
+  inventory?: any[];
+  onUpdateInventory?: (item: Partial<any> & { id: string }) => void;
 }
 
 export function DynamicWeatherInventory({
@@ -44,7 +47,10 @@ export function DynamicWeatherInventory({
   db,
   setDb,
   geminiApiKey,
-  onNavigateShipments
+  onNavigateShipments,
+  isSimulation = false,
+  inventory,
+  onUpdateInventory,
 }: DynamicWeatherInventoryProps) {
   const [scenario, setScenario] = useState<'blizzard_3day' | 'normal_polar'>('blizzard_3day');
   const [currentStockL, setCurrentStockL] = useState<number>(15000);
@@ -52,12 +58,35 @@ export function DynamicWeatherInventory({
   const [requestingShip, setRequestingShip] = useState<boolean>(false);
   const [shipRequested, setShipRequested] = useState<boolean>(false);
   const [shipDetails, setShipDetails] = useState<any>(null);
+  const [shipError, setShipError] = useState<string | null>(null);
   const [minStockAdjusted, setMinStockAdjusted] = useState<boolean>(true);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
-  // Sync fuel stock from DB if available
+    // Detect existing active resupply shipment from database state
   useEffect(() => {
-    if (db?.inventory) {
-      const fuelItem = db.inventory.find(
+    const shipmentsList = db?.shipments || [];
+    const activeShip = shipmentsList.find((s: any) =>
+      s.status !== 'Delivered' &&
+      s.status !== 'Cancelled' &&
+      ((s.notes && s.notes.includes('Vasiliy Golovnin')) || (s.cargo && s.cargo.toLowerCase().includes('fuel')))
+    );
+    if (activeShip) {
+      setShipRequested(true);
+      if (!shipDetails) {
+        setShipDetails({
+          shipmentId: activeShip.id,
+          message: `Active resupply shipment (${activeShip.id}) already in transit.`,
+          etaDays: 8,
+        });
+      }
+    }
+  }, [db?.shipments]);
+
+// Sync fuel stock from inventory prop or DB if available
+  useEffect(() => {
+    const invList = inventory || db?.inventory;
+    if (invList) {
+      const fuelItem = invList.find(
         (i: any) =>
           i.id === 'INV-0002' ||
           (i.name && i.name.toLowerCase().includes('diesel')) ||
@@ -67,7 +96,7 @@ export function DynamicWeatherInventory({
         setCurrentStockL(fuelItem.quantity);
       }
     }
-  }, [db]);
+  }, [inventory, db]);
 
   // Calculations
   const normalBurnRate = 500; // L/day
@@ -116,6 +145,7 @@ export function DynamicWeatherInventory({
   // Evaluate via AI backend endpoint
   const handleEvaluateAI = async () => {
     setLoadingEval(true);
+    setEvalError(null);
     try {
       const res = await apiFetch('/api/ai/weather-inventory/evaluate', {
         method: 'POST',
@@ -129,23 +159,118 @@ export function DynamicWeatherInventory({
           blizzardDays: 3,
           geminiApiKey: geminiApiKey || undefined,
           autoAdjustMinStock: true,
+          isSimulation,
         }),
       });
 
       const data = await res.json();
-      if (data.status === 'ok') {
+      if (res.ok && data.status === 'ok') {
         setMinStockAdjusted(true);
+        setEvalError(null);
+        if (onUpdateInventory) {
+          const invList = inventory || db?.inventory || [];
+          const fuelItem = invList.find(
+            (i: any) =>
+              i.id === 'INV-0002' ||
+              (i.name && i.name.toLowerCase().includes('diesel')) ||
+              (i.category && i.category.toLowerCase() === 'fuel')
+          );
+          if (fuelItem) {
+            onUpdateInventory({ id: fuelItem.id, minStock: dynamicMinStock });
+          }
+        }
+      } else {
+        const errMessage = data?.error || `Evaluation failed (${res.status})`;
+        setEvalError(errMessage);
+        setMinStockAdjusted(false);
       }
-    } catch (err) {
-      console.warn('Backend evaluation failed, using local model calculation.');
-      setMinStockAdjusted(true);
+    } catch (err: any) {
+      console.warn('Backend evaluation failed:', err);
+      setEvalError(`Network error: ${err.message || 'Server unreachable'}`);
+      setMinStockAdjusted(false);
     }
     setLoadingEval(false);
   };
 
-  // Trigger early supply ship request
+  // Trigger early supply ship request with simulation isolation and error validation
   const handleRequestSupplyShip = async () => {
     setRequestingShip(true);
+    setShipError(null);
+
+    if (isSimulation) {
+      // Simulation Isolation: Update isolated simulation database state without altering live production
+      try {
+        const res = await apiFetch('/api/ai/weather-inventory/request-ship', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shipName: 'MV Vasiliy Golovnin (Polar Icebreaker & Tanker)',
+            cargoVolumeLiters: 45000,
+            cargoType: 'Arctic Diesel Fuel F-34 / JP-8',
+            station: 'Maitri Station (Tank Farm Alpha)',
+            urgency: 'CRITICAL_EARLY_BLIZZARD_DISPATCH',
+            isSimulation: true,
+          }),
+        });
+        const data = await res.json();
+        setShipRequested(true);
+        setShipDetails(data);
+      } catch {
+        setShipRequested(true);
+        setShipDetails({
+          shipmentId: 'SIM-SHP-FUEL-LOCAL',
+          message: '[SIMULATION] Early request confirmed in training buffer! MV Vasiliy Golovnin booked.',
+          etaDays: 8,
+        });
+      }
+
+      if (onUpdateInventory) {
+        const invList = inventory || db?.inventory || [];
+        const fuelItem = invList.find(
+          (i: any) =>
+            i.id === 'INV-0002' ||
+            (i.name && i.name.toLowerCase().includes('diesel')) ||
+            (i.category && i.category.toLowerCase() === 'fuel')
+        );
+        if (fuelItem) {
+          onUpdateInventory({ id: fuelItem.id, minStock: dynamicMinStock });
+        }
+      }
+
+      if (setDb) {
+        setDb((prev: any) => {
+          const hasSimShip = (prev.shipments || []).some(
+            (s: any) => s.notes && s.notes.includes('Vasiliy Golovnin')
+          );
+          if (hasSimShip) return prev;
+          return {
+            ...prev,
+            shipments: [
+              {
+                id: `SIM-SHP-FUEL-${Date.now().toString().slice(-4)}`,
+                origin: 'Cape Town Logistics Hub',
+                destination: 'Maitri',
+                expeditionId: 'EXP-0003',
+                cargo: '[SIMULATION] 45,000L Arctic Diesel Fuel (F-34 / JP-8)',
+                weight: 37800,
+                quantity: 216,
+                mode: 'Ship',
+                departure: new Date().toISOString().slice(0, 10),
+                expectedArrival: new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10),
+                actualArrival: null,
+                status: 'Dispatched',
+                notes: '[SIMULATION] Early resupply requested for MV Vasiliy Golovnin (Polar Icebreaker & Tanker).',
+              },
+              ...prev.shipments,
+            ],
+          };
+        });
+      }
+      setRequestingShip(false);
+      return;
+    }
+
+    // Live mode: Enforce authoritative server-side RBAC and deduplication
     try {
       const res = await apiFetch('/api/ai/weather-inventory/request-ship', {
         method: 'POST',
@@ -156,50 +281,37 @@ export function DynamicWeatherInventory({
           cargoType: 'Arctic Diesel Fuel F-34 / JP-8',
           station: 'Maitri Station (Tank Farm Alpha)',
           urgency: 'CRITICAL_EARLY_BLIZZARD_DISPATCH',
+          isSimulation: false,
         }),
       });
+
+      if (!res.ok) {
+        let errMessage = `Authorization Error (${res.status}): Insufficient permissions to dispatch supply ship.`;
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errMessage = errData.error;
+          }
+        } catch {}
+        setShipError(errMessage);
+        setShipRequested(false);
+        setRequestingShip(false);
+        return;
+      }
 
       const data = await res.json();
       setShipRequested(true);
       setShipDetails(data);
-
-      if (setDb) {
-        setDb((prev: any) => ({
-          ...prev,
-          inventory: prev.inventory.map((inv: any) =>
-            inv.id === 'INV-0002' || (inv.name && inv.name.toLowerCase().includes('diesel'))
-              ? { ...inv, minStock: dynamicMinStock }
-              : inv
-          ),
-          shipments: [
-            {
-              id: `SHP-FUEL-${Date.now().toString().slice(-4)}`,
-              origin: 'Cape Town Logistics Hub',
-              destination: 'Maitri',
-              expeditionId: 'EXP-0003',
-              cargo: '45,000L Arctic Diesel Fuel (F-34 / JP-8)',
-              weight: 37800,
-              quantity: 216,
-              mode: 'Ship',
-              departure: new Date().toISOString().slice(0, 10),
-              expectedArrival: new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10),
-              actualArrival: null,
-              status: 'Dispatched',
-            },
-            ...prev.shipments,
-          ],
-        }));
-      }
-    } catch (err) {
-      console.warn('Network call failed, applying local state for supply ship.');
-      setShipRequested(true);
-      setShipDetails({
-        shipmentId: 'SHP-FUEL-LOCAL',
-        message: 'Early request confirmed! MV Vasiliy Golovnin dispatched from Cape Town with 45,000L fuel.',
-        etaDays: 8,
-      });
+      setShipError(null);
+      // Redundant frontend shipment creation removed: the server already owns the authoritative shipment
+      // and broadcasts STATE_UPDATE across WebSocket to all clients.
+    } catch (err: any) {
+      console.warn('Network call failed for supply ship request:', err);
+      setShipError(`Network communication failure: ${err?.message || 'Unable to contact operations server'}. Supply ship was NOT dispatched.`);
+      setShipRequested(false);
+    } finally {
+      setRequestingShip(false);
     }
-    setRequestingShip(false);
   };
 
   return (
@@ -374,6 +486,25 @@ export function DynamicWeatherInventory({
         </div>
       </div>
 
+      {/* Accurate Authorization / Network Failure Banner */}
+      {shipError && (
+        <div className="p-3.5 mb-4 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs flex items-center justify-between gap-3 font-mono">
+          <div className="flex items-center gap-2.5">
+            <ShieldAlert size={18} className="text-rose-400 shrink-0" />
+            <div>
+              <strong className="text-rose-300 block font-bold">SUPPLY SHIP DISPATCH REJECTED / FAILED:</strong>
+              <span>{shipError}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setShipError(null)}
+            className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[11px] font-bold cursor-pointer"
+          >
+            DISMISS
+          </button>
+        </div>
+      )}
+
       {/* Interactive Supply Ship Dispatch Banner */}
       <div
         style={{
@@ -397,11 +528,13 @@ export function DynamicWeatherInventory({
           <div>
             <div className="flex items-center gap-2">
               <h4 style={{ color: t.text, fontFamily: FONT_HEAD }} className="text-xs sm:text-sm font-bold">
-                {shipRequested ? 'Early Request Sent to Supply Ship: Confirmed En Route' : 'Autonomous Supply Ship Early Request Directive'}
+                {shipRequested
+                  ? (isSimulation ? '[SIMULATION] Early Request Sent: Confirmed in Training Buffer' : 'Early Request Sent to Supply Ship: Confirmed En Route')
+                  : (isSimulation ? '[SIMULATION] Autonomous Supply Ship Early Request Directive' : 'Autonomous Supply Ship Early Request Directive')}
               </h4>
               {shipRequested && (
-                <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  DISPATCHED
+                <span className={`px-2 py-0.2 rounded text-[10px] font-bold ${isSimulation ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                  {isSimulation ? 'SIMULATED DISPATCH' : 'DISPATCHED'}
                 </span>
               )}
             </div>

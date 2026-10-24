@@ -98,6 +98,9 @@ export function useSimulation({
   const activeScenarioRef = useRef<SimulationScenario | null>(activeScenario);
   activeScenarioRef.current = activeScenario;
 
+  // Track processed simulation event IDs to guarantee idempotency and prevent duplicate deductions
+  const processedSimEventIdsRef = useRef<Set<string>>(new Set());
+
   // Broadcast AI Action Event to existing AiActionLogsPanel
   const emitSimAiAction = useCallback((
     category: 'logistics' | 'power' | 'weather' | 'sar' | 'inventory' | 'maintenance',
@@ -175,6 +178,7 @@ export function useSimulation({
       barometerHpa: 984
     });
 
+    processedSimEventIdsRef.current.clear();
     setExecutedEvents([]);
     setElapsedSeconds(0);
     setCurrentPhase('Departure & Telemetry Lock');
@@ -270,6 +274,7 @@ export function useSimulation({
 
   // EXIT SIMULATION (Restores Live Data Completely)
   const exitSimulation = useCallback(() => {
+    processedSimEventIdsRef.current.clear();
     stopScenario(false);
     setIsActive(false);
     setIsPaused(false);
@@ -284,9 +289,16 @@ export function useSimulation({
     const tmpl = MANUAL_EVENT_TEMPLATES.find(t => t.type === templateType);
     if (!tmpl) return;
 
+    const eventId = customParams?.id || customParams?.eventId || `SIM-MAN-${templateType}-${Date.now()}`;
+    if (processedSimEventIdsRef.current.has(eventId)) {
+      console.warn(`[SIMULATION] Event ${eventId} was already processed. Skipping duplicate execution.`);
+      return;
+    }
+    processedSimEventIdsRef.current.add(eventId);
+
     const currentSec = elapsedRef.current;
     const newEvent: SimulationTimelineEvent = {
-      id: `SIM-MAN-${Date.now()}`,
+      id: eventId,
       second: currentSec,
       timeFormatted: formatSeconds(currentSec),
       title: customParams?.title || tmpl.defaultTitle,
@@ -304,7 +316,8 @@ export function useSimulation({
     setManualInjectionsCount(c => c + 1);
 
     // Apply immediate state effects according to event type
-    switch (templateType) {
+    const normalizedType = templateType === 'INJ-MAYDAY' ? 'INJECT_MAYDAY' : templateType;
+    switch (normalizedType) {
       case 'INJECT_BLIZZARD':
         setSimConditionLevel('COND-1_SEVERE_BLIZZARD');
         setSimWeather(prev => ({
@@ -416,9 +429,11 @@ export function useSimulation({
       case 'INJECT_FUEL_CRISIS':
         setSimDb(d => ({
           ...d,
-          inventory: d.inventory.map(i => {
-            if (i.name.toLowerCase().includes('diesel') || i.name.toLowerCase().includes('fuel')) {
-              return { ...i, currentStock: Math.max(1200, i.currentStock - 4500) };
+          inventory: (d.inventory || []).map((i: any) => {
+            if (i.name?.toLowerCase().includes('diesel') || i.name?.toLowerCase().includes('fuel') || i.id === 'INV-0002') {
+              const currentQty = typeof i.quantity === 'number' ? i.quantity : (typeof (i as any).currentStock === 'number' ? (i as any).currentStock : 15000);
+              const newQty = Math.max(1200, currentQty - 4500);
+              return { ...i, quantity: newQty, currentStock: newQty };
             }
             return i;
           }),
@@ -432,7 +447,7 @@ export function useSimulation({
               relatedId: 'Fuel-Tank-Alpha',
               read: false
             },
-            ...d.alerts
+            ...(d.alerts || [])
           ]
         }));
         break;
@@ -454,6 +469,12 @@ export function useSimulation({
 
   // EXECUTE SIMULATED TIMELINE EVENT
   const executeEvent = useCallback((event: SimulationTimelineEvent) => {
+    if (processedSimEventIdsRef.current.has(event.id)) {
+      console.warn(`[SIMULATION] Timeline event ${event.id} already processed. Skipping duplicate execution.`);
+      return;
+    }
+    processedSimEventIdsRef.current.add(event.id);
+
     // 1. Mark event as executed
     setExecutedEvents(prev => [
       {
@@ -532,6 +553,20 @@ export function useSimulation({
       if (soundEnabled) startEmergencyAlarm();
     } else if (event.category === 'comms') {
       setSimSyncStatus(event.severity === 'critical' || event.severity === 'warning' ? 'offline' : 'synced');
+    } else if (event.category === 'logistics' || (event as any).type === 'INJECT_FUEL_CRISIS') {
+      if (event.title?.toLowerCase().includes('fuel') || event.description?.toLowerCase().includes('fuel')) {
+        setSimDb(d => ({
+          ...d,
+          inventory: (d.inventory || []).map((i: any) => {
+            if (i.name?.toLowerCase().includes('diesel') || i.name?.toLowerCase().includes('fuel') || i.id === 'INV-0002') {
+              const currentQty = typeof i.quantity === 'number' ? i.quantity : (typeof (i as any).currentStock === 'number' ? (i as any).currentStock : 15000);
+              const newQty = Math.max(1200, currentQty - 4500);
+              return { ...i, quantity: newQty, currentStock: newQty };
+            }
+            return i;
+          }),
+        }));
+      }
     }
 
     // 3. Create simulated alert entry
@@ -789,6 +824,63 @@ export function useSimulation({
     if (soundEnabled) playSuccessChime();
   }, [soundEnabled]);
 
+  const reorderWaypoints = useCallback((orderedWaypoints: any[], expeditionId: string) => {
+    const normalized = orderedWaypoints.map((w, idx) => ({ ...w, sequence: idx + 1 }));
+    setSimDb(prev => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      if (expeditionId) {
+        cloned.expeditions = (cloned.expeditions || []).map((e: any) => {
+          if (e.id !== expeditionId) return e;
+          return {
+            ...e,
+            waypoints: normalized,
+          };
+        });
+      }
+      return cloned;
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const updateAsset = useCallback((assetId: string, updates: any) => {
+    setSimAssets(prev => prev.map(a => a.id === assetId ? { ...a, ...updates } : a));
+    setSimDb(prev => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      cloned.assets = (cloned.assets || []).map((a: any) => a.id === assetId ? { ...a, ...updates } : a);
+      return cloned;
+    });
+  }, []);
+
+  const addInventory = useCallback((newItem: any) => {
+    setSimDb((prev) => {
+      const current = prev.inventory || [];
+      if (current.some((i: any) => i.id === newItem.id)) return prev;
+      return {
+        ...prev,
+        inventory: [newItem, ...current],
+      };
+    });
+    if (soundEnabled) playSuccessChime();
+  }, [soundEnabled]);
+
+  const updateInventory = useCallback((item: any) => {
+    setSimDb((prev) => ({
+      ...prev,
+      inventory: (prev.inventory || []).map((i: any) =>
+        i.id === item.id ? { ...i, ...item } : i
+      ),
+    }));
+  }, []);
+
+  const adjustInventoryStock = useCallback((id: string, delta: number) => {
+    setSimDb((prev) => ({
+      ...prev,
+      inventory: (prev.inventory || []).map((i: any) =>
+        i.id === id ? { ...i, quantity: Math.max(0, (Number(i.quantity) || 0) + delta) } : i
+      ),
+    }));
+  }, []);
+
   return {
     // Playback state
     isActive,
@@ -831,9 +923,14 @@ export function useSimulation({
     addWaypoint,
     deleteWaypoint,
     updateWaypoint,
+    reorderWaypoints,
+    updateAsset,
     addPersonnel,
     addAsset,
     updateAssetStatus,
-    addStation
+    addStation,
+    addInventory,
+    updateInventory,
+    adjustInventoryStock
   };
 }
